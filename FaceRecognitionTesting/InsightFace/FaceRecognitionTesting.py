@@ -1,15 +1,42 @@
 """Run a simple one-to-one face-verification test with InsightFace."""
 
+import json
+from pathlib import Path
+from time import perf_counter
+import warnings
+
 import cv2
 import numpy as np
+import onnxruntime as ort
 from insightface.app import FaceAnalysis
 
 
-REFERENCE_IMAGE_PATH = "test_images/Ref_8.jpeg"
-CAPTURED_IMAGE_PATH = "test_images/Ref_10.jpeg"
+# InsightFace 1.0.1 currently calls an API that scikit-image has deprecated.
+# This narrow filter hides only that known third-party compatibility notice.
+warnings.filterwarnings(
+    "ignore",
+    message=r"`estimate` is deprecated.*",
+    category=FutureWarning,
+    module=r"insightface\.utils\.face_align",
+)
+
+
+REFERENCE_IMAGE_PATH = "test_images/Screenshot 2026-08-02 011524.png"
+CAPTURED_IMAGE_PATH = "test_images/Ref_6.jpeg"
+REFERENCE_EMBEDDING_PATH = "stored_embeddings/reference_embedding.json"
 
 MODEL_PACK_NAME = "buffalo_l"
 DETECTION_SIZE = (640, 640)
+
+# Prefer CUDA when the GPU-enabled ONNX Runtime package is available. Otherwise,
+# select CPU explicitly instead of asking ONNX Runtime for an unavailable provider.
+AVAILABLE_EXECUTION_PROVIDERS = ort.get_available_providers()
+if "CUDAExecutionProvider" in AVAILABLE_EXECUTION_PROVIDERS:
+    EXECUTION_PROVIDERS = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    EXECUTION_CONTEXT_ID = 0
+else:
+    EXECUTION_PROVIDERS = ["CPUExecutionProvider"]
+    EXECUTION_CONTEXT_ID = -1
 
 # The threshold of 0.40 is only an initial experimental value for this mock.
 # It must not be treated as a production threshold. The final threshold must
@@ -19,13 +46,16 @@ SIMILARITY_THRESHOLD = 0.60
 
 
 def create_face_analyzer() -> FaceAnalysis:
-    """Initialize the InsightFace models once for CPU execution."""
+    """Initialize the InsightFace models once using an available provider."""
     face_analyzer = FaceAnalysis(
         name=MODEL_PACK_NAME,
-        providers=["CPUExecutionProvider"],
+        providers=EXECUTION_PROVIDERS,
+        # Verification needs only face detection and recognition. Excluding
+        # age, gender, and extra landmark models avoids unrelated inference.
+        allowed_modules=["detection", "recognition"],
     )
     face_analyzer.prepare(
-        ctx_id=-1,
+        ctx_id=EXECUTION_CONTEXT_ID,
         det_size=DETECTION_SIZE,
     )
     return face_analyzer
@@ -107,33 +137,136 @@ def calculate_cosine_similarity(
     return float(similarity)
 
 
-def verify_faces(
+def store_reference_embedding(
+    embedding: np.ndarray,
+    embedding_path: str,
     reference_image_path: str,
-    captured_image_path: str,
 ) -> None:
-    """Process two images and make a temporary threshold-based decision."""
-    print("InsightFace one-to-one verification")
-    print("-----------------------------------")
+    """Save the enrolled reference embedding and its model metadata as JSON."""
+    stored_data = {
+        "model_pack": MODEL_PACK_NAME,
+        "detection_size": list(DETECTION_SIZE),
+        "source_image": reference_image_path,
+        "embedding_dimension": int(embedding.size),
+        "embedding": embedding.tolist(),
+    }
+
+    destination = Path(embedding_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(
+        json.dumps(stored_data, indent=2),
+        encoding="utf-8",
+    )
+
+
+def load_reference_embedding(embedding_path: str) -> np.ndarray:
+    """Load and validate a previously enrolled reference embedding."""
+    source = Path(embedding_path)
+
+    try:
+        stored_data = json.loads(source.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise ValueError(f"Stored reference embedding is not valid JSON: {source}") from error
+
+    if stored_data.get("model_pack") != MODEL_PACK_NAME:
+        raise ValueError(
+            "Stored reference embedding uses a different model pack. "
+            f"Delete {source} and run the script again to re-enrol it."
+        )
+
+    embedding_values = stored_data.get("embedding")
+    if not isinstance(embedding_values, list) or not embedding_values:
+        raise ValueError(f"Stored reference embedding is missing or empty: {source}")
+
+    embedding = np.asarray(embedding_values, dtype=np.float32).reshape(-1)
+    embedding_norm = float(np.linalg.norm(embedding))
+
+    if embedding_norm == 0.0 or not np.isfinite(embedding_norm):
+        raise ValueError(f"Stored reference embedding is invalid: {source}")
+
+    expected_dimension = stored_data.get("embedding_dimension")
+    if expected_dimension != embedding.size:
+        raise ValueError(
+            "Stored reference embedding dimension does not match its metadata. "
+            f"Delete {source} and run the script again to re-enrol it."
+        )
+
+    return embedding / embedding_norm
+
+
+def get_or_create_reference_embedding(
+    face_analyzer: FaceAnalysis,
+    reference_image_path: str,
+    embedding_path: str,
+) -> np.ndarray:
+    """Load the stored reference embedding or create it during first enrolment."""
+    if Path(embedding_path).is_file():
+        print(f"Using stored reference embedding: {embedding_path}")
+        print()
+        return load_reference_embedding(embedding_path)
+
+    print("No stored reference embedding was found.")
+    print(f"Creating it from: {reference_image_path}")
     print()
 
-    # Initialize the model only once and reuse it for both images.
-    face_analyzer = create_face_analyzer()
-
-    # Do not resize, crop, align, normalize pixels, or change colour channels
-    # here. InsightFace controls its required face preprocessing internally.
     reference_image = load_image(reference_image_path)
-    captured_image = load_image(captured_image_path)
-
     reference_embedding = extract_embedding(
         face_analyzer,
         reference_image,
         "reference",
     )
+    store_reference_embedding(
+        reference_embedding,
+        embedding_path,
+        reference_image_path,
+    )
+
+    print(f"Reference embedding stored successfully: {embedding_path}")
+    print()
+    return reference_embedding
+
+
+def verify_faces(
+    reference_image_path: str,
+    captured_image_path: str,
+) -> None:
+    """Compare one captured face with the enrolled reference embedding."""
+    total_started_at = perf_counter()
+
+    print("InsightFace one-to-one verification")
+    print("-----------------------------------")
+    print()
+
+    # Initialize the model only once. It is needed to process the captured image
+    # and is also reused for reference enrolment when no stored embedding exists.
+    model_started_at = perf_counter()
+    face_analyzer = create_face_analyzer()
+    model_initialization_time = perf_counter() - model_started_at
+
+    # Do not resize, crop, align, normalize pixels, or change colour channels
+    # here. InsightFace controls its required face preprocessing internally.
+    reference_started_at = perf_counter()
+    reference_embedding = get_or_create_reference_embedding(
+        face_analyzer,
+        reference_image_path,
+        REFERENCE_EMBEDDING_PATH,
+    )
+    reference_embedding_time = perf_counter() - reference_started_at
+
+    # On every run after enrolment, only this newly captured image is decoded,
+    # detected, aligned, preprocessed, and passed through the recognition model.
+    captured_request_started_at = perf_counter()
+    image_load_started_at = perf_counter()
+    captured_image = load_image(captured_image_path)
+    captured_image_load_time = perf_counter() - image_load_started_at
+
+    recognition_started_at = perf_counter()
     captured_embedding = extract_embedding(
         face_analyzer,
         captured_image,
         "captured",
     )
+    captured_recognition_time = perf_counter() - recognition_started_at
 
     if reference_embedding.shape != captured_embedding.shape:
         raise ValueError(
@@ -141,15 +274,19 @@ def verify_faces(
             f"{reference_embedding.size} and {captured_embedding.size}."
         )
 
+    comparison_started_at = perf_counter()
     cosine_similarity = calculate_cosine_similarity(
         reference_embedding,
         captured_embedding,
     )
     verified = cosine_similarity >= SIMILARITY_THRESHOLD
+    comparison_time = perf_counter() - comparison_started_at
+    captured_request_time = perf_counter() - captured_request_started_at
+    total_verification_time = perf_counter() - total_started_at
 
     print(f"Model pack: {MODEL_PACK_NAME}")
     print("Detector and recognition pipeline: InsightFace FaceAnalysis")
-    print("Execution provider: CPUExecutionProvider")
+    print(f"Execution provider: {EXECUTION_PROVIDERS[0]}")
     print(f"Detection size: {DETECTION_SIZE[0]} x {DETECTION_SIZE[1]}")
     print(f"Embedding dimension: {reference_embedding.size}")
     print("Comparison metric: Cosine similarity")
@@ -166,11 +303,25 @@ def verify_faces(
     else:
         print("Result: The two images do not appear to belong to the same person.")
 
+    print()
+    print("Timing breakdown")
+    print("----------------")
+    print(f"Model initialization: {model_initialization_time:.4f} seconds")
+    print(f"Stored embedding load/enrolment: {reference_embedding_time:.4f} seconds")
+    print(f"Captured image loading: {captured_image_load_time:.4f} seconds")
+    print(
+        "Captured face detection, alignment and embedding: "
+        f"{captured_recognition_time:.4f} seconds"
+    )
+    print(f"Cosine similarity and decision: {comparison_time:.6f} seconds")
+    print(f"Captured-image request latency: {captured_request_time:.4f} seconds")
+    print(f"Total script verification time: {total_verification_time:.4f} seconds")
 
-# This mock processes both images on every run and is suitable only for testing.
-# A future enrolment pipeline should generate and store the reference embedding
-# once. During attendance, only the newly captured image embedding should
-# normally be generated and compared with the stored reference embedding.
+
+# The reference image is processed only when its stored embedding is missing.
+# Later runs process only the captured image and compare it with that stored
+# reference representation. This JSON storage is still a local testing approach;
+# production biometric data requires appropriate access control and protection.
 if __name__ == "__main__":
     try:
         verify_faces(

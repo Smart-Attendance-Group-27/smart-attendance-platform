@@ -7,3 +7,4 @@ venv.bak/
 FaceRecognitionTesting/DeepFace/stored_embeddings/
 FaceRecognitionTesting/DeepFace/test_images/
 FaceRecognitionTesting/InsightFace/test_images/
+FaceRecognitionTesting/InsightFace/stored_embeddings/

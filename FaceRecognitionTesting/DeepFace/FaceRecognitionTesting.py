@@ -26,7 +26,7 @@ SCRIPT_DIRECTORY = Path(__file__).resolve().parent
 
 # Change these paths when testing with different local images.
 REFERENCE_IMAGE_PATH = SCRIPT_DIRECTORY / "test_images/Screenshot 2026-08-02 011524.png"
-CAPTURED_IMAGE_PATH = SCRIPT_DIRECTORY / "test_images/Ref_5.jpeg"
+CAPTURED_IMAGE_PATH = SCRIPT_DIRECTORY / "test_images/Ref_20.jpeg"
 REFERENCE_EMBEDDING_PATH = SCRIPT_DIRECTORY / "stored_embeddings/reference_embedding.json"
 
 MODEL_NAME = "ArcFace"  # ArcFace, Dlib, Facenet, OpenFace, DeepFace, DeepID, VGG-Face
@@ -154,6 +154,8 @@ def load_reference_embedding(embedding_path: Path) -> list[float] | None:
 
 def verify_captured_face(embedding_path: Path, captured_image_path: Path) -> None:
     """Process only the captured image and compare it with the stored embedding."""
+    total_verification_started_at = perf_counter()
+
     if not captured_image_path.is_file():
         print(f"Error: Captured image file not found: {captured_image_path}")
         return
@@ -161,14 +163,41 @@ def verify_captured_face(embedding_path: Path, captured_image_path: Path) -> Non
     if not _deepface_is_available():
         return
 
+    df = cast(Any, DeepFace)
+
+    try:
+        # Preload both models so their one-time startup cost is measured separately
+        # from the latency of processing a newly captured image.
+        recognition_model_started_at = perf_counter()
+        df.build_model(model_name=MODEL_NAME, task="facial_recognition")
+        recognition_model_initialization_time = (
+            perf_counter() - recognition_model_started_at
+        )
+
+        detector_model_started_at = perf_counter()
+        df.build_model(model_name=DETECTOR_BACKEND, task="face_detector")
+        detector_model_initialization_time = perf_counter() - detector_model_started_at
+    except (ValueError, OSError, RuntimeError) as error:
+        _print_processing_error(error)
+        return
+    except Exception as error:
+        print(f"Error: An unexpected model initialization error occurred: {error}")
+        return
+
+    total_model_initialization_time = (
+        recognition_model_initialization_time + detector_model_initialization_time
+    )
+
+    stored_embedding_started_at = perf_counter()
     reference_embedding = load_reference_embedding(embedding_path)
+    stored_embedding_load_time = perf_counter() - stored_embedding_started_at
     if reference_embedding is None:
         return
 
-    started_at = perf_counter()
+    captured_request_started_at = perf_counter()
 
     try:
-        df = cast(Any, DeepFace)
+        captured_processing_started_at = perf_counter()
         captured_representations = cast(list, df.represent(
             img_path=str(captured_image_path),
             model_name=MODEL_NAME,
@@ -177,6 +206,7 @@ def verify_captured_face(embedding_path: Path, captured_image_path: Path) -> Non
             enforce_detection=True,
             max_faces=2,
         ))
+        captured_processing_time = perf_counter() - captured_processing_started_at
 
         if len(captured_representations) != 1:
             print(
@@ -192,6 +222,7 @@ def verify_captured_face(embedding_path: Path, captured_image_path: Path) -> Non
 
         # Both arguments are embeddings, so DeepFace applies its official ArcFace
         # cosine threshold without decoding or processing the reference image again.
+        comparison_started_at = perf_counter()
         result: dict[str, Any] = cast(dict, df.verify(
             img1_path=reference_embedding,
             img2_path=captured_embedding,
@@ -202,10 +233,15 @@ def verify_captured_face(embedding_path: Path, captured_image_path: Path) -> Non
             enforce_detection=True,
             silent=True,
         ))
+        comparison_time = perf_counter() - comparison_started_at
+        captured_request_time = perf_counter() - captured_request_started_at
+        total_verification_time = perf_counter() - total_verification_started_at
 
-        comparison_time = result.get("time")
-        result["time"] = round(perf_counter() - started_at, 2)
-        result["embedding_comparison_time"] = comparison_time
+        deepface_internal_comparison_time = result.get("time")
+        result["time"] = round(captured_request_time, 4)
+        result["captured_image_processing_time"] = round(captured_processing_time, 4)
+        result["embedding_comparison_time"] = round(comparison_time, 6)
+        result["deepface_internal_comparison_time"] = deepface_internal_comparison_time
         result["facial_areas"]["img2"] = captured_representations[0].get("facial_area")
         result["captured_face_confidence"] = captured_representations[0].get(
             "face_confidence"
@@ -227,12 +263,31 @@ def verify_captured_face(embedding_path: Path, captured_image_path: Path) -> Non
     print(f"Recognition model: {result.get('model', MODEL_NAME)}")
     print(f"Detector backend: {DETECTOR_BACKEND}")
     print(f"Similarity metric: {result.get('similarity_metric', DISTANCE_METRIC)}")
-    print(f"Total captured-image verification time: {result['time']} seconds")
 
     if verified:
         print("Result: The captured image appears to belong to the enrolled person.")
     else:
         print("Result: The captured image does not appear to belong to the enrolled person.")
+
+    print("\nTiming breakdown")
+    print("----------------")
+    print(
+        "ArcFace model initialization: "
+        f"{recognition_model_initialization_time:.4f} seconds"
+    )
+    print(
+        "RetinaFace model initialization: "
+        f"{detector_model_initialization_time:.4f} seconds"
+    )
+    print(f"Total model initialization: {total_model_initialization_time:.4f} seconds")
+    print(f"Stored embedding loading: {stored_embedding_load_time:.4f} seconds")
+    print(
+        "Captured image decode, detection, alignment and embedding: "
+        f"{captured_processing_time:.4f} seconds"
+    )
+    print(f"Embedding comparison and decision: {comparison_time:.6f} seconds")
+    print(f"Captured-image request latency: {captured_request_time:.4f} seconds")
+    print(f"Total script verification time: {total_verification_time:.4f} seconds")
 
     print("\nRaw DeepFace result:")
     print(result)
