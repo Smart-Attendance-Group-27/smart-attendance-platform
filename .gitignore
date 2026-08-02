@@ -4,5 +4,6 @@ env/
 ENV/
 env.bak/
 venv.bak/
-FaceRecognitionTesting/DeepFace-Arc/stored_embeddings/
-FaceRecognitionTesting/DeepFace-Arc/test_images/
+FaceRecognitionTesting/DeepFace/stored_embeddings/
+FaceRecognitionTesting/DeepFace/test_images/
+FaceRecognitionTesting/InsightFace/test_images/
