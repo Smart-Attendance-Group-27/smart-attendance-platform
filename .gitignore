@@ -31,3 +31,12 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Virtual Environment folders (DO NOT COMMIT THESE)
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+FaceRecognitionTesting/DeepFace-Arc/test_images/
