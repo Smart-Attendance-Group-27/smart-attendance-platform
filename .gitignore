@@ -40,3 +40,4 @@ ENV/
 env.bak/
 venv.bak/
 FaceRecognitionTesting/DeepFace-Arc/test_images/
+FaceRecognitionTesting/DeepFace-Arc/stored_embeddings/
