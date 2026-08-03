@@ -21,8 +21,8 @@ warnings.filterwarnings(
 )
 
 
-REFERENCE_IMAGE_PATH = "test_images/Screenshot 2026-08-02 011524.png"
-CAPTURED_IMAGE_PATH = "test_images/Ref_6.jpeg"
+REFERENCE_IMAGE_PATH = "reference_images/Screenshot 2026-08-02 011524.png"
+CAPTURED_IMAGE_PATH = "capture_images/Ref_6.jpeg"
 REFERENCE_EMBEDDING_PATH = "stored_embeddings/reference_embedding.json"
 
 MODEL_PACK_NAME = "buffalo_l"

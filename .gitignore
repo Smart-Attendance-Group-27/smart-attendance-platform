@@ -8,3 +8,9 @@ FaceRecognitionTesting/DeepFace/stored_embeddings/
 FaceRecognitionTesting/DeepFace/test_images/
 FaceRecognitionTesting/InsightFace/test_images/
 FaceRecognitionTesting/InsightFace/stored_embeddings/
+FaceRecognitionTesting/InsightFace/reference_images/*
+!FaceRecognitionTesting/InsightFace/reference_images/.gitkeep
+FaceRecognitionTesting/InsightFace/capture_images/*
+!FaceRecognitionTesting/InsightFace/capture_images/.gitkeep
+FaceRecognitionTesting/InsightFace/benchmark_data/
+FaceRecognitionTesting/InsightFace/benchmark_reports/
