@@ -31,3 +31,16 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Face Recognition Testing
+FaceRecognitionTesting/
+.venv/
+venv.back/*
+
+# Virtual Environment folders 
+venv/
+.venv/
+env/
+ENV/
+env.bak/*
+venv.bak/
