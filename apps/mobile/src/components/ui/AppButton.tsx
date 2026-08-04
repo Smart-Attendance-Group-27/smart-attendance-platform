@@ -29,6 +29,7 @@ type AppButtonProps = Omit<
   title: string;
   variant?: AppButtonVariant;
   loading?: boolean;
+  loadingTitle?: string;
   fullWidth?: boolean;
   leftIcon?: ReactNode;
   style?: StyleProp<ViewStyle>;
@@ -38,6 +39,7 @@ export function AppButton({
   title,
   variant = 'primary',
   loading = false,
+  loadingTitle,
   fullWidth = true,
   leftIcon,
   disabled = false,
@@ -71,20 +73,16 @@ export function AppButton({
           color={loadingIndicatorColors[variant]}
           size="small"
         />
-      ) : (
-        <>
-          {leftIcon}
+      ) : leftIcon}
 
-          <Text
-            style={[
-              styles.label,
-              variantTextStyles[variant],
-            ]}
-          >
-            {title}
-          </Text>
-        </>
-      )}
+      <Text
+        style={[
+          styles.label,
+          variantTextStyles[variant],
+        ]}
+      >
+        {loading ? loadingTitle ?? title : title}
+      </Text>
     </Pressable>
   );
 }
