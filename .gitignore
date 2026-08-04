@@ -32,11 +32,15 @@ Thumbs.db
 *.tmp
 *.temp
 
-# Virtual Environment folders (DO NOT COMMIT THESE)
+# Face Recognition Testing
+FaceRecognitionTesting/
+.venv/
+venv.back/*
+
+# Virtual Environment folders 
 venv/
 .venv/
 env/
 ENV/
-env.bak/
+env.bak/*
 venv.bak/
-FaceRecognitionTesting/
