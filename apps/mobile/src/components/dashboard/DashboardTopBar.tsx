@@ -1,5 +1,5 @@
 import { SymbolView } from 'expo-symbols';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { lightColors, radii, spacing } from '../../theme';
 
@@ -14,11 +14,7 @@ export function DashboardTopBar({
     <View style={styles.container}>
       <View style={styles.brand}>
         <View style={styles.brandMark}>
-          <Image
-            accessibilityIgnoresInvertColors
-            source={require('../../../assets/Uni.jpg')}
-            style={styles.brandLogo}
-          />
+          <Text style={styles.brandMarkText}>U</Text>
         </View>
         <Text style={styles.brandTitle}>UniAttend</Text>
       </View>
@@ -63,18 +59,17 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   brandMark: {
-    width: 34,
-    height: 34,
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
-    backgroundColor: lightColors.surface,
-    overflow: 'hidden',
+    borderRadius: 9,
+    backgroundColor: lightColors.primary,
   },
-  brandLogo: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+  brandMarkText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: lightColors.surface,
   },
   brandTitle: {
     fontSize: 17,
