@@ -2,6 +2,7 @@ import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -88,7 +89,11 @@ export function StudentLoginScreen({
             <View style={styles.card}>
               <View style={styles.brandBlock}>
                 <View style={styles.brandMark}>
-                  <Text style={styles.brandMarkText}>U</Text>
+                  <Image
+                    accessibilityIgnoresInvertColors
+                    source={require('../../../assets/Uni.jpg')}
+                    style={styles.brandLogo}
+                  />
                 </View>
                 <Text style={styles.brandTitle}>UniAttend</Text>
                 <Text style={styles.brandSubtitle}>
@@ -247,18 +252,19 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg - 2,
   },
   brandMark: {
-    width: 56,
-    height: 56,
+    width: 64,
+    height: 64,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.sm,
     borderRadius: radii.card,
-    backgroundColor: lightColors.primary,
+    backgroundColor: lightColors.surface,
+    overflow: 'hidden',
   },
-  brandMarkText: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: lightColors.surface,
+  brandLogo: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   brandTitle: {
     fontSize: 20,
