@@ -28,6 +28,28 @@ The database data is stored in the Docker volume named
 
 These values are for local development only.
 
+## Imported Realm
+
+Keycloak imports the local realm file from:
+
+```text
+infra/local/keycloak/realm/uniattend-realm.json
+```
+
+The imported realm is named `uniattend`.
+
+It creates:
+
+- `student`, `lecturer`, and `administrator` realm roles.
+- `uniattend-mobile`, a public OpenID Connect mobile client.
+- PKCE with `S256` for the mobile client.
+- Browser-based login flow support.
+- Direct password grant disabled, so the mobile app does not collect and submit
+  passwords directly.
+
+If Keycloak was already started before this realm file was added, reset the local
+database once so Keycloak can import the realm on a fresh start.
+
 ## Start Keycloak
 
 Run this from the repository root:
@@ -41,6 +63,7 @@ What this does:
 - Downloads the PostgreSQL and Keycloak images if needed.
 - Starts the local PostgreSQL database.
 - Starts Keycloak after the database is healthy.
+- Imports the `uniattend` realm when starting with a fresh local database.
 - Opens Keycloak on `http://localhost:8080`.
 
 ## Check Container Status
@@ -64,6 +87,67 @@ Use:
 ```text
 Username: admin
 Password: admin
+```
+
+To view the imported UniAttend realm, open the realm selector in the admin
+console and choose `uniattend`.
+
+## Verify The Imported Realm
+
+Run this after Keycloak has finished starting:
+
+```powershell
+curl.exe -I http://localhost:8080/realms/uniattend
+```
+
+Expected result:
+
+```text
+HTTP/1.1 200 OK
+```
+
+If this returns `404 Not Found`, Keycloak is running but the `uniattend` realm
+has not been imported into the current local database. Reset local data once and
+start Keycloak again.
+
+## Verify Roles And Mobile Client
+
+Log in to the local Keycloak admin CLI:
+
+```powershell
+docker exec uniattend-keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password admin
+```
+
+Check the imported realm roles:
+
+```powershell
+docker exec uniattend-keycloak /opt/keycloak/bin/kcadm.sh get roles -r uniattend
+```
+
+Expected UniAttend roles:
+
+```text
+student
+lecturer
+administrator
+```
+
+Check the imported mobile client:
+
+```powershell
+docker exec uniattend-keycloak /opt/keycloak/bin/kcadm.sh get clients -r uniattend -q clientId=uniattend-mobile
+```
+
+Expected mobile client settings:
+
+```text
+clientId: uniattend-mobile
+publicClient: true
+standardFlowEnabled: true
+implicitFlowEnabled: false
+directAccessGrantsEnabled: false
+pkce.code.challenge.method: S256
+redirectUris: uniattend://*, exp://*
 ```
 
 ## Stop Keycloak
