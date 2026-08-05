@@ -28,6 +28,28 @@ The database data is stored in the Docker volume named
 
 These values are for local development only.
 
+## Imported Realm
+
+Keycloak imports the local realm file from:
+
+```text
+infra/local/keycloak/realm/uniattend-realm.json
+```
+
+The imported realm is named `uniattend`.
+
+It creates:
+
+- `student`, `lecturer`, and `administrator` realm roles.
+- `uniattend-mobile`, a public OpenID Connect mobile client.
+- PKCE with `S256` for the mobile client.
+- Browser-based login flow support.
+- Direct password grant disabled, so the mobile app does not collect and submit
+  passwords directly.
+
+If Keycloak was already started before this realm file was added, reset the local
+database once so Keycloak can import the realm on a fresh start.
+
 ## Start Keycloak
 
 Run this from the repository root:
@@ -41,6 +63,7 @@ What this does:
 - Downloads the PostgreSQL and Keycloak images if needed.
 - Starts the local PostgreSQL database.
 - Starts Keycloak after the database is healthy.
+- Imports the `uniattend` realm when starting with a fresh local database.
 - Opens Keycloak on `http://localhost:8080`.
 
 ## Check Container Status
