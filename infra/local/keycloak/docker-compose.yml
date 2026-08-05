@@ -1,0 +1,49 @@
+name: uniattend-local-keycloak
+
+services:
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: uniattend-keycloak-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${KEYCLOAK_DB_NAME:-keycloak}
+      POSTGRES_USER: ${KEYCLOAK_DB_USER:-keycloak}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak_dev_password}
+    ports:
+      - "${KEYCLOAK_DB_PORT:-5433}:5432"
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.0
+    container_name: uniattend-keycloak
+    command: ["start-dev", "--import-realm"]
+    restart: unless-stopped
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/${KEYCLOAK_DB_NAME:-keycloak}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak_dev_password}
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "${KEYCLOAK_HTTP_PORT:-8080}:8080"
+      - "${KEYCLOAK_HEALTH_PORT:-9000}:9000"
+    volumes:
+      - ./realm:/opt/keycloak/data/import:ro
+
+volumes:
+  keycloak_db_data:
