@@ -1,10 +1,14 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from 'react-native';
 
 import { ScreenContainer } from '../../../../components/ui';
 import { AttendanceSessionDetailsScreen } from '../../../../features/attendance/screens/AttendanceSessionDetailsScreen';
+import { MockAttendanceService } from '../../../../features/attendance/services/mockAttendanceService';
+
+const attendanceService = new MockAttendanceService();
 
 export default function AttendanceSessionDetailsRoute() {
+  const router = useRouter();
   const { sessionId: sessionIdParam } = useLocalSearchParams<{
     sessionId?: string | string[];
   }>();
@@ -24,5 +28,18 @@ export default function AttendanceSessionDetailsRoute() {
     );
   }
 
-  return <AttendanceSessionDetailsScreen sessionId={sessionId} />;
+  return (
+    <AttendanceSessionDetailsScreen
+      attendanceService={attendanceService}
+      onBack={() => router.back()}
+      onStartCheckIn={() =>
+        router.push({
+          pathname:
+            '/(student)/attendance/[sessionId]/location-check',
+          params: { sessionId },
+        })
+      }
+      sessionId={sessionId}
+    />
+  );
 }
