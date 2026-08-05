@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { lightColors, radii, spacing, typography } from '../../theme';
-import type { NotificationFilter } from './notification.types';
+import { lightColors, radii, spacing, typography } from '../../../theme';
+
+export type NotificationFilter = 'all' | 'attendance' | 'general';
 
 type NotificationFiltersProps = {
   selectedFilter: NotificationFilter;
@@ -11,7 +12,7 @@ type NotificationFiltersProps = {
 const filters: { label: string; value: NotificationFilter }[] = [
   { label: 'All', value: 'all' },
   { label: 'Attendance', value: 'attendance' },
-  { label: 'System', value: 'system' },
+  { label: 'System', value: 'general' },
 ];
 
 export function NotificationFilters({
