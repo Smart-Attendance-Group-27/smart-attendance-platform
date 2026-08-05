@@ -89,6 +89,27 @@ Username: admin
 Password: admin
 ```
 
+To view the imported UniAttend realm, open the realm selector in the admin
+console and choose `uniattend`.
+
+## Verify The Imported Realm
+
+Run this after Keycloak has finished starting:
+
+```powershell
+curl.exe -I http://localhost:8080/realms/uniattend
+```
+
+Expected result:
+
+```text
+HTTP/1.1 200 OK
+```
+
+If this returns `404 Not Found`, Keycloak is running but the `uniattend` realm
+has not been imported into the current local database. Reset local data once and
+start Keycloak again.
+
 ## Stop Keycloak
 
 ```powershell
