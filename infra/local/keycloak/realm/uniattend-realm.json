@@ -1,0 +1,49 @@
+{
+  "realm": "uniattend",
+  "displayName": "UniAttend",
+  "enabled": true,
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "student",
+        "description": "Student mobile application user"
+      },
+      {
+        "name": "lecturer",
+        "description": "Lecturer dashboard user"
+      },
+      {
+        "name": "administrator",
+        "description": "Administrator dashboard user"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "uniattend-mobile",
+      "name": "UniAttend Mobile App",
+      "description": "Public mobile client for student authentication",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": [
+        "uniattend://*",
+        "exp://*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ]
+}

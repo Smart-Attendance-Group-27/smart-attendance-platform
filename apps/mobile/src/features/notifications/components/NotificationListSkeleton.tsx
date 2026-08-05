@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 
-import { lightColors, radii, spacing } from '../../theme';
+import { lightColors, radii, spacing } from '../../../theme';
 
 const SKELETON_ROWS = 4;
 
@@ -29,7 +29,10 @@ export function NotificationListSkeleton() {
   }, [opacity]);
 
   return (
-    <View accessibilityLabel="Loading notifications" accessibilityRole="progressbar">
+    <View
+      accessibilityLabel="Loading notifications"
+      accessibilityRole="progressbar"
+    >
       {Array.from({ length: SKELETON_ROWS }, (_, index) => (
         <View key={index} style={styles.row}>
           <Animated.View style={[styles.icon, { opacity }]} />
