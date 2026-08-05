@@ -1,7 +1,7 @@
 import { SymbolView } from 'expo-symbols';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { lightColors, radii, spacing, typography } from '../../theme';
+import { lightColors, radii, spacing, typography } from '../../../theme';
 
 type NotificationEmptyStateProps = {
   filtered?: boolean;
@@ -14,7 +14,11 @@ export function NotificationEmptyState({
     <View style={styles.container}>
       <View style={styles.iconContainer}>
         <SymbolView
-          name={{ ios: 'bell', android: 'notifications_none', web: 'notifications_none' }}
+          name={{
+            ios: 'bell',
+            android: 'notifications_none',
+            web: 'notifications_none',
+          }}
           size={30}
           tintColor={lightColors.neutral}
         />
