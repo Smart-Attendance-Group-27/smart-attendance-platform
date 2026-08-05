@@ -2,29 +2,53 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { lightColors, radii, spacing, typography } from '../../../theme';
 
-const steps = [
-  { number: '1', label: 'Location', status: 'Not started' },
-  { number: '2', label: 'Face', status: 'Waiting' },
-  { number: '3', label: 'Complete', status: 'Not recorded' },
-] as const;
+type AttendanceProgressStepsProps = {
+  phase?: 'not_started' | 'location';
+};
 
-export function AttendanceProgressSteps() {
+const stepLabels = ['Location', 'Face', 'Complete'] as const;
+
+const stepStatuses = {
+  not_started: ['Not started', 'Waiting', 'Not recorded'],
+  location: ['Current', 'Waiting', 'Pending'],
+} as const;
+
+export function AttendanceProgressSteps({
+  phase = 'not_started',
+}: AttendanceProgressStepsProps) {
+  const statuses = stepStatuses[phase];
+
   return (
     <View
       accessible
       accessibilityLabel="Attendance check-in progress: Location, Face, Complete"
       style={styles.container}
     >
-      {steps.map((step, index) => (
-        <View key={step.label} style={styles.step}>
-          {index < steps.length - 1 ? <View style={styles.connector} /> : null}
-          <View style={styles.dot}>
-            <Text style={styles.dotText}>{step.number}</Text>
+      {stepLabels.map((label, index) => {
+        const isCurrent = phase === 'location' && index === 0;
+
+        return (
+          <View key={label} style={styles.step}>
+            {index < stepLabels.length - 1 ? (
+              <View style={styles.connector} />
+            ) : null}
+            <View style={[styles.dot, isCurrent && styles.currentDot]}>
+              <Text
+                style={[
+                  styles.dotText,
+                  isCurrent && styles.currentDotText,
+                ]}
+              >
+                {index + 1}
+              </Text>
+            </View>
+            <Text style={styles.label}>{label}</Text>
+            <Text style={[styles.status, isCurrent && styles.currentStatus]}>
+              {statuses[index]}
+            </Text>
           </View>
-          <Text style={styles.label}>{step.label}</Text>
-          <Text style={styles.status}>{step.status}</Text>
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
@@ -62,6 +86,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: lightColors.textSecondary,
   },
+  currentDot: {
+    borderColor: lightColors.primaryInteraction,
+    backgroundColor: lightColors.primaryInteraction,
+  },
+  currentDotText: {
+    color: lightColors.surface,
+  },
   label: {
     ...typography.supporting,
     marginTop: spacing.xs,
@@ -74,5 +105,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxs,
     textAlign: 'center',
     color: lightColors.textSecondary,
+  },
+  currentStatus: {
+    fontWeight: '700',
+    color: lightColors.primaryInteraction,
   },
 });
