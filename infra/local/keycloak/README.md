@@ -110,6 +110,46 @@ If this returns `404 Not Found`, Keycloak is running but the `uniattend` realm
 has not been imported into the current local database. Reset local data once and
 start Keycloak again.
 
+## Verify Roles And Mobile Client
+
+Log in to the local Keycloak admin CLI:
+
+```powershell
+docker exec uniattend-keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password admin
+```
+
+Check the imported realm roles:
+
+```powershell
+docker exec uniattend-keycloak /opt/keycloak/bin/kcadm.sh get roles -r uniattend
+```
+
+Expected UniAttend roles:
+
+```text
+student
+lecturer
+administrator
+```
+
+Check the imported mobile client:
+
+```powershell
+docker exec uniattend-keycloak /opt/keycloak/bin/kcadm.sh get clients -r uniattend -q clientId=uniattend-mobile
+```
+
+Expected mobile client settings:
+
+```text
+clientId: uniattend-mobile
+publicClient: true
+standardFlowEnabled: true
+implicitFlowEnabled: false
+directAccessGrantsEnabled: false
+pkce.code.challenge.method: S256
+redirectUris: uniattend://*, exp://*
+```
+
 ## Stop Keycloak
 
 ```powershell
