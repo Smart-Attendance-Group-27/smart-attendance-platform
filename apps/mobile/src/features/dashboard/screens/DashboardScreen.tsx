@@ -25,9 +25,15 @@ type DashboardScreenProps = {
   dashboardService?: DashboardService;
   profileService?: ProfileService;
   authService?: AuthService;
+  onSignOutPress?: () => void;
 };
 
-export function DashboardScreen({ dashboardService, profileService, authService }: DashboardScreenProps) {
+export function DashboardScreen({
+  authService,
+  dashboardService,
+  onSignOutPress,
+  profileService,
+}: DashboardScreenProps) {
   const router = useRouter();
   const service = useMemo(() => dashboardService ?? new MockDashboardService(), [dashboardService]);
   const profileServiceInstance = profileService ?? new MockProfileService();
@@ -150,7 +156,10 @@ export function DashboardScreen({ dashboardService, profileService, authService 
 
   return (
     <ScreenContainer scrollable contentContainerStyle={styles.scrollContent}>
-        <DashboardTopBar onNotificationsPress={() => router.push('/(student)/(tabs)/notifications')} />
+        <DashboardTopBar
+          onNotificationsPress={() => router.push('/(student)/(tabs)/notifications')}
+          onSignOutPress={onSignOutPress}
+        />
 
         <View style={styles.greeting}>
           <Text accessibilityRole="header" style={styles.greetingTitle}>
