@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { lightColors, radii, spacing, typography } from '../../../theme';
 
 type AttendanceProgressStepsProps = {
-  phase?: 'not_started' | 'location';
+  phase?: 'not_started' | 'location' | 'face';
 };
 
 const stepLabels = ['Location', 'Face', 'Complete'] as const;
@@ -11,6 +11,7 @@ const stepLabels = ['Location', 'Face', 'Complete'] as const;
 const stepStatuses = {
   not_started: ['Not started', 'Waiting', 'Not recorded'],
   location: ['Current', 'Waiting', 'Pending'],
+  face: ['Verified', 'Current', 'Pending'],
 } as const;
 
 export function AttendanceProgressSteps({
@@ -25,25 +26,46 @@ export function AttendanceProgressSteps({
       style={styles.container}
     >
       {stepLabels.map((label, index) => {
-        const isCurrent = phase === 'location' && index === 0;
+        const currentStepIndex =
+          phase === 'location' ? 0 : phase === 'face' ? 1 : -1;
+        const isCurrent = index === currentStepIndex;
+        const isVerified = phase === 'face' && index === 0;
 
         return (
           <View key={label} style={styles.step}>
             {index < stepLabels.length - 1 ? (
-              <View style={styles.connector} />
+              <View
+                style={[
+                  styles.connector,
+                  isVerified && styles.verifiedConnector,
+                ]}
+              />
             ) : null}
-            <View style={[styles.dot, isCurrent && styles.currentDot]}>
+            <View
+              style={[
+                styles.dot,
+                isCurrent && styles.currentDot,
+                isVerified && styles.verifiedDot,
+              ]}
+            >
               <Text
                 style={[
                   styles.dotText,
                   isCurrent && styles.currentDotText,
+                  isVerified && styles.verifiedDotText,
                 ]}
               >
-                {index + 1}
+                {isVerified ? '✓' : index + 1}
               </Text>
             </View>
             <Text style={styles.label}>{label}</Text>
-            <Text style={[styles.status, isCurrent && styles.currentStatus]}>
+            <Text
+              style={[
+                styles.status,
+                isCurrent && styles.currentStatus,
+                isVerified && styles.verifiedStatus,
+              ]}
+            >
               {statuses[index]}
             </Text>
           </View>
@@ -71,6 +93,9 @@ const styles = StyleSheet.create({
     height: 2,
     backgroundColor: lightColors.border,
   },
+  verifiedConnector: {
+    backgroundColor: lightColors.success,
+  },
   dot: {
     width: spacing.xxl,
     height: spacing.xxl,
@@ -93,6 +118,13 @@ const styles = StyleSheet.create({
   currentDotText: {
     color: lightColors.surface,
   },
+  verifiedDot: {
+    borderColor: lightColors.success,
+    backgroundColor: lightColors.success,
+  },
+  verifiedDotText: {
+    color: lightColors.surface,
+  },
   label: {
     ...typography.supporting,
     marginTop: spacing.xs,
@@ -109,5 +141,9 @@ const styles = StyleSheet.create({
   currentStatus: {
     fontWeight: '700',
     color: lightColors.primaryInteraction,
+  },
+  verifiedStatus: {
+    fontWeight: '700',
+    color: lightColors.success,
   },
 });
