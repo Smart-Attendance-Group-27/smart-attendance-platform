@@ -5,6 +5,7 @@ from fastapi import FastAPI
 
 from core.config import get_settings
 from db.pool import close_database_pool, create_database_pool
+from modules.attendance_sessions.qr_session.route import router as qr_session_router
 from modules.routes.health import router as health_router
 
 
@@ -26,6 +27,7 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
         lifespan=lifespan if enable_database else None,
     )
     app.include_router(health_router)
+    app.include_router(qr_session_router, prefix="/api/v1")
     return app
 
 
