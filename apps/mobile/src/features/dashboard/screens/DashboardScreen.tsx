@@ -9,7 +9,8 @@ import {
   View,
 } from 'react-native';
 
-import { ActiveSessionCard, CourseSummaryCard, DashboardTopBar, UpcomingAttendanceList, courseSummaries } from '../../../components/dashboard';
+import { CourseSummaryCard, DashboardTopBar, UpcomingAttendanceList, courseSummaries } from '../../../components/dashboard';
+import { ActiveSessionCard } from '../../../components/dashboard/ActiveSessionCard';
 import { ScreenContainer } from '../../../components/ui';
 import { lightColors, spacing, typography } from '../../../theme';
 import type { DashboardService } from '../services/dashboardService';
