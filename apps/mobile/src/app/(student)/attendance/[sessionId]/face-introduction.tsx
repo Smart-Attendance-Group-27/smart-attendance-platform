@@ -1,10 +1,11 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from 'react-native';
 
 import { ScreenContainer } from '../../../../components/ui';
 import { FaceIntroductionScreen } from '../../../../features/face-verification/screens/FaceIntroductionScreen';
 
 export default function FaceIntroductionRoute() {
+  const router = useRouter();
   const { sessionId: sessionIdParam } = useLocalSearchParams<{
     sessionId?: string | string[];
   }>();
@@ -24,5 +25,17 @@ export default function FaceIntroductionRoute() {
     );
   }
 
-  return <FaceIntroductionScreen sessionId={sessionId} />;
+  return (
+    <FaceIntroductionScreen
+      onBack={() => router.back()}
+      onBeginVerification={(verifiedSessionId) =>
+        router.push({
+          pathname:
+            '/(student)/attendance/[sessionId]/face-verification',
+          params: { sessionId: verifiedSessionId },
+        })
+      }
+      sessionId={sessionId}
+    />
+  );
 }
