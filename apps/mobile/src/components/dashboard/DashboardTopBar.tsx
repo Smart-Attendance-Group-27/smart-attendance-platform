@@ -5,10 +5,12 @@ import { lightColors, radii, spacing } from '../../theme';
 
 type DashboardTopBarProps = {
   onNotificationsPress: () => void;
+  onSignOutPress?: () => void;
 };
 
 export function DashboardTopBar({
   onNotificationsPress,
+  onSignOutPress,
 }: DashboardTopBarProps) {
   return (
     <View style={styles.container}>
@@ -40,6 +42,28 @@ export function DashboardTopBar({
           />
           <View style={styles.notificationDot} />
         </Pressable>
+
+        {onSignOutPress ? (
+          <Pressable
+            accessibilityLabel="Log out"
+            accessibilityRole="button"
+            onPress={onSignOutPress}
+            style={({ pressed }) => [
+              styles.notificationButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <SymbolView
+              name={{
+                ios: 'rectangle.portrait.and.arrow.right',
+                android: 'logout',
+                web: 'logout',
+              }}
+              size={23}
+              tintColor={lightColors.textPrimary}
+            />
+          </Pressable>
+        ) : null}
 
         <View accessibilityLabel="Student profile, Mahesh" style={styles.avatar}>
           <Text style={styles.avatarText}>MH</Text>

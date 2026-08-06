@@ -1,6 +1,24 @@
-import { Stack } from 'expo-router'
+import { Redirect, Stack } from 'expo-router'
+import { ActivityIndicator, StyleSheet, View } from 'react-native'
+
+import { useAuth } from '../../features/auth/context/AuthContext'
+import { lightColors } from '../../theme'
 
 export default function StudentLayout() {
+  const { isRestoring, session } = useAuth()
+
+  if (isRestoring) {
+    return (
+      <View style={styles.loadingScreen}>
+        <ActivityIndicator color={lightColors.primaryInteraction} size="large" />
+      </View>
+    )
+  }
+
+  if (session.status !== 'authenticated') {
+    return <Redirect href="/(auth)/login" />
+  }
+
   return (
     <Stack
       screenOptions={{
@@ -10,3 +28,12 @@ export default function StudentLayout() {
     />
   )
 }
+
+const styles = StyleSheet.create({
+  loadingScreen: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: lightColors.background,
+  },
+})
