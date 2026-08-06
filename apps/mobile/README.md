@@ -1,56 +1,93 @@
-# Welcome to your Expo app 👋
+# UniAttend Mobile
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo mobile application for UniAttend student attendance.
 
-## Get started
+## Local Keycloak Login
 
-1. Install dependencies
+The mobile app uses Keycloak for credential entry. The app must not collect and
+submit a student's university password directly.
 
-   ```bash
-   npm install
-   ```
+For Android emulator testing, the app points to:
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```text
+http://10.0.2.2:8080/realms/uniattend
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+`10.0.2.2` is the Android emulator address for the host machine where Docker is
+running.
 
-### Other setup steps
+## Start Local Keycloak
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Run this from the repository root:
 
-## Learn more
+```powershell
+docker compose --env-file infra/local/keycloak/.env.example -f infra/local/keycloak/docker-compose.yml up -d
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Check that the `uniattend` realm is available:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```powershell
+curl.exe -I http://localhost:8080/realms/uniattend
+```
 
-## Join the community
+Expected result:
 
-Join our community of developers creating universal apps.
+```text
+HTTP/1.1 200 OK
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Create A Local Student
+
+Open the Keycloak admin console:
+
+```text
+http://localhost:8080/admin
+```
+
+Use:
+
+```text
+Username: admin
+Password: admin
+```
+
+Then:
+
+1. Select the `uniattend` realm.
+2. Go to `Users`.
+3. Create a user, for example `student1`.
+4. Set the user email, for example `student1@students.uniattend.test`.
+5. Set a non-temporary password in the `Credentials` tab.
+6. Assign the `student` realm role in the `Role mapping` tab.
+
+## Run On Android Emulator
+
+Install dependencies from the repository root:
+
+```powershell
+npm install
+```
+
+Start the Android build:
+
+```powershell
+npm.cmd run android --workspace=apps/mobile
+```
+
+When the app opens:
+
+1. Tap `Continue with university login`.
+2. Keycloak should open in the browser.
+3. Log in with the local student user.
+4. After login, the app should return to the student home screen.
+5. Tap the logout icon in the dashboard header to clear the session.
+
+## Validation
+
+Run these from the repository root before opening a pull request:
+
+```powershell
+npm.cmd run typecheck --workspace=apps/mobile
+npm.cmd run test:ci --workspace=apps/mobile
+npm.cmd run lint --workspace=apps/mobile
+```
