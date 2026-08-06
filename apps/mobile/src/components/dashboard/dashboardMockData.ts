@@ -33,6 +33,30 @@ export const courseSummaries: CourseSummary[] = [
     upcomingSessions: 2,
     color: '#1D4ED8',
   },
+  {
+    code: 'CS3052',
+    title: 'Computer Security',
+    lecturer: 'Dr. R. Silva',
+    attendancePercentage: 78,
+    upcomingSessions: 1,
+    color: '#254E9A',
+  },
+  {
+    code: 'EC2010',
+    title: 'Digital Systems',
+    lecturer: 'Prof. K. Senaratne',
+    attendancePercentage: 92,
+    upcomingSessions: 0,
+    color: '#0F4C81',
+  },
+  {
+    code: 'CS2101',
+    title: 'Data Structures',
+    lecturer: 'Dr. W. Perera',
+    attendancePercentage: 88,
+    upcomingSessions: 2,
+    color: '#1E3A8A',
+  },
 ];
 
 export const upcomingAttendance: UpcomingAttendance[] = [
@@ -58,6 +82,30 @@ export const upcomingAttendance: UpcomingAttendance[] = [
     month: 'JUL',
     course: 'CS3203 — Software Eng. Project',
     time: '10:00',
+    location: 'Hall 02',
+  },
+  {
+    id: 'cs2101-28-jul',
+    day: '28',
+    month: 'JUL',
+    course: 'CS2101 — Data Structures',
+    time: '09:00',
+    location: 'Room C1',
+  },
+  {
+    id: 'ec2010-29-jul',
+    day: '29',
+    month: 'JUL',
+    course: 'EC2010 — Digital Systems',
+    time: '11:00',
+    location: 'Lab 7',
+  },
+  {
+    id: 'cs3203-30-jul',
+    day: '30',
+    month: 'JUL',
+    course: 'CS3203 — Software Eng. Project',
+    time: '14:00',
     location: 'Hall 02',
   },
 ];

@@ -25,7 +25,7 @@ export function ScreenContainer({
       {scrollable ? (
         <ScrollView
           contentContainerStyle={[
-            styles.content,
+            styles.contentContainer,
             styles.scrollContent,
             contentContainerStyle,
           ]}
@@ -51,6 +51,11 @@ const styles = StyleSheet.create({
 
   content: {
     flex: 1,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+
+  contentContainer: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
