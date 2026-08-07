@@ -1,10 +1,16 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from 'react-native';
 
 import { ScreenContainer } from '../../../../components/ui';
 import { LocationCheckScreen } from '../../../../features/location/screens/LocationCheckScreen';
+import { MockLocationService } from '../../../../features/location/services/mockLocationService';
+
+const locationService = new MockLocationService({
+  result: { status: 'inside_geofence' },
+});
 
 export default function LocationCheckRoute() {
+  const router = useRouter();
   const { sessionId: sessionIdParam } = useLocalSearchParams<{
     sessionId?: string | string[];
   }>();
@@ -24,5 +30,18 @@ export default function LocationCheckRoute() {
     );
   }
 
-  return <LocationCheckScreen sessionId={sessionId} />;
+  return (
+    <LocationCheckScreen
+      locationService={locationService}
+      onBack={() => router.back()}
+      onLocationValidated={(validatedSessionId) =>
+        router.push({
+          pathname:
+            '/(student)/attendance/[sessionId]/face-introduction',
+          params: { sessionId: validatedSessionId },
+        })
+      }
+      sessionId={sessionId}
+    />
+  );
 }

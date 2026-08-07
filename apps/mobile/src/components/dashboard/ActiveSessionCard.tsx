@@ -3,16 +3,45 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { AppButton } from '../ui';
 import { lightColors, radii, spacing, typography } from '../../theme';
+import type { AttendanceSession } from '../../features/dashboard/types';
 
-export function ActiveSessionCard() {
+type ActiveSessionCardProps = {
+  session?: AttendanceSession | null | (Partial<Record<string, any>> & AttendanceSession);
+  onStart?: () => void;
+};
+
+function formatTimeRange(start?: string, end?: string) {
+  if (!start || !end) return undefined;
+  try {
+    const s = new Date(start);
+    const e = new Date(end);
+    const opts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
+    return `${s.toLocaleTimeString([], opts)}–${e.toLocaleTimeString([], opts)}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function computeClosingText(end?: string) {
+  if (!end) return 'Check-in closes soon';
+  const minutes = Math.max(0, Math.floor((new Date(end).getTime() - Date.now()) / 60000));
+  if (minutes <= 0) return 'Check-in closed';
+  return `Check-in closes in ${minutes} min`;
+}
+
+export function ActiveSessionCard({ session, onStart }: ActiveSessionCardProps) {
+  const courseLabel = session ? `${session.courseCode} · ${session.courseName}` : '—';
+  const title = (session as any)?.sessionTitle ?? session?.courseName ?? '';
+  const timeRange = formatTimeRange((session as any)?.startTime ?? (session && (session as any).startTime), (session as any)?.endTime ?? (session && (session as any).endTime));
+  const venue = (session as any)?.venue ?? '';
+  const closingText = computeClosingText((session as any)?.endTime ?? (session && (session as any).endTime));
+
   return (
     <View style={styles.card}>
       <View style={styles.headingRow}>
         <View style={styles.headingCopy}>
-          <Text style={styles.course}>
-            CS3203 · Software Engineering Project
-          </Text>
-          <Text style={styles.title}>Architecture Review Lecture</Text>
+          <Text style={styles.course}>{courseLabel}</Text>
+          <Text style={styles.title}>{title}</Text>
         </View>
         <View style={styles.activeChip}>
           <SymbolView
@@ -25,28 +54,33 @@ export function ActiveSessionCard() {
       </View>
 
       <View style={styles.details}>
-        <View style={styles.detail}>
-          <SymbolView
-            name={{ ios: 'clock', android: 'schedule', web: 'schedule' }}
-            size={17}
-            tintColor={lightColors.textSecondary}
-          />
-          <Text style={styles.detailText}>10:00–12:00</Text>
-        </View>
-        <View style={styles.detail}>
-          <SymbolView
-            name={{ ios: 'location', android: 'location_on', web: 'location_on' }}
-            size={17}
-            tintColor={lightColors.textSecondary}
-          />
-          <Text style={styles.detailText}>Lecture Hall 02</Text>
-        </View>
+        {timeRange ? (
+          <View style={styles.detail}>
+            <SymbolView
+              name={{ ios: 'clock', android: 'schedule', web: 'schedule' }}
+              size={17}
+              tintColor={lightColors.textSecondary}
+            />
+            <Text style={styles.detailText}>{timeRange}</Text>
+          </View>
+        ) : null}
+
+        {venue ? (
+          <View style={styles.detail}>
+            <SymbolView
+              name={{ ios: 'location', android: 'location_on', web: 'location_on' }}
+              size={17}
+              tintColor={lightColors.textSecondary}
+            />
+            <Text style={styles.detailText}>{venue}</Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.button}>
-        <AppButton title="Start attendance" />
+        <AppButton title="Start attendance" onPress={onStart} />
       </View>
-      <Text style={styles.closingText}>Check-in closes in 18 min</Text>
+      <Text style={styles.closingText}>{closingText}</Text>
     </View>
   );
 }
