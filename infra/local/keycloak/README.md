@@ -44,6 +44,7 @@ It creates:
 - `uniattend-mobile`, a public OpenID Connect mobile client.
 - PKCE with `S256` for the mobile client.
 - Browser-based login flow support.
+- Post-logout redirects back to the mobile app.
 - Direct password grant disabled, so the mobile app does not collect and submit
   passwords directly.
 
@@ -148,6 +149,7 @@ implicitFlowEnabled: false
 directAccessGrantsEnabled: false
 pkce.code.challenge.method: S256
 redirectUris: uniattend://*, exp://*
+post.logout.redirect.uris: uniattend://*, exp://*
 ```
 
 ## Stop Keycloak
