@@ -11,6 +11,7 @@ export const keycloakAuthConfig = {
   localIssuerUrl: buildLocalIssuerUrl('localhost'),
   redirectScheme: 'uniattend',
   redirectPath: 'auth/callback',
+  logoutRedirectPath: 'auth/logout-callback',
   scopes: [
     'openid',
     'profile',
@@ -20,9 +21,38 @@ export const keycloakAuthConfig = {
 
 export type KeycloakAuthConfig = typeof keycloakAuthConfig;
 
+type KeycloakRedirectUriOptions = {
+  readonly redirectScheme?: KeycloakAuthConfig['redirectScheme'];
+  readonly redirectPath?: string;
+};
+
 export function buildKeycloakRedirectUri({
-  redirectScheme,
-  redirectPath,
-}: Pick<KeycloakAuthConfig, 'redirectScheme' | 'redirectPath'> = keycloakAuthConfig) {
+  redirectScheme = keycloakAuthConfig.redirectScheme,
+  redirectPath = keycloakAuthConfig.redirectPath,
+}: KeycloakRedirectUriOptions = {}) {
   return `${redirectScheme}://${redirectPath}`;
+}
+
+type KeycloakLogoutUrlOptions = {
+  readonly idToken?: string;
+  readonly postLogoutRedirectUri?: string;
+};
+
+export function buildKeycloakLogoutUrl({
+  idToken,
+  postLogoutRedirectUri,
+}: KeycloakLogoutUrlOptions = {}) {
+  const queryParams = new URLSearchParams({
+    client_id: keycloakAuthConfig.clientId,
+  });
+
+  if (idToken) {
+    queryParams.set('id_token_hint', idToken);
+  }
+
+  if (postLogoutRedirectUri) {
+    queryParams.set('post_logout_redirect_uri', postLogoutRedirectUri);
+  }
+
+  return `${keycloakAuthConfig.issuerUrl}/protocol/openid-connect/logout?${queryParams.toString()}`;
 }
