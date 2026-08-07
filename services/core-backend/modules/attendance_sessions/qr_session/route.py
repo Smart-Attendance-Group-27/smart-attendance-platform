@@ -10,20 +10,23 @@ from modules.attendance_sessions.qr_session.exception import (
 from modules.attendance_sessions.qr_session.schemas import (
     CreateQrSessionRequest,
     CreateQrSessionResponse,
+    VerifyQrSessionRequest,
+    VerifyQrSessionResponse,
 )
 from modules.attendance_sessions.qr_session.service import QrSessionService
 
-router = APIRouter(
+router = APIRouter(tags=["qr-sessions"])
+create_qr_session_router = APIRouter(
     prefix="/attendance-sessions/{session_id}/qr-sessions",
-    tags=["qr-sessions"],
 )
+verify_qr_session_router = APIRouter(prefix="/qr-sessions/{qr_session_id}")
 
 
 def get_qr_session_service() -> QrSessionService:
     return QrSessionService()
 
 
-@router.post(
+@create_qr_session_router.post(
     "",
     response_model=CreateQrSessionResponse,
     status_code=status.HTTP_201_CREATED,
@@ -61,3 +64,31 @@ async def create_static_qr_session(
         valid_from=created_qr_session.valid_from,
         expires_at=created_qr_session.expires_at,
     )
+
+
+@verify_qr_session_router.post(
+    "/verify",
+    response_model=VerifyQrSessionResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def verify_qr_session(
+    qr_session_id: UUID,
+    http_request: Request,
+    payload: VerifyQrSessionRequest,
+    qr_session_service: QrSessionService = Depends(get_qr_session_service),
+) -> VerifyQrSessionResponse:
+    verified_qr_session = await qr_session_service.verify_qr_session(
+        http_request.app.state.db_pool,
+        qr_session_id,
+        payload.qr_value,
+    )
+
+    return VerifyQrSessionResponse(
+        qr_session_id=verified_qr_session.qr_session_id,
+        status=verified_qr_session.status,
+        verified_at=verified_qr_session.verified_at,
+    )
+
+
+router.include_router(create_qr_session_router)
+router.include_router(verify_qr_session_router)

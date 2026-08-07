@@ -2,7 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
-from secrets import token_urlsafe
+from secrets import compare_digest, token_urlsafe
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -15,6 +15,7 @@ from modules.attendance_sessions.qr_session.repository import (
     ACTIVE_STATUS,
     AttendanceSessionRecord,
     QrSessionRepository,
+    QrVerificationRecord,
 )
 
 
@@ -30,6 +31,13 @@ class CreatedQrSession:
     status: str
     valid_from: datetime
     expires_at: datetime
+
+
+@dataclass(frozen=True)
+class VerifiedQrSession:
+    qr_session_id: UUID
+    status: str
+    verified_at: datetime
 
 
 class QrSessionService:
@@ -100,6 +108,33 @@ class QrSessionService:
             expires_at=actual_expires_at,
         )
 
+    async def verify_qr_session(
+        self,
+        pool: asyncpg.Pool,
+        qr_session_id: UUID,
+        qr_value: str,
+    ) -> VerifiedQrSession:
+        current_time = self._ensure_utc(self._clock())
+        submitted_token_hash = self._hash_qr_value(qr_value)
+
+        async with pool.acquire() as connection:
+            verification_record = await self._repository.fetch_qr_verification_record(
+                connection,
+                qr_session_id,
+            )
+
+        verification_status = self._classify_qr_verification(
+            verification_record,
+            submitted_token_hash,
+            current_time,
+        )
+
+        return VerifiedQrSession(
+            qr_session_id=qr_session_id,
+            status=verification_status,
+            verified_at=current_time,
+        )
+
     @staticmethod
     def _utc_now() -> datetime:
         return datetime.now(UTC)
@@ -139,3 +174,77 @@ class QrSessionService:
 
         if scheduled_end_at <= current_time:
             raise AttendanceSessionNotActiveError("Attendance session has already ended.")
+
+    @staticmethod
+    def _classify_qr_verification(
+        verification_record: QrVerificationRecord | None,
+        submitted_token_hash: str,
+        current_time: datetime,
+    ) -> str:
+        if verification_record is None:
+            return "invalid"
+
+        if QrSessionService._verification_record_is_closed(
+            verification_record,
+            current_time,
+        ):
+            return "closed"
+
+        if verification_record.token_hash is None:
+            return "invalid"
+
+        if verification_record.token_revoked_at is not None:
+            return "closed"
+
+        if (
+            verification_record.token_valid_from is None
+            or verification_record.token_expires_at is None
+        ):
+            return "invalid"
+
+        token_valid_from = QrSessionService._ensure_utc(
+            verification_record.token_valid_from,
+        )
+        token_expires_at = QrSessionService._ensure_utc(
+            verification_record.token_expires_at,
+        )
+
+        if current_time < token_valid_from or current_time >= token_expires_at:
+            return "expired"
+
+        if not compare_digest(verification_record.token_hash, submitted_token_hash):
+            return "invalid"
+
+        return "accepted"
+
+    @staticmethod
+    def _verification_record_is_closed(
+        verification_record: QrVerificationRecord,
+        current_time: datetime,
+    ) -> bool:
+        if verification_record.attendance_session_id is None:
+            return True
+
+        if verification_record.attendance_session_status != ACTIVE_STATUS:
+            return True
+
+        if verification_record.attendance_session_closed_at is not None:
+            return True
+
+        if verification_record.attendance_session_cancelled_at is not None:
+            return True
+
+        if verification_record.attendance_session_scheduled_end_at is None:
+            return True
+
+        scheduled_end_at = QrSessionService._ensure_utc(
+            verification_record.attendance_session_scheduled_end_at,
+        )
+
+        if scheduled_end_at <= current_time:
+            return True
+
+        if verification_record.batch_status != ACTIVE_STATUS:
+            return True
+
+        return verification_record.batch_deactivated_at is not None

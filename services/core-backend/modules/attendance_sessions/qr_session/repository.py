@@ -19,6 +19,22 @@ class AttendanceSessionRecord:
     cancelled_at: datetime | None
 
 
+@dataclass(frozen=True)
+class QrVerificationRecord:
+    qr_session_id: UUID
+    batch_status: str | None
+    batch_deactivated_at: datetime | None
+    attendance_session_id: UUID | None
+    attendance_session_status: str | None
+    attendance_session_scheduled_end_at: datetime | None
+    attendance_session_closed_at: datetime | None
+    attendance_session_cancelled_at: datetime | None
+    token_hash: str | None
+    token_valid_from: datetime | None
+    token_expires_at: datetime | None
+    token_revoked_at: datetime | None
+
+
 class QrSessionRepository:
     async def lock_attendance_session(
         self,
@@ -131,4 +147,56 @@ class QrSessionRepository:
             valid_from,
             expires_at,
             STATIC_QR_TOKEN_SEQUENCE_NUMBER,
+        )
+
+    async def fetch_qr_verification_record(
+        self,
+        connection: asyncpg.Connection,
+        qr_session_id: UUID,
+    ) -> QrVerificationRecord | None:
+        row = await connection.fetchrow(
+            """
+            SELECT
+                batch.id AS qr_session_id,
+                batch.status AS batch_status,
+                batch.deactivated_at AS batch_deactivated_at,
+                session.id AS attendance_session_id,
+                session.status AS attendance_session_status,
+                session.scheduled_end_at AS attendance_session_scheduled_end_at,
+                session.closed_at AS attendance_session_closed_at,
+                session.cancelled_at AS attendance_session_cancelled_at,
+                token.token_hash AS token_hash,
+                token.valid_from AS token_valid_from,
+                token.expires_at AS token_expires_at,
+                token.revoked_at AS token_revoked_at
+            FROM attendance_session.qr_token_batches AS batch
+            LEFT JOIN attendance_session.sessions AS session
+                ON session.id = batch.session_id
+            LEFT JOIN attendance_session.qr_tokens AS token
+                ON token.qr_batch_id = batch.id
+            WHERE batch.id = $1
+            ORDER BY token.sequence_number ASC
+            LIMIT 1
+            """,
+            qr_session_id,
+        )
+
+        if row is None:
+            return None
+
+        return QrVerificationRecord(
+            qr_session_id=row["qr_session_id"],
+            batch_status=row["batch_status"],
+            batch_deactivated_at=row["batch_deactivated_at"],
+            attendance_session_id=row["attendance_session_id"],
+            attendance_session_status=row["attendance_session_status"],
+            attendance_session_scheduled_end_at=row[
+                "attendance_session_scheduled_end_at"
+            ],
+            attendance_session_closed_at=row["attendance_session_closed_at"],
+            attendance_session_cancelled_at=row["attendance_session_cancelled_at"],
+            token_hash=row["token_hash"],
+            token_valid_from=row["token_valid_from"],
+            token_expires_at=row["token_expires_at"],
+            token_revoked_at=row["token_revoked_at"],
         )
