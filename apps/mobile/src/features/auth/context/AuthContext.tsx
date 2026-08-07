@@ -29,7 +29,15 @@ import type {
   AuthSession,
   StoredAuthTokens,
 } from '../types/auth.types';
-import { getJwtSubject } from '../utils/jwt';
+import {
+  hasAuthRole,
+  studentMobileRole,
+  toAuthRoles,
+} from '../utils/authRoles';
+import {
+  getJwtRoles,
+  getJwtSubject,
+} from '../utils/jwt';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -51,6 +59,9 @@ const unauthenticatedSession: AuthSession = {
 const sessionExpired: AuthSession = {
   status: 'session-expired',
 };
+
+const unauthorizedStudentMessage =
+  'This account does not have student mobile access. Please sign in with a student account.';
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -94,7 +105,19 @@ export function AuthProvider({ children }: PropsWithChildren) {
         }
 
         if (areStoredAuthTokensFresh(storedTokens)) {
-          setSession(createAuthenticatedSession(storedTokens));
+          const restoredSession = createStudentSession(storedTokens);
+
+          if (!restoredSession) {
+            await clearStoredAuthTokens();
+            if (!isMounted) {
+              return;
+            }
+            setSession(unauthenticatedSession);
+            setErrorMessage(unauthorizedStudentMessage);
+            return;
+          }
+
+          setSession(restoredSession);
           return;
         }
 
@@ -117,12 +140,23 @@ export function AuthProvider({ children }: PropsWithChildren) {
           discovery,
         );
         const nextStoredTokens = buildStoredAuthTokens(refreshedTokens);
+        const refreshedSession = createStudentSession(nextStoredTokens);
+
+        if (!refreshedSession) {
+          await clearStoredAuthTokens();
+          if (!isMounted) {
+            return;
+          }
+          setSession(unauthenticatedSession);
+          setErrorMessage(unauthorizedStudentMessage);
+          return;
+        }
 
         await saveStoredAuthTokens(nextStoredTokens);
         if (!isMounted) {
           return;
         }
-        setSession(createAuthenticatedSession(nextStoredTokens));
+        setSession(refreshedSession);
       } catch {
         await clearStoredAuthTokens();
         if (!isMounted) {
@@ -189,9 +223,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
         discovery,
       );
       const storedTokens = buildStoredAuthTokens(tokenResponse);
+      const nextSession = createStudentSession(storedTokens);
+
+      if (!nextSession) {
+        await clearStoredAuthTokens();
+        setSession(unauthenticatedSession);
+        setErrorMessage(unauthorizedStudentMessage);
+        return;
+      }
 
       await saveStoredAuthTokens(storedTokens);
-      setSession(createAuthenticatedSession(storedTokens));
+      setSession(nextSession);
     } catch {
       setErrorMessage(
         'Could not complete Keycloak login. Check local Keycloak and try again.',
@@ -267,6 +309,12 @@ function buildStoredAuthTokens(tokenResponse: TokenResponse): StoredAuthTokens {
   };
 }
 
+function createStudentSession(tokens: StoredAuthTokens): AuthSession | null {
+  const session = createAuthenticatedSession(tokens);
+
+  return hasAuthRole(session, studentMobileRole) ? session : null;
+}
+
 function createAuthenticatedSession(tokens: StoredAuthTokens): AuthSession {
   return {
     status: 'authenticated',
@@ -274,6 +322,10 @@ function createAuthenticatedSession(tokens: StoredAuthTokens): AuthSession {
       getJwtSubject(tokens.idToken) ??
       getJwtSubject(tokens.accessToken) ??
       'keycloak-user',
+    roles: toAuthRoles([
+      ...getJwtRoles(tokens.accessToken, keycloakAuthConfig.clientId),
+      ...getJwtRoles(tokens.idToken, keycloakAuthConfig.clientId),
+    ]),
     accessToken: tokens.accessToken,
     expiresAt: tokens.expiresAt,
     idToken: tokens.idToken,

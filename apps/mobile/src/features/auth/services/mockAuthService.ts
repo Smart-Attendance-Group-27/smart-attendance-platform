@@ -47,6 +47,7 @@ export class MockAuthService implements AuthService {
     this.session = {
       status: 'authenticated',
       userId: this.authenticatedUserId,
+      roles: ['student'],
     };
 
     return {

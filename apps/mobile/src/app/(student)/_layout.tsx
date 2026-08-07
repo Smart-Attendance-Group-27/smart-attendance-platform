@@ -2,6 +2,10 @@ import { Redirect, Stack } from 'expo-router'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
 
 import { useAuth } from '../../features/auth/context/AuthContext'
+import {
+  hasAuthRole,
+  studentMobileRole,
+} from '../../features/auth/utils/authRoles'
 import { lightColors } from '../../theme'
 
 export default function StudentLayout() {
@@ -15,7 +19,7 @@ export default function StudentLayout() {
     )
   }
 
-  if (session.status !== 'authenticated') {
+  if (!hasAuthRole(session, studentMobileRole)) {
     return <Redirect href="/(auth)/login" />
   }
 

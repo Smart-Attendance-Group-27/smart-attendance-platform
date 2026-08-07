@@ -60,6 +60,8 @@ Then:
 5. Set a non-temporary password in the `Credentials` tab.
 6. Assign the `student` realm role in the `Role mapping` tab.
 
+The mobile app only accepts Keycloak sessions that include the `student` role.
+
 ## Run On Android Emulator
 
 Install dependencies from the repository root:

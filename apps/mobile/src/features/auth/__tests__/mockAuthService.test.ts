@@ -20,12 +20,14 @@ describe('MockAuthService', () => {
       initialSession: {
         status: 'authenticated',
         userId: 'configured-student-user',
+        roles: ['student'],
       },
     });
 
     await expect(service.restoreSession()).resolves.toEqual({
       status: 'authenticated',
       userId: 'configured-student-user',
+      roles: ['student'],
     });
   });
 
@@ -39,6 +41,7 @@ describe('MockAuthService', () => {
       session: {
         status: 'authenticated',
         userId: 'signed-in-student-user',
+        roles: ['student'],
       },
     });
   });
@@ -66,6 +69,7 @@ describe('MockAuthService', () => {
     await expect(service.restoreSession()).resolves.toEqual({
       status: 'authenticated',
       userId: 'restored-student-user',
+      roles: ['student'],
     });
   });
 
@@ -74,6 +78,7 @@ describe('MockAuthService', () => {
       initialSession: {
         status: 'authenticated',
         userId: 'signed-out-student-user',
+        roles: ['student'],
       },
     });
 

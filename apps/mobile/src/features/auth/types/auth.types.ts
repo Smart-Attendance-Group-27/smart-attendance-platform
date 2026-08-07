@@ -3,9 +3,15 @@ export type AuthSessionStatus =
   | 'session-expired'
   | 'unauthenticated';
 
+export type AuthRole =
+  | 'administrator'
+  | 'lecturer'
+  | 'student';
+
 export type AuthenticatedSession = {
   readonly status: 'authenticated';
   readonly userId: string;
+  readonly roles: readonly AuthRole[];
   readonly accessToken?: string;
   readonly refreshToken?: string;
   readonly idToken?: string;

@@ -6,6 +6,10 @@ import {
 } from 'react-native';
 
 import { useAuth } from '../../features/auth/context/AuthContext';
+import {
+  hasAuthRole,
+  studentMobileRole,
+} from '../../features/auth/utils/authRoles';
 import { lightColors } from '../../theme';
 
 export default function AuthCallbackRoute() {
@@ -15,7 +19,7 @@ export default function AuthCallbackRoute() {
     session,
   } = useAuth();
 
-  if (session.status === 'authenticated') {
+  if (hasAuthRole(session, studentMobileRole)) {
     return <Redirect href="/(student)/(tabs)" />;
   }
 

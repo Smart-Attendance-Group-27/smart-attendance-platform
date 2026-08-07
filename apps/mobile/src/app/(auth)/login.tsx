@@ -2,6 +2,10 @@ import { Redirect } from 'expo-router';
 
 import { StudentLoginScreen } from '../../components/auth';
 import { useAuth } from '../../features/auth/context/AuthContext';
+import {
+  hasAuthRole,
+  studentMobileRole,
+} from '../../features/auth/utils/authRoles';
 
 export default function LoginRoute() {
   const {
@@ -13,7 +17,7 @@ export default function LoginRoute() {
     signIn,
   } = useAuth();
 
-  if (!isRestoring && session.status === 'authenticated') {
+  if (!isRestoring && hasAuthRole(session, studentMobileRole)) {
     return <Redirect href="/(student)/(tabs)" />;
   }
 
