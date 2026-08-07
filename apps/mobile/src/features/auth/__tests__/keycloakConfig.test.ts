@@ -15,7 +15,7 @@ describe('keycloakAuthConfig', () => {
     expect(keycloakAuthConfig.clientId).toBe('uniattend-mobile');
   });
 
-  test('uses the Android emulator host for local Keycloak', () => {
+  test('uses the Android emulator host for local Keycloak by default', () => {
     expect(keycloakAuthConfig.issuerUrl).toBe(
       'http://10.0.2.2:8080/realms/uniattend',
     );

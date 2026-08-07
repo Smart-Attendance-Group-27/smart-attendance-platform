@@ -1,13 +1,17 @@
 const keycloakRealm = 'uniattend';
 const keycloakLocalPort = 8080;
+const defaultAndroidEmulatorHost = '10.0.2.2';
 
 const buildLocalIssuerUrl = (host: string) =>
   `http://${host}:${keycloakLocalPort}/realms/${keycloakRealm}`;
 
+const keycloakHost =
+  process.env.EXPO_PUBLIC_KEYCLOAK_HOST?.trim() || defaultAndroidEmulatorHost;
+
 export const keycloakAuthConfig = {
   realm: keycloakRealm,
   clientId: 'uniattend-mobile',
-  issuerUrl: buildLocalIssuerUrl('10.0.2.2'),
+  issuerUrl: buildLocalIssuerUrl(keycloakHost),
   localIssuerUrl: buildLocalIssuerUrl('localhost'),
   redirectScheme: 'uniattend',
   redirectPath: 'auth/callback',
