@@ -21,10 +21,12 @@ computer's LAN IP instead. Create `apps/mobile/.env`:
 
 ```text
 EXPO_PUBLIC_KEYCLOAK_HOST=192.168.1.25
+EXPO_PUBLIC_CORE_API_URL=http://192.168.1.25:8000
 ```
 
 Replace `192.168.1.25` with the IPv4 address shown by `ipconfig` on the
-computer running Keycloak. Restart Expo after changing this value.
+computer running Keycloak and the FastAPI backend. Restart Expo after changing
+these values.
 
 ## Start Local Keycloak
 
