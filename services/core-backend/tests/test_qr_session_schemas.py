@@ -6,6 +6,7 @@ from modules.attendance_sessions.qr_session.schemas import (
     MAX_QR_VALIDITY_SECONDS,
     MIN_QR_VALIDITY_SECONDS,
     CreateQrSessionRequest,
+    VerifyQrSessionRequest,
 )
 
 
@@ -28,3 +29,14 @@ def test_create_qr_session_request_accepts_camel_case_alias() -> None:
 def test_create_qr_session_request_rejects_out_of_range_values(valid_for_seconds: int) -> None:
     with pytest.raises(ValidationError):
         CreateQrSessionRequest(validForSeconds=valid_for_seconds)
+
+
+def test_verify_qr_session_request_accepts_camel_case_qr_value() -> None:
+    payload = VerifyQrSessionRequest(qrValue="raw-test-token")
+
+    assert payload.qr_value == "raw-test-token"
+
+
+def test_verify_qr_session_request_rejects_empty_qr_value() -> None:
+    with pytest.raises(ValidationError):
+        VerifyQrSessionRequest(qrValue="")
