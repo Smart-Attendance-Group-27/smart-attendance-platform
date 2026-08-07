@@ -34,6 +34,14 @@
           "imageWidth": 76
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow UniAttend to use the camera to scan attendance QR codes.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
       "expo-secure-store"
     ],
     "experiments": {
