@@ -15,11 +15,71 @@ import {
 
 import { AppButton, ScreenContainer } from '../../../components/ui';
 import { lightColors, radii, spacing, typography } from '../../../theme';
+import type {
+  QrVerificationResult,
+  QrVerificationStatus,
+} from '../types/qrVerification';
+import type { QrVerificationService } from '../services/qrVerificationService';
+import { parseScannedQrPayload } from '../utils/parseScannedQrPayload';
 
 type QrScannerScreenProps = {
   sessionId: string;
+  qrSessionId?: string;
+  qrVerificationService: QrVerificationService;
   onBack: () => void;
-  onQrScanned?: (result: { sessionId: string; qrValue: string }) => void;
+  onQrVerified?: (result: QrVerificationResult) => void;
+};
+
+type QrScannerUiState =
+  | { status: 'scanning' }
+  | { status: 'verifying' }
+  | { status: QrVerificationStatus; verifiedAt: string }
+  | { status: 'missing_qr_session' }
+  | { status: 'verification_error' };
+
+type VerificationContent = {
+  title: string;
+  message: string;
+  tone: 'success' | 'error' | 'warning' | 'neutral';
+};
+
+const verificationContent: Record<
+  Exclude<QrScannerUiState['status'], 'scanning' | 'verifying'>,
+  VerificationContent
+> = {
+  accepted: {
+    title: 'QR verified',
+    message: 'This QR code is valid for the active attendance session.',
+    tone: 'success',
+  },
+  invalid: {
+    title: 'Invalid QR code',
+    message: 'This QR code does not match the active attendance QR session.',
+    tone: 'error',
+  },
+  expired: {
+    title: 'QR code expired',
+    message: 'Ask the lecturer to generate a fresh QR code, then scan again.',
+    tone: 'warning',
+  },
+  closed: {
+    title: 'QR session closed',
+    message:
+      'This attendance QR session is no longer accepting verification.',
+    tone: 'neutral',
+  },
+  missing_qr_session: {
+    title: 'QR session ID missing',
+    message:
+      'This QR code could not be verified because it did not include the QR session ID.',
+    tone: 'error',
+  },
+  verification_error: {
+    title: "We couldn't verify the QR",
+    message:
+      'Check your connection to the backend service, then scan the QR again.',
+    tone: 'error',
+  },
 };
 
 function ScreenHeader({ onBack }: { onBack: () => void }) {
@@ -54,33 +114,56 @@ function ScreenHeader({ onBack }: { onBack: () => void }) {
 
 export function QrScannerScreen({
   sessionId,
+  qrSessionId,
+  qrVerificationService,
   onBack,
-  onQrScanned,
+  onQrVerified,
 }: QrScannerScreenProps) {
   const [permission, requestPermission] = useCameraPermissions();
 
-  const [scanned, setScanned] = useState(false);
-  const [scannedQrValue, setScannedQrValue] = useState<string | null>(null);
+  const [state, setState] = useState<QrScannerUiState>({
+    status: 'scanning',
+  });
 
-  function handleQrScanned(result: BarcodeScanningResult) {
-    if (scanned) {
+  async function handleQrScanned(result: BarcodeScanningResult) {
+    if (state.status !== 'scanning') {
       return;
     }
 
-    const qrValue = result.data.trim();
+    const scannedPayload = parseScannedQrPayload(result.data);
 
-    if (!qrValue) {
+    if (!scannedPayload.qrValue) {
       return;
     }
 
-    setScanned(true);
-    setScannedQrValue(qrValue);
-    onQrScanned?.({ sessionId, qrValue });
+    const targetQrSessionId = scannedPayload.qrSessionId ?? qrSessionId;
+
+    if (!targetQrSessionId) {
+      setState({ status: 'missing_qr_session' });
+      return;
+    }
+
+    setState({ status: 'verifying' });
+
+    try {
+      const verificationResult =
+        await qrVerificationService.verifyQrSession({
+          qrSessionId: targetQrSessionId,
+          qrValue: scannedPayload.qrValue,
+        });
+
+      setState({
+        status: verificationResult.status,
+        verifiedAt: verificationResult.verifiedAt,
+      });
+      onQrVerified?.(verificationResult);
+    } catch {
+      setState({ status: 'verification_error' });
+    }
   }
 
   function scanAgain() {
-    setScannedQrValue(null);
-    setScanned(false);
+    setState({ status: 'scanning' });
   }
 
   if (!permission) {
@@ -138,49 +221,39 @@ export function QrScannerScreen({
       <View style={styles.explanation}>
         <Text style={styles.title}>Scan the lecturer&apos;s QR code</Text>
         <Text style={styles.supportText}>
-          Point your camera at the QR displayed in class. The decoded value is
-          kept only in memory for this test screen.
+          Point your camera at the QR displayed in class. UniAttend verifies it
+          with the attendance backend without showing the raw QR value.
         </Text>
       </View>
 
       <View style={styles.cameraContainer}>
-        {!scanned && (
+        {state.status === 'scanning' && (
           <CameraView
             style={StyleSheet.absoluteFill}
             barcodeScannerSettings={{
               barcodeTypes: ['qr'],
             }}
             facing="back"
-            onBarcodeScanned={handleQrScanned}
+            onBarcodeScanned={(result) => {
+              void handleQrScanned(result);
+            }}
           />
         )}
 
         <View pointerEvents="none" style={styles.scanFrame} />
       </View>
 
-      {scannedQrValue ? (
-        <View style={styles.successBox}>
-          <Text style={styles.successTitle}>QR captured successfully</Text>
-
-          <Text style={styles.supportText}>
-            The QR value was decoded and is ready for verification.
-          </Text>
-
-          <Text
-            accessibilityLabel="Decoded QR value"
-            numberOfLines={3}
-            style={styles.qrPreview}
-          >
-            {scannedQrValue}
-          </Text>
-
-          <AppButton
-            accessibilityLabel="Scan another QR code"
-            onPress={scanAgain}
-            title="Scan Again"
-            variant="secondary"
+      {state.status === 'verifying' ? (
+        <View style={styles.waitingCard}>
+          <ActivityIndicator
+            accessibilityLabel="Verifying QR code"
+            accessibilityRole="progressbar"
+            color={lightColors.primaryInteraction}
           />
+          <Text style={styles.waitingText}>Verifying QR code...</Text>
         </View>
+      ) : state.status !== 'scanning' ? (
+        <VerificationResultCard state={state} onScanAgain={scanAgain} />
       ) : (
         <View style={styles.waitingCard}>
           <ActivityIndicator
@@ -192,6 +265,43 @@ export function QrScannerScreen({
         </View>
       )}
     </ScreenContainer>
+  );
+}
+
+function VerificationResultCard({
+  state,
+  onScanAgain,
+}: {
+  state: Exclude<QrScannerUiState, { status: 'scanning' | 'verifying' }>;
+  onScanAgain: () => void;
+}) {
+  const content = verificationContent[state.status];
+  const verifiedAt =
+    'verifiedAt' in state
+      ? new Intl.DateTimeFormat(undefined, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        }).format(new Date(state.verifiedAt))
+      : null;
+
+  return (
+    <View style={[styles.resultBox, resultToneStyles[content.tone]]}>
+      <Text style={[styles.resultTitle, resultTitleToneStyles[content.tone]]}>
+        {content.title}
+      </Text>
+      <Text style={styles.supportText}>{content.message}</Text>
+
+      {verifiedAt ? (
+        <Text style={styles.verifiedAtText}>Verified at {verifiedAt}</Text>
+      ) : null}
+
+      <AppButton
+        accessibilityLabel="Scan another QR code"
+        onPress={onScanAgain}
+        title="Scan Again"
+        variant="secondary"
+      />
+    </View>
   );
 }
 
@@ -258,24 +368,46 @@ const styles = StyleSheet.create({
     borderColor: lightColors.accent,
     borderRadius: radii.card,
   },
-  successBox: {
+  resultBox: {
     marginTop: spacing.lg,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: lightColors.success,
     borderRadius: radii.card,
-    backgroundColor: lightColors.successBackground,
     gap: spacing.sm,
   },
-  successTitle: {
+  resultSuccess: {
+    borderColor: lightColors.success,
+    backgroundColor: lightColors.successBackground,
+  },
+  resultError: {
+    borderColor: lightColors.error,
+    backgroundColor: lightColors.errorBackground,
+  },
+  resultWarning: {
+    borderColor: lightColors.warning,
+    backgroundColor: lightColors.warningBackground,
+  },
+  resultNeutral: {
+    borderColor: lightColors.border,
+    backgroundColor: lightColors.neutralBackground,
+  },
+  resultTitle: {
     ...typography.cardTitle,
+  },
+  resultTitleSuccess: {
     color: lightColors.success,
   },
-  qrPreview: {
+  resultTitleError: {
+    color: lightColors.error,
+  },
+  resultTitleWarning: {
+    color: lightColors.warning,
+  },
+  resultTitleNeutral: {
+    color: lightColors.neutral,
+  },
+  verifiedAtText: {
     ...typography.caption,
-    padding: spacing.sm,
-    borderRadius: radii.input,
-    backgroundColor: lightColors.surface,
     color: lightColors.textSecondary,
   },
   waitingCard: {
@@ -309,3 +441,17 @@ const styles = StyleSheet.create({
     backgroundColor: lightColors.primaryLight,
   },
 });
+
+const resultToneStyles = {
+  success: styles.resultSuccess,
+  error: styles.resultError,
+  warning: styles.resultWarning,
+  neutral: styles.resultNeutral,
+} as const;
+
+const resultTitleToneStyles = {
+  success: styles.resultTitleSuccess,
+  error: styles.resultTitleError,
+  warning: styles.resultTitleWarning,
+  neutral: styles.resultTitleNeutral,
+} as const;

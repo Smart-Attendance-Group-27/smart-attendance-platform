@@ -5,9 +5,15 @@ import {
   jest,
   test,
 } from '@jest/globals';
-import { fireEvent, render } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  waitFor,
+} from '@testing-library/react-native';
 
 import { QrScannerScreen } from '../screens/QrScannerScreen';
+import type { QrVerificationService } from '../services/qrVerificationService';
 
 const mockRequestPermission = jest.fn();
 let mockPermissionState: { granted: boolean } | null = { granted: true };
@@ -50,45 +56,124 @@ describe('QrScannerScreen', () => {
     mockBarcodeHandler = undefined;
   });
 
-  test('shows camera preview and returns the decoded qrValue', async () => {
-    const onQrScanned = jest.fn();
-    const { findByText, getByLabelText } = await render(
+  test('verifies a scanned QR payload and shows the result without raw QR text', async () => {
+    const verifyQrSession = jest.fn<Required<QrVerificationService>['verifyQrSession']>(
+      async () => ({
+        qrSessionId: 'qr-session-1',
+        status: 'accepted',
+        verifiedAt: '2026-08-07T10:30:00Z',
+      }),
+    );
+    const onQrVerified = jest.fn();
+    const { getByLabelText, queryByText, findByText } = await render(
       <QrScannerScreen
         onBack={jest.fn()}
-        onQrScanned={onQrScanned}
+        onQrVerified={onQrVerified}
+        qrVerificationService={{ verifyQrSession }}
         sessionId="session-1"
       />,
     );
 
-    fireEvent.press(getByLabelText('Camera preview'));
-
-    expect(onQrScanned).toHaveBeenCalledWith({
-      sessionId: 'session-1',
-      qrValue: 'decoded-qr-value',
+    await act(async () => {
+      mockBarcodeHandler?.({
+        data: JSON.stringify({
+          qrSessionId: 'qr-session-1',
+          qrValue: 'decoded-qr-value',
+        }),
+      });
     });
-    expect(await findByText('QR captured successfully')).toBeTruthy();
-    expect(await findByText('decoded-qr-value')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(verifyQrSession).toHaveBeenCalledWith({
+        qrSessionId: 'qr-session-1',
+        qrValue: 'decoded-qr-value',
+      });
+    });
+    expect(onQrVerified).toHaveBeenCalledWith({
+      qrSessionId: 'qr-session-1',
+      status: 'accepted',
+      verifiedAt: '2026-08-07T10:30:00Z',
+    });
+    expect(await findByText('QR verified')).toBeTruthy();
+    expect(queryByText('decoded-qr-value')).toBeNull();
+    expect(getByLabelText('Scan another QR code')).toBeTruthy();
   });
 
   test('ignores empty decoded QR values', async () => {
-    const onQrScanned = jest.fn();
+    const verifyQrSession = jest.fn<Required<QrVerificationService>['verifyQrSession']>();
     await render(
       <QrScannerScreen
         onBack={jest.fn()}
-        onQrScanned={onQrScanned}
+        qrVerificationService={{ verifyQrSession }}
         sessionId="session-1"
       />,
     );
 
-    mockBarcodeHandler?.({ data: '   ' });
+    await act(async () => {
+      mockBarcodeHandler?.({ data: '   ' });
+    });
 
-    expect(onQrScanned).not.toHaveBeenCalled();
+    expect(verifyQrSession).not.toHaveBeenCalled();
+  });
+
+  test('uses the route qrSessionId when scanning a plain raw QR value', async () => {
+    const verifyQrSession = jest.fn<Required<QrVerificationService>['verifyQrSession']>(
+      async () => ({
+        qrSessionId: 'qr-session-from-route',
+        status: 'invalid',
+        verifiedAt: '2026-08-07T10:30:00Z',
+      }),
+    );
+    const { findByText } = await render(
+      <QrScannerScreen
+        onBack={jest.fn()}
+        qrSessionId="qr-session-from-route"
+        qrVerificationService={{ verifyQrSession }}
+        sessionId="session-1"
+      />,
+    );
+
+    await act(async () => {
+      mockBarcodeHandler?.({ data: 'plain-raw-qr-value' });
+    });
+
+    await waitFor(() => {
+      expect(verifyQrSession).toHaveBeenCalledWith({
+        qrSessionId: 'qr-session-from-route',
+        qrValue: 'plain-raw-qr-value',
+      });
+    });
+    expect(await findByText('Invalid QR code')).toBeTruthy();
+  });
+
+  test('shows a friendly error when QR session id is unavailable', async () => {
+    const verifyQrSession = jest.fn<Required<QrVerificationService>['verifyQrSession']>();
+    const { findByText } = await render(
+      <QrScannerScreen
+        onBack={jest.fn()}
+        qrVerificationService={{ verifyQrSession }}
+        sessionId="session-1"
+      />,
+    );
+
+    await act(async () => {
+      mockBarcodeHandler?.({ data: 'plain-raw-qr-value' });
+    });
+
+    expect(await findByText('QR session ID missing')).toBeTruthy();
+    expect(verifyQrSession).not.toHaveBeenCalled();
   });
 
   test('requests camera permission when access has not been granted', async () => {
     mockPermissionState = { granted: false };
     const { getByLabelText, getByText } = await render(
-      <QrScannerScreen onBack={jest.fn()} sessionId="session-1" />,
+      <QrScannerScreen
+        onBack={jest.fn()}
+        qrVerificationService={{
+          verifyQrSession: jest.fn<Required<QrVerificationService>['verifyQrSession']>(),
+        }}
+        sessionId="session-1"
+      />,
     );
 
     expect(getByText('Camera permission required')).toBeTruthy();
