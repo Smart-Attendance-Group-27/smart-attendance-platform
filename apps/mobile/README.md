@@ -16,6 +16,18 @@ http://10.0.2.2:8080/realms/uniattend
 `10.0.2.2` is the Android emulator address for the host machine where Docker is
 running.
 
+For physical Android phone testing over USB or Wi-Fi, point the app at the
+computer's LAN IP instead. Create `apps/mobile/.env`:
+
+```text
+EXPO_PUBLIC_KEYCLOAK_HOST=192.168.1.25
+EXPO_PUBLIC_CORE_API_URL=http://192.168.1.25:8000
+```
+
+Replace `192.168.1.25` with the IPv4 address shown by `ipconfig` on the
+computer running Keycloak and the FastAPI backend. Restart Expo after changing
+these values.
+
 ## Start Local Keycloak
 
 Run this from the repository root:
@@ -82,7 +94,13 @@ When the app opens:
 2. Keycloak should open in the browser.
 3. Log in with the local student user.
 4. After login, the app should return to the student home screen.
-5. Tap the logout icon in the dashboard header to clear the session.
+5. Tap the logout icon in the dashboard header.
+6. Keycloak should clear the browser session and return to the login screen.
+
+If logout does not return to the app, make sure the `uniattend-mobile` Keycloak
+client has `uniattend://*` and `exp://*` configured as valid post-logout
+redirect URIs. Existing local Docker volumes may need a reset before newly
+imported realm settings appear.
 
 ## Validation
 

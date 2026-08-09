@@ -39,6 +39,16 @@ export default function QrTestPage() {
       timeStyle: "medium",
     }).format(new Date(qrSession.expiresAt));
   }, [qrSession]);
+  const qrCodePayload = useMemo(() => {
+    if (!qrSession) {
+      return "";
+    }
+
+    return JSON.stringify({
+      qrSessionId: qrSession.qrSessionId,
+      qrValue: qrSession.qrValue,
+    });
+  }, [qrSession]);
 
   async function generateQr() {
     if (!canSubmit) {
@@ -143,7 +153,7 @@ export default function QrTestPage() {
               {qrSession ? (
                 <div className="flex w-full flex-col items-center text-center">
                   <QRCodeSVG
-                    value={qrSession.qrValue}
+                    value={qrCodePayload}
                     size={300}
                     level="M"
                     marginSize={4}

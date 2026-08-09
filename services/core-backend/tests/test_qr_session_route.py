@@ -9,7 +9,10 @@ from modules.attendance_sessions.qr_session.exception import (
     AttendanceSessionNotFoundError,
 )
 from modules.attendance_sessions.qr_session.route import get_qr_session_service
-from modules.attendance_sessions.qr_session.service import CreatedQrSession
+from modules.attendance_sessions.qr_session.service import (
+    CreatedQrSession,
+    VerifiedQrSession,
+)
 
 
 class SuccessfulQrSessionService:
@@ -26,6 +29,18 @@ class SuccessfulQrSessionService:
             status="active",
             valid_from=datetime(2026, 8, 6, 10, 0, tzinfo=UTC),
             expires_at=datetime(2026, 8, 6, 10, 5, tzinfo=UTC),
+        )
+
+    async def verify_qr_session(
+        self,
+        pool: object,
+        qr_session_id: UUID,
+        qr_value: str,
+    ) -> VerifiedQrSession:
+        return VerifiedQrSession(
+            qr_session_id=qr_session_id,
+            status="accepted",
+            verified_at=datetime(2026, 8, 6, 10, 3, tzinfo=UTC),
         )
 
 
@@ -125,3 +140,50 @@ def test_create_static_qr_session_route_maps_inactive_session_to_409() -> None:
 
     assert response.status_code == 409
     assert response.json() == {"detail": "Attendance session is not active."}
+
+
+def test_verify_qr_session_route_returns_camel_case_response() -> None:
+    app = create_app(enable_database=False)
+    app.state.db_pool = object()
+    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/verify",
+            json={"qrValue": "raw-test-token"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "qrSessionId": "50000000-0000-0000-0000-000000000001",
+        "status": "accepted",
+        "verifiedAt": "2026-08-06T10:03:00Z",
+    }
+
+
+def test_verify_qr_session_route_rejects_malformed_uuid() -> None:
+    app = create_app(enable_database=False)
+    app.state.db_pool = object()
+    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/qr-sessions/not-a-uuid/verify",
+            json={"qrValue": "raw-test-token"},
+        )
+
+    assert response.status_code == 422
+
+
+def test_verify_qr_session_route_rejects_missing_qr_value() -> None:
+    app = create_app(enable_database=False)
+    app.state.db_pool = object()
+    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/verify",
+            json={},
+        )
+
+    assert response.status_code == 422

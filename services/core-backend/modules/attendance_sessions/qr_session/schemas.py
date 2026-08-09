@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -29,3 +30,20 @@ class CreateQrSessionResponse(BaseModel):
     status: str
     valid_from: datetime = Field(alias="validFrom")
     expires_at: datetime = Field(alias="expiresAt")
+
+
+QrVerificationStatus = Literal["accepted", "invalid", "expired", "closed"]
+
+
+class VerifyQrSessionRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    qr_value: str = Field(alias="qrValue", min_length=1)
+
+
+class VerifyQrSessionResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    qr_session_id: UUID = Field(alias="qrSessionId")
+    status: QrVerificationStatus
+    verified_at: datetime = Field(alias="verifiedAt")

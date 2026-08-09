@@ -18,7 +18,10 @@ import {
 } from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 
-import { keycloakAuthConfig } from '../config/keycloakConfig';
+import {
+  buildKeycloakLogoutUrl,
+  keycloakAuthConfig,
+} from '../config/keycloakConfig';
 import {
   areStoredAuthTokensFresh,
   clearStoredAuthTokens,
@@ -68,6 +71,11 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const redirectUri = makeRedirectUri({
   scheme: keycloakAuthConfig.redirectScheme,
   path: keycloakAuthConfig.redirectPath,
+});
+
+const logoutRedirectUri = makeRedirectUri({
+  scheme: keycloakAuthConfig.redirectScheme,
+  path: keycloakAuthConfig.logoutRedirectPath,
 });
 
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -248,10 +256,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
   ]);
 
   const signOut = useCallback(async () => {
+    const idToken = session.status === 'authenticated' ? session.idToken : undefined;
+    const logoutUrl = buildKeycloakLogoutUrl({
+      idToken,
+      postLogoutRedirectUri: logoutRedirectUri,
+    });
+
     setErrorMessage(null);
     await clearStoredAuthTokens();
     setSession(unauthenticatedSession);
-  }, []);
+
+    try {
+      await WebBrowser.openAuthSessionAsync(logoutUrl, logoutRedirectUri);
+    } catch {
+      setErrorMessage('Signed out locally, but Keycloak logout could not be opened.');
+    }
+  }, [session]);
 
   const clearAuthError = useCallback(() => {
     setErrorMessage(null);
