@@ -6,7 +6,7 @@ const COLUMNS = Array.from({ length: 7 }, (_, index) => index);
 
 export function UniversityBackdrop() {
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+    <View pointerEvents="none" style={styles.backdrop}>
       <View style={styles.sky} />
       <View style={styles.lowerSky} />
       <View style={styles.glow} />
@@ -25,6 +25,14 @@ export function UniversityBackdrop() {
 }
 
 const styles = StyleSheet.create({
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 0,
+  },
   sky: {
     position: 'absolute',
     top: 0,
