@@ -6,28 +6,35 @@ import type { StudentProfile } from '../types/profile.types';
 
 type MockProfileServiceOptions = {
   readonly profilesByUserId?: Readonly<Record<string, StudentProfile>>;
+  readonly fallbackProfile?: StudentProfile | null;
   readonly simulateProfileFailure?: boolean;
 };
 
+const defaultStudentProfile: StudentProfile = {
+  id: 'mock-student-profile-1',
+  registrationNumber: '230736R',
+  fullName: 'Manushan Hasanka',
+  universityEmail: 'manushanh.23@cse.mrt.ac.lk',
+};
+
 const defaultProfilesByUserId: Readonly<Record<string, StudentProfile>> = {
-  'mock-student-user-1': {
-    id: 'mock-student-profile-1',
-    registrationNumber: 'UA-0001',
-    fullName: 'Avery Mockstudent',
-    universityEmail: 'avery.mockstudent@students.uniattend.test',
-  },
+  'mock-student-user-1': defaultStudentProfile,
 };
 
 export class MockProfileService implements ProfileService {
   private readonly profilesByUserId: Readonly<Record<string, StudentProfile>>;
 
+  private readonly fallbackProfile: StudentProfile | null;
+
   private readonly simulateProfileFailure: boolean;
 
   constructor({
     profilesByUserId = defaultProfilesByUserId,
+    fallbackProfile = defaultStudentProfile,
     simulateProfileFailure = false,
   }: MockProfileServiceOptions = {}) {
     this.profilesByUserId = profilesByUserId;
+    this.fallbackProfile = fallbackProfile;
     this.simulateProfileFailure = simulateProfileFailure;
   }
 
@@ -38,7 +45,7 @@ export class MockProfileService implements ProfileService {
       };
     }
 
-    const profile = this.profilesByUserId[userId];
+    const profile = this.profilesByUserId[userId] ?? this.fallbackProfile;
 
     if (!profile) {
       return {
