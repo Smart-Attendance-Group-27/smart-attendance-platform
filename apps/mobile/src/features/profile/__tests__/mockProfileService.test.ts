@@ -17,9 +17,9 @@ describe('MockProfileService', () => {
       status: 'found',
       profile: {
         id: 'mock-student-profile-1',
-        registrationNumber: 'UA-0001',
+        registrationNumber: '230736R',
         fullName: 'Manushan Hasanka',
-        universityEmail: 'manushan.hasanka@students.uniattend.test',
+        universityEmail: 'manushanh.23@cse.mrt.ac.lk',
       },
     });
   });
