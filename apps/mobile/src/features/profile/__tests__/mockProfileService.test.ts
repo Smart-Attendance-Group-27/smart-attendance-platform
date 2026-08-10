@@ -8,6 +8,22 @@ import { MockProfileService } from '../services/mockProfileService';
 import type { StudentProfile } from '../types/profile.types';
 
 describe('MockProfileService', () => {
+  test('returns the default mock profile for the signed-in student', async () => {
+    const service = new MockProfileService();
+
+    await expect(
+      service.getStudentProfile('keycloak-student-user'),
+    ).resolves.toEqual({
+      status: 'found',
+      profile: {
+        id: 'mock-student-profile-1',
+        registrationNumber: '230736R',
+        fullName: 'Manushan Hasanka',
+        universityEmail: 'manushanh.23@cse.mrt.ac.lk',
+      },
+    });
+  });
+
   test('returns a valid student profile for a known user id', async () => {
     const profile: StudentProfile = {
       id: 'profile-1',
@@ -20,6 +36,7 @@ describe('MockProfileService', () => {
       profilesByUserId: {
         'student-user-1': profile,
       },
+      fallbackProfile: null,
     });
 
     await expect(
@@ -33,6 +50,7 @@ describe('MockProfileService', () => {
   test('returns missing when no profile exists for the user id', async () => {
     const service = new MockProfileService({
       profilesByUserId: {},
+      fallbackProfile: null,
     });
 
     await expect(

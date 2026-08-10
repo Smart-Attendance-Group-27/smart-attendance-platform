@@ -70,6 +70,13 @@ export default function StudentTabsLayout() {
           title: 'Notifications',
         }}
       />
+
+      <Tabs.Screen
+        name="profile"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

@@ -158,6 +158,7 @@ export function DashboardScreen({
     <ScreenContainer scrollable contentContainerStyle={styles.scrollContent}>
         <DashboardTopBar
           onNotificationsPress={() => router.push('/(student)/(tabs)/notifications')}
+          onProfilePress={() => router.push('/(student)/(tabs)/profile')}
           onSignOutPress={onSignOutPress}
         />
 

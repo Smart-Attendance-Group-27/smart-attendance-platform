@@ -103,4 +103,21 @@ describe('DashboardScreen', () => {
       params: { sessionId: 'attendance-session-1' },
     });
   });
+
+  test('opens the profile screen from the avatar action', async () => {
+    const fakeService: DashboardService = {
+      async getUpcomingLectures() {
+        return [];
+      },
+      async getActiveAttendanceSession() {
+        return null;
+      },
+    };
+
+    const { findByRole } = await render(<DashboardScreen dashboardService={fakeService} />);
+
+    fireEvent.press(await findByRole('button', { name: 'Open student profile' }));
+
+    expect(mockPush).toHaveBeenCalledWith('/(student)/(tabs)/profile');
+  });
 });
