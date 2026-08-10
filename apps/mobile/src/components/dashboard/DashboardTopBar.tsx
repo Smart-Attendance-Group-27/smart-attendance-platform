@@ -5,11 +5,13 @@ import { lightColors, radii, spacing } from '../../theme';
 
 type DashboardTopBarProps = {
   onNotificationsPress: () => void;
+  onProfilePress: () => void;
   onSignOutPress?: () => void;
 };
 
 export function DashboardTopBar({
   onNotificationsPress,
+  onProfilePress,
   onSignOutPress,
 }: DashboardTopBarProps) {
   return (
@@ -65,9 +67,17 @@ export function DashboardTopBar({
           </Pressable>
         ) : null}
 
-        <View accessibilityLabel="Student profile, Mahesh" style={styles.avatar}>
+        <Pressable
+          accessibilityLabel="Open student profile"
+          accessibilityRole="button"
+          onPress={onProfilePress}
+          style={({ pressed }) => [
+            styles.avatar,
+            pressed && styles.pressed,
+          ]}
+        >
           <Text style={styles.avatarText}>MH</Text>
-        </View>
+        </Pressable>
       </View>
     </View>
   );
