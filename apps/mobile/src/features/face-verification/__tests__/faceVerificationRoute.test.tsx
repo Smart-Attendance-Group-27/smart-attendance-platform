@@ -21,6 +21,29 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
+jest.mock('../screens/FaceVerificationScreen', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Pressable, Text } = require('react-native');
+
+  return {
+    FaceVerificationScreen: ({
+      onFaceVerified,
+      sessionId,
+    }: {
+      onFaceVerified: (sessionId: string) => void;
+      sessionId: string;
+    }) => (
+      <Pressable
+        accessibilityLabel="Continue to check-in result"
+        accessibilityRole="button"
+        onPress={() => onFaceVerified(sessionId)}
+      >
+        <Text>Continue</Text>
+      </Pressable>
+    ),
+  };
+});
+
 describe('FaceVerificationRoute', () => {
   beforeEach(() => {
     mockPush.mockClear();
@@ -29,7 +52,7 @@ describe('FaceVerificationRoute', () => {
     };
   });
 
-  test('opens QR scanner with the normalized session ID after mock face verification', async () => {
+  test('opens check-in success with the normalized session ID after face verification', async () => {
     mockSearchParams = {
       sessionId: [' attendance-session-active ', 'ignored-session'],
     };
@@ -37,14 +60,18 @@ describe('FaceVerificationRoute', () => {
 
     await fireEvent.press(
       getByRole('button', {
-        name: 'Continue to QR scanner',
+        name: 'Continue to check-in result',
       }),
     );
 
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenCalledWith(
-      '/(student)/attendance/attendance-session-active/qr-scanner',
-    );
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname:
+        '/(student)/attendance/[sessionId]/check-in-success',
+      params: {
+        sessionId: 'attendance-session-active',
+      },
+    });
   });
 
   test('keeps the friendly fallback for a missing session ID', async () => {
@@ -60,7 +87,7 @@ describe('FaceVerificationRoute', () => {
     ).toBeTruthy();
     expect(
       queryByRole('button', {
-        name: 'Continue to QR scanner',
+        name: 'Continue to check-in result',
       }),
     ).toBeNull();
     expect(mockPush).not.toHaveBeenCalled();
