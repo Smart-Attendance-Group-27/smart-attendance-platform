@@ -1,7 +1,9 @@
 import type {
+  AttendanceCheckInResultLookupResult,
   AttendanceService,
   AttendanceSessionLookupResult,
 } from './attendanceService';
+import type { AttendanceCheckInResult } from '../types/attendanceCheckInResult';
 import type { AttendanceSession } from '../types/attendanceSession';
 
 const attendanceSessions: Readonly<Record<string, AttendanceSession>> = {
@@ -39,6 +41,19 @@ const attendanceSessions: Readonly<Record<string, AttendanceSession>> = {
   },
 };
 
+const checkInResults: Readonly<Record<string, AttendanceCheckInResult>> = {
+  'attendance-session-active': {
+    sessionId: 'attendance-session-active',
+    status: 'present',
+    checkInTime: '2026-07-20T10:02:00+05:30',
+  },
+  'attendance-session-late': {
+    sessionId: 'attendance-session-late',
+    status: 'late',
+    checkInTime: '2026-07-20T10:18:00+05:30',
+  },
+};
+
 export class MockAttendanceService implements AttendanceService {
   async getAttendanceSession(
     sessionId: string,
@@ -54,6 +69,23 @@ export class MockAttendanceService implements AttendanceService {
     return {
       status: 'available',
       session: { ...session },
+    };
+  }
+
+  async getCheckInResult(
+    sessionId: string,
+  ): Promise<AttendanceCheckInResultLookupResult> {
+    const result = checkInResults[sessionId];
+
+    if (!result) {
+      return {
+        status: 'unavailable',
+      };
+    }
+
+    return {
+      status: 'available',
+      result: { ...result },
     };
   }
 }
