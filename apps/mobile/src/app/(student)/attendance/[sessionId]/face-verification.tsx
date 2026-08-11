@@ -3,6 +3,12 @@ import { Text } from 'react-native';
 
 import { ScreenContainer } from '../../../../components/ui';
 import { FaceVerificationScreen } from '../../../../features/face-verification/screens/FaceVerificationScreen';
+import { MockFaceVerificationService } from '../../../../features/face-verification/services/mockFaceVerificationService';
+
+const faceVerificationService = new MockFaceVerificationService({
+  result: { status: 'success' },
+  delayMs: 750,
+});
 
 export default function FaceVerificationRoute() {
   const router = useRouter();
@@ -27,10 +33,15 @@ export default function FaceVerificationRoute() {
 
   return (
     <FaceVerificationScreen
+      faceVerificationService={faceVerificationService}
+      key={sessionId}
+      onBack={() => router.back()}
       onFaceVerified={(verifiedSessionId) =>
-        router.push(
-          `/(student)/attendance/${verifiedSessionId}/qr-scanner`,
-        )
+        router.push({
+          pathname:
+            '/(student)/attendance/[sessionId]/check-in-success',
+          params: { sessionId: verifiedSessionId },
+        })
       }
       sessionId={sessionId}
     />

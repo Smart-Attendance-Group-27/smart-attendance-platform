@@ -37,7 +37,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow UniAttend to use the camera to scan attendance QR codes.",
+          "cameraPermission": "Allow UniAttend to use the camera for face verification and attendance QR scanning.",
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true
         }
