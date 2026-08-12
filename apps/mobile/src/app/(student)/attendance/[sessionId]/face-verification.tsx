@@ -39,7 +39,7 @@ export default function FaceVerificationRoute() {
       onFaceVerified={(verifiedSessionId) =>
         router.push({
           pathname:
-            '/(student)/attendance/[sessionId]/check-in-success',
+            '/(student)/attendance/[sessionId]/qr-scanner',
           params: { sessionId: verifiedSessionId },
         })
       }

@@ -335,7 +335,7 @@ function VerificationAction({
   if (state.status === 'success') {
     return (
       <AppButton
-        accessibilityLabel="Continue to check-in result"
+        accessibilityLabel="Continue to QR scanner"
         onPress={onContinue}
         title="Continue"
       />
