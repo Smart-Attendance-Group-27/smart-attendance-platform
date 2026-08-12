@@ -39,6 +39,7 @@ describe('AttendanceSessionDetailsScreen', () => {
   test('shows an accessible loading state without an enabled start action', async () => {
     const pendingService: AttendanceService = {
       getAttendanceSession: () => new Promise(() => undefined),
+      getCheckInResult: async () => ({ status: 'unavailable' }),
     };
 
     const { getByRole, queryByRole } = await renderScreen(
@@ -175,6 +176,7 @@ describe('AttendanceSessionDetailsScreen', () => {
 
         return activeResult;
       },
+      getCheckInResult: async () => ({ status: 'unavailable' }),
     };
     const {
       findByRole,

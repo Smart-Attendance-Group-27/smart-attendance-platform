@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { lightColors, radii, spacing, typography } from '../../../theme';
 
 type AttendanceProgressStepsProps = {
-  phase?: 'not_started' | 'location' | 'face';
+  phase?: 'not_started' | 'location' | 'face' | 'complete';
 };
 
 const stepLabels = ['Location', 'Face', 'Complete'] as const;
@@ -12,6 +12,7 @@ const stepStatuses = {
   not_started: ['Not started', 'Waiting', 'Not recorded'],
   location: ['Current', 'Waiting', 'Pending'],
   face: ['Verified', 'Current', 'Pending'],
+  complete: ['Verified', 'Verified', 'Complete'],
 } as const;
 
 export function AttendanceProgressSteps({
@@ -29,7 +30,8 @@ export function AttendanceProgressSteps({
         const currentStepIndex =
           phase === 'location' ? 0 : phase === 'face' ? 1 : -1;
         const isCurrent = index === currentStepIndex;
-        const isVerified = phase === 'face' && index === 0;
+        const isVerified =
+          phase === 'complete' || (phase === 'face' && index === 0);
 
         return (
           <View key={label} style={styles.step}>
