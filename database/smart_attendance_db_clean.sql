@@ -408,6 +408,7 @@ CREATE TABLE attendance_session.qr_token_batches (
   "issued_by" uuid,
   "status" character varying(20),
   "activated_at" timestamp with time zone,
+  "expires_at" timestamp with time zone NOT NULL,
   "deactivated_at" timestamp with time zone,
   "created_at" timestamp with time zone,
   PRIMARY KEY ("id"),
@@ -424,7 +425,9 @@ CREATE TABLE attendance_session.qr_token_batches (
       ("mode" = 'static' AND "refresh_interval_seconds" IS NULL)
       OR
       ("mode" = 'dynamic' AND "refresh_interval_seconds" IS NOT NULL AND "refresh_interval_seconds" > 0)
-    )
+    ),
+  CONSTRAINT "CK_qr_token_batches_expires_after_activation"
+    CHECK ("expires_at" > "activated_at")
 );
 
 CREATE TABLE attendance_session.qr_tokens (
