@@ -7,6 +7,7 @@ from modules.attendance_sessions.qr_session.exception import (
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
 )
+from modules.attendance_sessions.qr_session.cache import QrBatchMetadataCache
 from modules.attendance_sessions.qr_session.schemas import (
     CreateQrSessionRequest,
     CreateQrSessionResponse,
@@ -22,8 +23,9 @@ create_qr_session_router = APIRouter(
 verify_qr_session_router = APIRouter(prefix="/qr-sessions/{qr_session_id}")
 
 
-def get_qr_session_service() -> QrSessionService:
-    return QrSessionService()
+def get_qr_session_service(request: Request) -> QrSessionService:
+    redis_client = getattr(request.app.state, "redis_client", None)
+    return QrSessionService(qr_batch_cache=QrBatchMetadataCache(redis_client))
 
 
 @create_qr_session_router.post(

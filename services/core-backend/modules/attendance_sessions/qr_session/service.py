@@ -11,6 +11,8 @@ from modules.attendance_sessions.qr_session.exception import (
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
 )
+from modules.attendance_sessions.qr_session.cache import QrBatchMetadataCache
+from modules.attendance_sessions.qr_session.metadata import QrBatchMetadata
 from modules.attendance_sessions.qr_session.repository import (
     ACTIVE_STATUS,
     DYNAMIC_QR_MODE,
@@ -48,11 +50,13 @@ class QrSessionService:
     def __init__(
         self,
         repository: QrSessionRepository | None = None,
+        qr_batch_cache: QrBatchMetadataCache | None = None,
         clock: Callable[[], datetime] | None = None,
         uuid_factory: Callable[[], UUID] | None = None,
         qr_value_generator: Callable[[], str] | None = None,
     ) -> None:
         self._repository = repository or QrSessionRepository()
+        self._qr_batch_cache = qr_batch_cache
         self._clock = clock or self._utc_now
         self._uuid_factory = uuid_factory or uuid4
         self._qr_value_generator = qr_value_generator or self._generate_qr_value
@@ -83,10 +87,12 @@ class QrSessionService:
                 qr_value = self._qr_value_generator()
                 token_hash = self._hash_qr_value(qr_value)
 
-                await self._repository.close_existing_active_qr_sessions(
-                    connection,
-                    attendance_session_id,
-                    current_time,
+                deactivated_qr_session_ids = (
+                    await self._repository.close_existing_active_qr_sessions(
+                        connection,
+                        attendance_session_id,
+                        current_time,
+                    )
                 )
                 await self._repository.insert_qr_batch(
                     connection,
@@ -95,6 +101,7 @@ class QrSessionService:
                     STATIC_QR_MODE,
                     None,
                     current_time,
+                    actual_expires_at,
                 )
                 await self._repository.insert_qr_token(
                     connection,
@@ -104,6 +111,8 @@ class QrSessionService:
                     current_time,
                     actual_expires_at,
                 )
+
+        await self._delete_cached_qr_batches(deactivated_qr_session_ids)
 
         return CreatedQrSession(
             qr_session_id=qr_session_id,
@@ -139,10 +148,12 @@ class QrSessionService:
                 actual_expires_at = min(requested_expires_at, scheduled_end_at)
                 qr_session_id = self._uuid_factory()
 
-                await self._repository.close_existing_active_qr_sessions(
-                    connection,
-                    attendance_session_id,
-                    current_time,
+                deactivated_qr_session_ids = (
+                    await self._repository.close_existing_active_qr_sessions(
+                        connection,
+                        attendance_session_id,
+                        current_time,
+                    )
                 )
                 await self._repository.insert_qr_batch(
                     connection,
@@ -151,7 +162,23 @@ class QrSessionService:
                     DYNAMIC_QR_MODE,
                     refresh_interval_seconds,
                     current_time,
+                    actual_expires_at,
                 )
+
+        await self._delete_cached_qr_batches(deactivated_qr_session_ids)
+        await self._set_cached_qr_batch_metadata(
+            QrBatchMetadata(
+                id=qr_session_id,
+                attendance_session_id=attendance_session_id,
+                mode=DYNAMIC_QR_MODE,
+                status=ACTIVE_STATUS,
+                activated_at=current_time,
+                deactivated_at=None,
+                refresh_interval_seconds=refresh_interval_seconds,
+                expires_at=actual_expires_at,
+            ),
+            current_time,
+        )
 
         return CreatedQrSession(
             qr_session_id=qr_session_id,
@@ -163,6 +190,31 @@ class QrSessionService:
             valid_from=current_time,
             expires_at=actual_expires_at,
         )
+
+    async def get_qr_batch_metadata(
+        self,
+        pool: asyncpg.Pool,
+        qr_session_id: UUID,
+    ) -> QrBatchMetadata | None:
+        current_time = self._ensure_utc(self._clock())
+
+        if self._qr_batch_cache is not None:
+            cached_metadata = await self._qr_batch_cache.get_qr_batch_cache(
+                qr_session_id,
+            )
+            if cached_metadata is not None:
+                return cached_metadata
+
+        async with pool.acquire() as connection:
+            metadata = await self._repository.fetch_qr_batch_metadata(
+                connection,
+                qr_session_id,
+            )
+
+        if metadata is not None:
+            await self._set_cached_qr_batch_metadata(metadata, current_time)
+
+        return metadata
 
     async def verify_qr_session(
         self,
@@ -304,3 +356,43 @@ class QrSessionService:
             return True
 
         return verification_record.batch_deactivated_at is not None
+
+    async def _delete_cached_qr_batches(
+        self,
+        qr_session_ids: list[UUID],
+    ) -> None:
+        if self._qr_batch_cache is None:
+            return
+
+        for qr_session_id in qr_session_ids:
+            await self._qr_batch_cache.delete_qr_batch_cache(qr_session_id)
+
+    async def _set_cached_qr_batch_metadata(
+        self,
+        metadata: QrBatchMetadata,
+        current_time: datetime,
+    ) -> None:
+        if self._qr_batch_cache is None:
+            return
+
+        ttl_seconds = self._calculate_qr_batch_cache_ttl_seconds(
+            metadata,
+            current_time,
+        )
+
+        if ttl_seconds <= 0:
+            return
+
+        await self._qr_batch_cache.set_qr_batch_cache(
+            metadata.id,
+            metadata,
+            ttl_seconds,
+        )
+
+    @staticmethod
+    def _calculate_qr_batch_cache_ttl_seconds(
+        metadata: QrBatchMetadata,
+        current_time: datetime,
+    ) -> int:
+        expires_at = QrSessionService._ensure_utc(metadata.expires_at)
+        return int((expires_at - current_time).total_seconds())

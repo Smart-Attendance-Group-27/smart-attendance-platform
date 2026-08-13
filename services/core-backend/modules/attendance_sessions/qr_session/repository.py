@@ -4,6 +4,8 @@ from uuid import UUID
 
 import asyncpg
 
+from modules.attendance_sessions.qr_session.metadata import QrBatchMetadata
+
 
 ACTIVE_STATUS = "active"
 INACTIVE_STATUS = "inactive"
@@ -71,8 +73,8 @@ class QrSessionRepository:
         connection: asyncpg.Connection,
         session_id: UUID,
         deactivated_at: datetime,
-    ) -> None:
-        await connection.execute(
+    ) -> list[UUID]:
+        rows = await connection.fetch(
             """
             WITH deactivated_batches AS (
                 UPDATE attendance_session.qr_token_batches
@@ -88,12 +90,19 @@ class QrSessionRepository:
             FROM deactivated_batches AS batch
             WHERE token.qr_batch_id = batch.id
               AND token.revoked_at IS NULL
+            ),
+            selected_deactivated_batches AS (
+                SELECT id FROM deactivated_batches
+            )
+            SELECT id
+            FROM selected_deactivated_batches
             """,
             session_id,
             deactivated_at,
             INACTIVE_STATUS,
             ACTIVE_STATUS,
         )
+        return [row["id"] for row in rows]
 
     async def insert_qr_batch(
         self,
@@ -103,6 +112,7 @@ class QrSessionRepository:
         mode: str,
         refresh_interval_seconds: int | None,
         activated_at: datetime,
+        expires_at: datetime,
     ) -> None:
         await connection.execute(
             """
@@ -114,10 +124,11 @@ class QrSessionRepository:
                 issued_by,
                 status,
                 activated_at,
+                expires_at,
                 deactivated_at,
                 created_at
             )
-            VALUES ($1, $2, $3, $4, NULL, $5, $6, NULL, $6)
+            VALUES ($1, $2, $3, $4, NULL, $5, $6, $7, NULL, $6)
             """,
             qr_session_id,
             attendance_session_id,
@@ -125,6 +136,7 @@ class QrSessionRepository:
             refresh_interval_seconds,
             ACTIVE_STATUS,
             activated_at,
+            expires_at,
         )
 
     async def insert_qr_token(
@@ -156,6 +168,42 @@ class QrSessionRepository:
             valid_from,
             expires_at,
             STATIC_QR_TOKEN_SEQUENCE_NUMBER,
+        )
+
+    async def fetch_qr_batch_metadata(
+        self,
+        connection: asyncpg.Connection,
+        qr_session_id: UUID,
+    ) -> QrBatchMetadata | None:
+        row = await connection.fetchrow(
+            """
+            SELECT
+                batch.id,
+                batch.session_id,
+                batch.mode,
+                batch.status,
+                batch.activated_at,
+                batch.deactivated_at,
+                batch.refresh_interval_seconds,
+                batch.expires_at
+            FROM attendance_session.qr_token_batches AS batch
+            WHERE batch.id = $1
+            """,
+            qr_session_id,
+        )
+
+        if row is None:
+            return None
+
+        return QrBatchMetadata(
+            id=row["id"],
+            attendance_session_id=row["session_id"],
+            mode=row["mode"],
+            status=row["status"],
+            activated_at=row["activated_at"],
+            deactivated_at=row["deactivated_at"],
+            refresh_interval_seconds=row["refresh_interval_seconds"],
+            expires_at=row["expires_at"],
         )
 
     async def fetch_qr_verification_record(
