@@ -25,3 +25,26 @@ export type {
 } from '../features/profile/services/profile.service';
 export { MockProfileService } from '../features/profile/services/mockProfileService';
 export { CoreApiProfileService } from '../features/profile/services/coreApiProfileService';
+
+export type {
+  FreshLocationReading,
+  FreshLocationResult,
+} from '../features/location/types/locationReading';
+export type { LocationProvider } from '../features/location/services/locationProvider';
+export { ExpoLocationProvider } from '../features/location/services/expoLocationProvider';
+export type {
+  GeofenceAttempt,
+  GeofenceAttemptResult,
+  GeofenceDecision,
+  GeofenceNextStep,
+  GeofenceReason,
+  SubmitGeofenceAttemptRequest,
+} from '../features/location/types/geofenceAttempt';
+export type { GeofenceValidationApiService } from '../features/location/services/geofenceValidationApiService';
+export { CoreApiGeofenceValidationService } from '../features/location/services/coreApiGeofenceValidationService';
+export type {
+  ActiveAttendanceSession,
+  ActiveAttendanceSessionsResult,
+} from '../features/dashboard/types/activeAttendanceSession';
+export type { ActiveAttendanceSessionService } from '../features/dashboard/services/activeAttendanceSessionService';
+export { CoreApiActiveAttendanceSessionService } from '../features/dashboard/services/coreApiActiveAttendanceSessionService';

@@ -42,6 +42,17 @@
           "barcodeScannerEnabled": true
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow UniAttend to use your location once to verify classroom attendance.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
+        }
+      ],
       "expo-secure-store",
       "expo-web-browser"
     ],
