@@ -13,6 +13,18 @@ def test_settings_normalizes_blank_db_uri() -> None:
     assert settings.db_uri is None
 
 
+def test_settings_normalizes_blank_redis_url() -> None:
+    settings = Settings(
+        db_host="localhost",
+        db_user="postgres",
+        db_password="password",
+        redis_url=" ",
+        token_secret="secret",
+    )
+
+    assert settings.redis_url is None
+
+
 def test_settings_rejects_invalid_ssl_mode() -> None:
     try:
         Settings(

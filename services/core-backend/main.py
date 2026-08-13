@@ -3,6 +3,7 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 
+from cache.redis import close_redis_client, create_redis_client
 from core.config import get_settings
 from db.pool import close_database_pool, create_database_pool
 from modules.attendance_sessions.qr_session.route import router as qr_session_router
@@ -14,10 +15,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     app.state.settings = settings
     app.state.db_pool = await create_database_pool(settings)
+    app.state.redis_client = await create_redis_client(settings)
 
     try:
         yield
     finally:
+        await close_redis_client(app.state.redis_client)
         await close_database_pool(app.state.db_pool)
 
 

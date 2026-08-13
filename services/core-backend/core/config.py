@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     db_pool_max_size: int = Field(default=5, ge=1)
     db_command_timeout_seconds: float = Field(default=10, gt=0)
 
+    redis_url: str | None = "redis://localhost:6379/0"
+
     token_secret: SecretStr
 
     model_config = SettingsConfigDict(
@@ -35,6 +37,13 @@ class Settings(BaseSettings):
     @field_validator("db_uri", mode="before")
     @classmethod
     def normalize_blank_db_uri(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("redis_url", mode="before")
+    @classmethod
+    def normalize_blank_redis_url(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
             return None
         return value
