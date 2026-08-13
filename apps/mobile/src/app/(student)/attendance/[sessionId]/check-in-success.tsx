@@ -1,10 +1,14 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Text } from 'react-native';
 
 import { ScreenContainer } from '../../../../components/ui';
-import { CheckInSuccessScreen } from '../../../../features/attendance/screens/CheckInSuccessScreen';
+import { CheckInResultScreen } from '../../../../features/attendance/screens/CheckInResultScreen';
+import { MockAttendanceService } from '../../../../features/attendance/services/mockAttendanceService';
+
+const attendanceService = new MockAttendanceService();
 
 export default function CheckInSuccessRoute() {
+  const router = useRouter();
   const { sessionId: sessionIdParam } = useLocalSearchParams<{
     sessionId?: string | string[];
   }>();
@@ -24,5 +28,17 @@ export default function CheckInSuccessRoute() {
     );
   }
 
-  return <CheckInSuccessScreen sessionId={sessionId} />;
+  return (
+    <CheckInResultScreen
+      attendanceService={attendanceService}
+      onOpenQrScanner={() =>
+        router.push({
+          pathname: '/(student)/attendance/[sessionId]/qr-scanner',
+          params: { sessionId },
+        })
+      }
+      onReturnHome={() => router.replace('/(student)/(tabs)')}
+      sessionId={sessionId}
+    />
+  );
 }
