@@ -84,18 +84,17 @@ class QrSessionRepository:
                   AND status = $4
                   AND deactivated_at IS NULL
                 RETURNING id
-            )
-            UPDATE attendance_session.qr_tokens AS token
-            SET revoked_at = $2
-            FROM deactivated_batches AS batch
-            WHERE token.qr_batch_id = batch.id
-              AND token.revoked_at IS NULL
             ),
-            selected_deactivated_batches AS (
-                SELECT id FROM deactivated_batches
+            revoked_tokens AS (
+                UPDATE attendance_session.qr_tokens AS token
+                SET revoked_at = $2
+                FROM deactivated_batches AS batch
+                WHERE token.qr_batch_id = batch.id
+                  AND token.revoked_at IS NULL
+                RETURNING token.id
             )
             SELECT id
-            FROM selected_deactivated_batches
+            FROM deactivated_batches
             """,
             session_id,
             deactivated_at,
