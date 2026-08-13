@@ -8,6 +8,7 @@ from core.config import get_settings
 from db.pool import close_database_pool, create_database_pool
 from modules.academic.student_profile.route import router as student_profile_router
 from modules.attendance_sessions.qr_session.route import router as qr_session_router
+from modules.attendance_verification.geofence.route import router as geofence_router
 from modules.identity.auth.route import router as auth_router
 from modules.routes.health import router as health_router
 
@@ -50,6 +51,7 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(student_profile_router, prefix="/api/v1")
     app.include_router(qr_session_router, prefix="/api/v1")
+    app.include_router(geofence_router, prefix="/api/v1")
     return app
 
 
