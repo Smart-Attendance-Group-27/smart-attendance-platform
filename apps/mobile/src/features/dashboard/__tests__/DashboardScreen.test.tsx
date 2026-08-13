@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { fireEvent, render } from '@testing-library/react-native';
 
 import { DashboardScreen } from '../screens/DashboardScreen';
+import type { ActiveAttendanceSessionService } from '../services/activeAttendanceSessionService';
 import type { DashboardService } from '../services/dashboardService';
 
 const mockPush = jest.fn();
@@ -104,6 +105,96 @@ describe('DashboardScreen', () => {
     });
   });
 
+  test('renders every active session returned by the Core API service', async () => {
+    const getActiveAttendanceSession =
+      jest.fn<DashboardService['getActiveAttendanceSession']>();
+    getActiveAttendanceSession.mockRejectedValue(
+      new Error('The mock active-session path must not be used'),
+    );
+    const dashboardService: DashboardService = {
+      async getUpcomingLectures() {
+        return [];
+      },
+      getActiveAttendanceSession,
+    };
+    const activeSessionService: ActiveAttendanceSessionService = {
+      async listMyActiveSessions() {
+        return {
+          status: 'loaded',
+          sessions: [
+            buildActiveSession(
+              '40000000-0000-0000-0000-000000000001',
+              'Geofence Demo - Near Centre',
+            ),
+            buildActiveSession(
+              '40000000-0000-0000-0000-000000000002',
+              'Geofence Demo - Far Centre',
+            ),
+          ],
+        };
+      },
+    };
+
+    const { findAllByRole, findByText } = await render(
+      <DashboardScreen
+        activeSessionService={activeSessionService}
+        dashboardService={dashboardService}
+      />,
+    );
+
+    expect(await findByText('Geofence Demo - Near Centre')).toBeTruthy();
+    expect(await findByText('Geofence Demo - Far Centre')).toBeTruthy();
+    const startButtons = await findAllByRole('button', {
+      name: 'Start attendance',
+    });
+
+    fireEvent.press(startButtons[1]);
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/(student)/attendance/[sessionId]/location-check',
+      params: {
+        sessionId: '40000000-0000-0000-0000-000000000002',
+      },
+    });
+    expect(getActiveAttendanceSession).not.toHaveBeenCalled();
+  });
+
+  test('shows an error instead of mock active-session data after an API failure', async () => {
+    const dashboardService: DashboardService = {
+      async getUpcomingLectures() {
+        return [];
+      },
+      async getActiveAttendanceSession() {
+        return {
+          id: 'mock-session-that-must-not-render',
+          lectureId: 'mock-lecture',
+          courseCode: 'MOCK101',
+          courseName: 'Mock course',
+          startTime: '2026-08-13T05:25:00Z',
+          endTime: '2026-08-13T06:00:00Z',
+          lateThreshold: '2026-08-13T05:45:00Z',
+          checkInStatus: 'open',
+          sessionTitle: 'Mock active session',
+        };
+      },
+    };
+    const activeSessionService: ActiveAttendanceSessionService = {
+      async listMyActiveSessions() {
+        return { status: 'network-error' };
+      },
+    };
+
+    const { findByText, queryByText } = await render(
+      <DashboardScreen
+        activeSessionService={activeSessionService}
+        dashboardService={dashboardService}
+      />,
+    );
+
+    expect(await findByText('Dashboard could not be loaded')).toBeTruthy();
+    expect(queryByText('Mock active session')).toBeNull();
+  });
+
   test('opens the profile screen from the avatar action', async () => {
     const fakeService: DashboardService = {
       async getUpcomingLectures() {
@@ -121,3 +212,22 @@ describe('DashboardScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/(student)/(tabs)/profile');
   });
 });
+
+function buildActiveSession(id: string, sessionTitle: string) {
+  return {
+    id,
+    courseCode: 'CS3203',
+    courseName: 'Software Engineering Project',
+    sessionTitle,
+    sessionType: 'lecture',
+    scheduledStartAt: '2026-08-13T05:25:00Z',
+    scheduledEndAt: '2026-08-13T06:30:00Z',
+    checkInOpensAt: '2026-08-13T05:28:00Z',
+    checkInClosesAt: '2026-08-13T06:00:00Z',
+    lateAfterAt: '2026-08-13T05:45:00Z',
+    venue: 'LH-02',
+    requiresFaceVerification: true,
+    requiresGeofence: true,
+    requiresQr: false,
+  };
+}

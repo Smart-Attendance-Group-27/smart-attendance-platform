@@ -20,6 +20,7 @@ import {
   type LocationStatusTone,
 } from '../components/LocationStatusCard';
 import type { LocationService } from '../services/locationService';
+import type { LocationValidationResult } from '../types/locationValidation';
 
 type LocationCheckScreenProps = {
   sessionId: string;
@@ -31,12 +32,7 @@ type LocationCheckScreenProps = {
 type LocationCheckUiState =
   | { status: 'permission_required' }
   | { status: 'checking' }
-  | { status: 'inside_geofence' }
-  | { status: 'outside_geofence' }
-  | { status: 'permission_denied' }
-  | { status: 'poor_accuracy' }
-  | { status: 'stale_location' }
-  | { status: 'unavailable' }
+  | LocationValidationResult
   | { status: 'unexpected_error' };
 
 type LocationStatusContent = {
@@ -71,7 +67,7 @@ const statusContent: Record<
       android: 'location_on',
       web: 'location_on',
     },
-    title: 'Checking location…',
+    title: 'Checking location...',
     message:
       'Confirming that you are inside the approved classroom area.',
     tone: 'info',
@@ -93,7 +89,8 @@ const statusContent: Record<
       web: 'cancel',
     },
     title: 'Outside classroom area',
-    message: 'Move inside the approved classroom area and check again.',
+    message:
+      'This location attempt is outside the approved classroom area.',
     tone: 'error',
   },
   permission_denied: {
@@ -107,6 +104,17 @@ const statusContent: Record<
       'Location permission is required to continue attendance verification.',
     tone: 'error',
   },
+  services_disabled: {
+    icon: {
+      ios: 'location.slash',
+      android: 'location_off',
+      web: 'location_off',
+    },
+    title: 'Location services are turned off',
+    message:
+      'Turn on Location Services for your phone, then check again.',
+    tone: 'warning',
+  },
   poor_accuracy: {
     icon: {
       ios: 'exclamationmark.triangle.fill',
@@ -116,6 +124,17 @@ const statusContent: Record<
     title: 'Location accuracy is too low',
     message:
       'Move closer to the classroom or wait a moment for a more accurate location.',
+    tone: 'warning',
+  },
+  retry_required: {
+    icon: {
+      ios: 'scope',
+      android: 'my_location',
+      web: 'my_location',
+    },
+    title: 'A clearer location is needed',
+    message:
+      'Your location overlaps the classroom boundary. Wait a moment, then check again.',
     tone: 'warning',
   },
   stale_location: {
@@ -138,6 +157,94 @@ const statusContent: Record<
     title: 'Location is unavailable',
     message:
       'We could not obtain your current location. Check your location settings and try again.',
+    tone: 'error',
+  },
+  mock_location_detected: {
+    icon: {
+      ios: 'exclamationmark.shield.fill',
+      android: 'gpp_bad',
+      web: 'gpp_bad',
+    },
+    title: 'Mock location detected',
+    message:
+      'Attendance verification cannot continue with a simulated location.',
+    tone: 'error',
+  },
+  session_unavailable: {
+    icon: {
+      ios: 'clock.badge.xmark.fill',
+      android: 'event_busy',
+      web: 'event_busy',
+    },
+    title: 'Attendance session unavailable',
+    message:
+      'This session is closed, inactive, or no longer accepting location attempts.',
+    tone: 'error',
+  },
+  attempt_limit_reached: {
+    icon: {
+      ios: 'exclamationmark.octagon.fill',
+      android: 'block',
+      web: 'block',
+    },
+    title: 'Location attempt limit reached',
+    message:
+      'No more location attempts are available for this attendance check-in.',
+    tone: 'error',
+  },
+  unauthenticated: {
+    icon: {
+      ios: 'person.crop.circle.badge.exclamationmark',
+      android: 'person_off',
+      web: 'person_off',
+    },
+    title: 'Sign-in required',
+    message:
+      'Your sign-in session has expired. Sign in again before checking attendance.',
+    tone: 'error',
+  },
+  forbidden: {
+    icon: {
+      ios: 'hand.raised.fill',
+      android: 'block',
+      web: 'block',
+    },
+    title: 'Attendance access denied',
+    message:
+      'You are not eligible to check in to this attendance session.',
+    tone: 'error',
+  },
+  invalid_request: {
+    icon: {
+      ios: 'exclamationmark.triangle.fill',
+      android: 'warning',
+      web: 'warning',
+    },
+    title: 'Location reading was not accepted',
+    message:
+      'Capture a new location reading and try the verification again.',
+    tone: 'warning',
+  },
+  network_error: {
+    icon: {
+      ios: 'wifi.exclamationmark',
+      android: 'wifi_off',
+      web: 'wifi_off',
+    },
+    title: 'Cannot reach UniAttend',
+    message:
+      'Check your connection to the attendance server, then try again.',
+    tone: 'error',
+  },
+  server_error: {
+    icon: {
+      ios: 'exclamationmark.circle.fill',
+      android: 'error',
+      web: 'error',
+    },
+    title: 'Location verification is unavailable',
+    message:
+      'The attendance server could not verify your location. Try again shortly.',
     tone: 'error',
   },
   unexpected_error: {
@@ -214,13 +321,25 @@ function LocationStatusAction({
     );
   }
 
+  if (
+    state.status === 'outside_geofence' ||
+    state.status === 'mock_location_detected' ||
+    state.status === 'session_unavailable' ||
+    state.status === 'attempt_limit_reached' ||
+    state.status === 'unauthenticated' ||
+    state.status === 'forbidden'
+  ) {
+    return null;
+  }
+
   const retryTitle =
-    state.status === 'outside_geofence'
-      ? 'Check Location Again'
-      : state.status === 'poor_accuracy' ||
-          state.status === 'stale_location'
-        ? 'Check Again'
-        : 'Try Again';
+    state.status === 'poor_accuracy' ||
+    state.status === 'retry_required' ||
+    state.status === 'stale_location' ||
+    state.status === 'services_disabled' ||
+    state.status === 'invalid_request'
+      ? 'Check Again'
+      : 'Try Again';
 
   return (
     <AppButton

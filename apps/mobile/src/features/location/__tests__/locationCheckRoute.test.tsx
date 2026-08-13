@@ -14,6 +14,13 @@ const mockPush = jest.fn();
 let mockSearchParams: {
   sessionId?: string | string[];
 };
+let mockAuthSession:
+  | {
+      status: 'authenticated';
+      userId: string;
+      accessToken: string;
+    }
+  | { status: 'unauthenticated' };
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockSearchParams,
@@ -23,8 +30,12 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
-jest.mock('../services/mockLocationService', () => ({
-  MockLocationService: class {
+jest.mock('../../auth/context/AuthContext', () => ({
+  useAuth: () => ({ session: mockAuthSession }),
+}));
+
+jest.mock('../services/liveLocationService', () => ({
+  LiveLocationService: class {
     async validateLocation() {
       return { status: 'inside_geofence' as const };
     }
@@ -37,6 +48,11 @@ describe('LocationCheckRoute', () => {
     mockPush.mockClear();
     mockSearchParams = {
       sessionId: 'attendance-session-active',
+    };
+    mockAuthSession = {
+      status: 'authenticated',
+      userId: 'student-user-id',
+      accessToken: 'header.payload.signature',
     };
   });
 
@@ -104,6 +120,19 @@ describe('LocationCheckRoute', () => {
       }),
     ).toBeNull();
     expect(mockBack).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  test('does not expose the protected location screen without an authenticated session', async () => {
+    mockAuthSession = { status: 'unauthenticated' };
+
+    const { queryByRole } = await render(<LocationCheckRoute />);
+
+    expect(
+      queryByRole('button', {
+        name: 'Allow location access and check classroom location',
+      }),
+    ).toBeNull();
     expect(mockPush).not.toHaveBeenCalled();
   });
 });

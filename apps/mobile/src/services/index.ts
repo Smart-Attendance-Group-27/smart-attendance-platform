@@ -32,6 +32,7 @@ export type {
 } from '../features/location/types/locationReading';
 export type { LocationProvider } from '../features/location/services/locationProvider';
 export { ExpoLocationProvider } from '../features/location/services/expoLocationProvider';
+export { LiveLocationService } from '../features/location/services/liveLocationService';
 export type {
   GeofenceAttempt,
   GeofenceAttemptResult,
