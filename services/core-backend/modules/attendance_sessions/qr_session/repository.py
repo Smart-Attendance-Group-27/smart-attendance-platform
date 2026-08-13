@@ -7,6 +7,8 @@ import asyncpg
 
 ACTIVE_STATUS = "active"
 INACTIVE_STATUS = "inactive"
+STATIC_QR_MODE = "static"
+DYNAMIC_QR_MODE = "dynamic"
 STATIC_QR_TOKEN_SEQUENCE_NUMBER = 1
 
 
@@ -22,6 +24,8 @@ class AttendanceSessionRecord:
 @dataclass(frozen=True)
 class QrVerificationRecord:
     qr_session_id: UUID
+    qr_mode: str | None
+    refresh_interval_seconds: int | None
     batch_status: str | None
     batch_deactivated_at: datetime | None
     attendance_session_id: UUID | None
@@ -96,6 +100,8 @@ class QrSessionRepository:
         connection: asyncpg.Connection,
         qr_session_id: UUID,
         attendance_session_id: UUID,
+        mode: str,
+        refresh_interval_seconds: int | None,
         activated_at: datetime,
     ) -> None:
         await connection.execute(
@@ -103,6 +109,7 @@ class QrSessionRepository:
             INSERT INTO attendance_session.qr_token_batches (
                 id,
                 session_id,
+                mode,
                 refresh_interval_seconds,
                 issued_by,
                 status,
@@ -110,10 +117,12 @@ class QrSessionRepository:
                 deactivated_at,
                 created_at
             )
-            VALUES ($1, $2, NULL, NULL, $3, $4, NULL, $4)
+            VALUES ($1, $2, $3, $4, NULL, $5, $6, NULL, $6)
             """,
             qr_session_id,
             attendance_session_id,
+            mode,
+            refresh_interval_seconds,
             ACTIVE_STATUS,
             activated_at,
         )
@@ -158,6 +167,8 @@ class QrSessionRepository:
             """
             SELECT
                 batch.id AS qr_session_id,
+                batch.mode AS qr_mode,
+                batch.refresh_interval_seconds AS refresh_interval_seconds,
                 batch.status AS batch_status,
                 batch.deactivated_at AS batch_deactivated_at,
                 session.id AS attendance_session_id,
@@ -186,6 +197,8 @@ class QrSessionRepository:
 
         return QrVerificationRecord(
             qr_session_id=row["qr_session_id"],
+            qr_mode=row["qr_mode"],
+            refresh_interval_seconds=row["refresh_interval_seconds"],
             batch_status=row["batch_status"],
             batch_deactivated_at=row["batch_deactivated_at"],
             attendance_session_id=row["attendance_session_id"],

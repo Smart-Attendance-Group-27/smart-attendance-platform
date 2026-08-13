@@ -13,9 +13,11 @@ from modules.attendance_sessions.qr_session.exception import (
 )
 from modules.attendance_sessions.qr_session.repository import (
     ACTIVE_STATUS,
+    DYNAMIC_QR_MODE,
     AttendanceSessionRecord,
     QrSessionRepository,
     QrVerificationRecord,
+    STATIC_QR_MODE,
 )
 
 
@@ -27,7 +29,9 @@ QR_TOKEN_RANDOM_BYTES = 32
 class CreatedQrSession:
     qr_session_id: UUID
     attendance_session_id: UUID
-    qr_value: str
+    mode: str
+    qr_value: str | None
+    refresh_interval_seconds: int | None
     status: str
     valid_from: datetime
     expires_at: datetime
@@ -88,6 +92,8 @@ class QrSessionService:
                     connection,
                     qr_session_id,
                     attendance_session_id,
+                    STATIC_QR_MODE,
+                    None,
                     current_time,
                 )
                 await self._repository.insert_qr_token(
@@ -102,7 +108,57 @@ class QrSessionService:
         return CreatedQrSession(
             qr_session_id=qr_session_id,
             attendance_session_id=attendance_session_id,
+            mode=STATIC_QR_MODE,
             qr_value=qr_value,
+            refresh_interval_seconds=None,
+            status=ACTIVE_STATUS,
+            valid_from=current_time,
+            expires_at=actual_expires_at,
+        )
+
+    async def create_dynamic_qr_session(
+        self,
+        pool: asyncpg.Pool,
+        attendance_session_id: UUID,
+        valid_for_seconds: int,
+        refresh_interval_seconds: int,
+    ) -> CreatedQrSession:
+        current_time = self._ensure_utc(self._clock())
+        requested_expires_at = current_time + timedelta(seconds=valid_for_seconds)
+
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                attendance_session = await self._repository.lock_attendance_session(
+                    connection,
+                    attendance_session_id,
+                )
+                self._validate_attendance_session(attendance_session, current_time)
+
+                assert attendance_session is not None
+                scheduled_end_at = self._ensure_utc(attendance_session.scheduled_end_at)
+                actual_expires_at = min(requested_expires_at, scheduled_end_at)
+                qr_session_id = self._uuid_factory()
+
+                await self._repository.close_existing_active_qr_sessions(
+                    connection,
+                    attendance_session_id,
+                    current_time,
+                )
+                await self._repository.insert_qr_batch(
+                    connection,
+                    qr_session_id,
+                    attendance_session_id,
+                    DYNAMIC_QR_MODE,
+                    refresh_interval_seconds,
+                    current_time,
+                )
+
+        return CreatedQrSession(
+            qr_session_id=qr_session_id,
+            attendance_session_id=attendance_session_id,
+            mode=DYNAMIC_QR_MODE,
+            qr_value=None,
+            refresh_interval_seconds=refresh_interval_seconds,
             status=ACTIVE_STATUS,
             valid_from=current_time,
             expires_at=actual_expires_at,
