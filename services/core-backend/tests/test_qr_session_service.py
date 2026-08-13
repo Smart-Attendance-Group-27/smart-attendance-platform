@@ -51,7 +51,7 @@ class FakeRepository:
     def __init__(self, session: AttendanceSessionRecord | None) -> None:
         self.session = session
         self.closed_session_id: UUID | None = None
-        self.inserted_batch: tuple[UUID, UUID, datetime] | None = None
+        self.inserted_batch: tuple[UUID, UUID, str, int | None, datetime] | None = None
         self.inserted_token: tuple[UUID, UUID, str, datetime, datetime] | None = None
 
     async def lock_attendance_session(
@@ -74,9 +74,17 @@ class FakeRepository:
         connection: FakeConnection,
         qr_session_id: UUID,
         attendance_session_id: UUID,
+        mode: str,
+        refresh_interval_seconds: int | None,
         activated_at: datetime,
     ) -> None:
-        self.inserted_batch = (qr_session_id, attendance_session_id, activated_at)
+        self.inserted_batch = (
+            qr_session_id,
+            attendance_session_id,
+            mode,
+            refresh_interval_seconds,
+            activated_at,
+        )
 
     async def insert_qr_token(
         self,
@@ -137,11 +145,19 @@ async def test_create_static_qr_session_hashes_raw_value_and_caps_expiration() -
 
     assert result.qr_session_id == qr_session_id
     assert result.attendance_session_id == attendance_session_id
+    assert result.mode == "static"
     assert result.qr_value == "raw-test-token"
+    assert result.refresh_interval_seconds is None
     assert result.valid_from == current_time
     assert result.expires_at == current_time + timedelta(minutes=20)
     assert repository.closed_session_id == attendance_session_id
-    assert repository.inserted_batch == (qr_session_id, attendance_session_id, current_time)
+    assert repository.inserted_batch == (
+        qr_session_id,
+        attendance_session_id,
+        "static",
+        None,
+        current_time,
+    )
     assert repository.inserted_token == (
         qr_token_id,
         qr_session_id,
@@ -185,6 +201,51 @@ async def test_create_static_qr_session_rejects_ended_session() -> None:
 
     with pytest.raises(AttendanceSessionNotActiveError, match="already ended"):
         await service.create_static_qr_session(FakePool(), attendance_session_id, 300)
+
+
+@pytest.mark.asyncio
+async def test_create_dynamic_qr_session_creates_batch_without_token_history() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    attendance_session_id = UUID("40000000-0000-0000-0000-000000000001")
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeRepository(
+        AttendanceSessionRecord(
+            id=attendance_session_id,
+            status="active",
+            scheduled_end_at=current_time + timedelta(minutes=30),
+            closed_at=None,
+            cancelled_at=None,
+        )
+    )
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        uuid_factory=lambda: qr_session_id,
+    )
+
+    result = await service.create_dynamic_qr_session(
+        FakePool(),
+        attendance_session_id,
+        valid_for_seconds=900,
+        refresh_interval_seconds=15,
+    )
+
+    assert result.qr_session_id == qr_session_id
+    assert result.attendance_session_id == attendance_session_id
+    assert result.mode == "dynamic"
+    assert result.qr_value is None
+    assert result.refresh_interval_seconds == 15
+    assert result.valid_from == current_time
+    assert result.expires_at == current_time + timedelta(minutes=15)
+    assert repository.closed_session_id == attendance_session_id
+    assert repository.inserted_batch == (
+        qr_session_id,
+        attendance_session_id,
+        "dynamic",
+        15,
+        current_time,
+    )
+    assert repository.inserted_token is None
 
 
 @pytest.mark.asyncio
@@ -432,6 +493,8 @@ def build_qr_verification_record(
 ) -> QrVerificationRecord:
     return QrVerificationRecord(
         qr_session_id=qr_session_id,
+        qr_mode="static",
+        refresh_interval_seconds=None,
         batch_status=batch_status,
         batch_deactivated_at=batch_deactivated_at,
         attendance_session_id=attendance_session_id,
