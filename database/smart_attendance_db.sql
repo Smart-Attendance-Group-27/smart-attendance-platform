@@ -417,6 +417,7 @@ CREATE INDEX "AK" ON  "attendance_verification.geofence_validation_attempts" ("v
 CREATE TABLE "attendance_session.qr_token_batches" (
   "id" uuid,
   "session_id" uuid,
+  "mode" character varying(20) NOT NULL,
   "refresh_interval_seconds" smallint,
   "issued_by" uuid,
   "status" character varying(20),
@@ -429,7 +430,15 @@ CREATE TABLE "attendance_session.qr_token_batches" (
       REFERENCES "attendance_session.sessions"("id"),
   CONSTRAINT "FK_qr_token_batches_issued_by"
     FOREIGN KEY ("issued_by")
-      REFERENCES "identity.users"("id")
+      REFERENCES "identity.users"("id"),
+  CONSTRAINT "CK_qr_token_batches_mode"
+    CHECK ("mode" IN ('static', 'dynamic')),
+  CONSTRAINT "CK_qr_token_batches_mode_refresh_interval"
+    CHECK (
+      ("mode" = 'static' AND "refresh_interval_seconds" IS NULL)
+      OR
+      ("mode" = 'dynamic' AND "refresh_interval_seconds" IS NOT NULL AND "refresh_interval_seconds" > 0)
+    )
 );
 
 CREATE TABLE "attendance_session.qr_tokens" (
@@ -822,4 +831,3 @@ CREATE TABLE "academic.course_lecturers" (
 );
 
 CREATE INDEX "AK" ON  "academic.course_lecturers" ("course_offering_id", "lecturer_id");
-
