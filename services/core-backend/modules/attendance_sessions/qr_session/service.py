@@ -1,4 +1,5 @@
-from collections.abc import Callable
+import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -33,6 +34,7 @@ from modules.attendance_sessions.qr_session.repository import (
 
 QR_TOKEN_SEQUENCE_NUMBER = 1
 QR_TOKEN_RANDOM_BYTES = 32
+SSE_RECONNECT_RETRY_MS = 3000
 
 
 @dataclass(frozen=True)
@@ -189,6 +191,10 @@ class QrSessionService:
             QrBatchMetadata(
                 id=qr_session_id,
                 attendance_session_id=attendance_session_id,
+                attendance_session_status=attendance_session.status,
+                attendance_session_scheduled_end_at=attendance_session.scheduled_end_at,
+                attendance_session_closed_at=attendance_session.closed_at,
+                attendance_session_cancelled_at=attendance_session.cancelled_at,
                 mode=DYNAMIC_QR_MODE,
                 status=ACTIVE_STATUS,
                 activated_at=current_time,
@@ -250,6 +256,19 @@ class QrSessionService:
                 qr_session_id,
             )
 
+        if verification_record is not None and verification_record.qr_mode == DYNAMIC_QR_MODE:
+            verification_status = await self._classify_dynamic_qr_verification(
+                pool,
+                qr_session_id,
+                qr_value,
+                current_time,
+            )
+            return VerifiedQrSession(
+                qr_session_id=qr_session_id,
+                status=verification_status,
+                verified_at=current_time,
+            )
+
         verification_status = self._classify_qr_verification(
             verification_record,
             submitted_token_hash,
@@ -302,6 +321,42 @@ class QrSessionService:
             expires_at=expires_at,
         )
 
+    async def stream_current_dynamic_qr_sessions(
+        self,
+        pool: asyncpg.Pool,
+        qr_session_id: UUID,
+        *,
+        initial_qr_session: CurrentDynamicQrSession | None = None,
+        is_disconnected: Callable[[], Awaitable[bool]] | None = None,
+        sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
+    ) -> AsyncIterator[CurrentDynamicQrSession]:
+        current_qr_session = initial_qr_session
+
+        while True:
+            if await self._client_is_disconnected(is_disconnected):
+                break
+
+            if current_qr_session is None:
+                try:
+                    current_qr_session = await self.get_current_dynamic_qr_session(
+                        pool,
+                        qr_session_id,
+                    )
+                except (QrSessionNotFoundError, DynamicQrSessionUnavailableError):
+                    break
+
+            yield current_qr_session
+
+            if await self._client_is_disconnected(is_disconnected):
+                break
+
+            wait_seconds = self._calculate_dynamic_qr_stream_wait_seconds(
+                current_qr_session,
+                self._clock(),
+            )
+            await sleep(wait_seconds)
+            current_qr_session = None
+
     @staticmethod
     def _utc_now() -> datetime:
         return datetime.now(UTC)
@@ -345,6 +400,24 @@ class QrSessionService:
         if value.tzinfo is None:
             return value.replace(tzinfo=UTC)
         return value.astimezone(UTC)
+
+    @staticmethod
+    def _calculate_dynamic_qr_stream_wait_seconds(
+        current_qr_session: CurrentDynamicQrSession,
+        current_time: datetime,
+    ) -> float:
+        expires_at = QrSessionService._ensure_utc(current_qr_session.expires_at)
+        current_time = QrSessionService._ensure_utc(current_time)
+        return max(0.0, (expires_at - current_time).total_seconds())
+
+    @staticmethod
+    async def _client_is_disconnected(
+        is_disconnected: Callable[[], Awaitable[bool]] | None,
+    ) -> bool:
+        if is_disconnected is None:
+            return False
+
+        return await is_disconnected()
 
     @staticmethod
     def _validate_attendance_session(
@@ -410,6 +483,32 @@ class QrSessionService:
 
         return "accepted"
 
+    async def _classify_dynamic_qr_verification(
+        self,
+        pool: asyncpg.Pool,
+        qr_session_id: UUID,
+        submitted_qr_value: str,
+        current_time: datetime,
+    ) -> str:
+        try:
+            current_qr_session = await self.get_current_dynamic_qr_session(
+                pool,
+                qr_session_id,
+            )
+        except QrSessionNotFoundError:
+            return "invalid"
+        except DynamicQrConfigurationError:
+            raise
+        except DynamicQrSessionUnavailableError as error:
+            if "expired" in error.message or "ended" in error.message:
+                return "expired"
+            return "closed"
+
+        if compare_digest(current_qr_session.qr_value, submitted_qr_value):
+            return "accepted"
+
+        return "invalid"
+
     @staticmethod
     def _verification_record_is_closed(
         verification_record: QrVerificationRecord,
@@ -447,6 +546,11 @@ class QrSessionService:
         metadata: QrBatchMetadata,
         current_time: datetime,
     ) -> None:
+        QrSessionService._validate_dynamic_qr_attendance_session_metadata(
+            metadata,
+            current_time,
+        )
+
         if metadata.mode != DYNAMIC_QR_MODE:
             raise DynamicQrSessionUnavailableError(
                 "QR session is not a dynamic QR session.",
@@ -476,6 +580,32 @@ class QrSessionService:
 
         if current_time >= expires_at:
             raise DynamicQrSessionUnavailableError("QR session is expired.")
+
+    @staticmethod
+    def _validate_dynamic_qr_attendance_session_metadata(
+        metadata: QrBatchMetadata,
+        current_time: datetime,
+    ) -> None:
+        if metadata.attendance_session_status != ACTIVE_STATUS:
+            raise DynamicQrSessionUnavailableError("Attendance session is not active.")
+
+        if metadata.attendance_session_closed_at is not None:
+            raise DynamicQrSessionUnavailableError("Attendance session is already closed.")
+
+        if metadata.attendance_session_cancelled_at is not None:
+            raise DynamicQrSessionUnavailableError("Attendance session is cancelled.")
+
+        if metadata.attendance_session_scheduled_end_at is None:
+            raise DynamicQrSessionUnavailableError(
+                "Attendance session scheduled end is missing.",
+            )
+
+        scheduled_end_at = QrSessionService._ensure_utc(
+            metadata.attendance_session_scheduled_end_at,
+        )
+
+        if scheduled_end_at <= current_time:
+            raise DynamicQrSessionUnavailableError("Attendance session has already ended.")
 
     async def _delete_cached_qr_batches(
         self,

@@ -60,6 +60,7 @@ class FakeRepository:
         self.inserted_token: tuple[UUID, UUID, str, datetime, datetime] | None = None
         self.deactivated_batch_ids: list[UUID] = []
         self.metadata: QrBatchMetadata | None = None
+        self.verification_record: QrVerificationRecord | None = None
         self.fetched_qr_session_id: UUID | None = None
 
     async def lock_attendance_session(
@@ -115,6 +116,14 @@ class FakeRepository:
     ) -> QrBatchMetadata | None:
         self.fetched_qr_session_id = qr_session_id
         return self.metadata
+
+    async def fetch_qr_verification_record(
+        self,
+        connection: FakeConnection,
+        qr_session_id: UUID,
+    ) -> QrVerificationRecord | None:
+        self.fetched_qr_session_id = qr_session_id
+        return self.verification_record
 
 
 class FakeVerificationRepository:
@@ -556,6 +565,23 @@ async def test_get_current_dynamic_qr_session_rejects_closed_batch() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_current_dynamic_qr_session_rejects_closed_attendance_session() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    metadata = build_qr_batch_metadata(
+        attendance_session_closed_at=current_time - timedelta(seconds=1),
+    )
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    with pytest.raises(DynamicQrSessionUnavailableError, match="already closed"):
+        await service.get_current_dynamic_qr_session(FakePool(), metadata.id)
+
+
+@pytest.mark.asyncio
 async def test_get_current_dynamic_qr_session_rejects_expired_batch() -> None:
     current_time = datetime(2026, 8, 6, 10, 15, tzinfo=UTC)
     metadata = build_qr_batch_metadata(expires_at=current_time)
@@ -638,6 +664,214 @@ async def test_get_current_dynamic_qr_session_does_not_log_or_cache_generated_va
 
     assert result.qr_value not in caplog.text
     assert "test-secret" not in caplog.text
+    assert cache.set_calls == []
+
+
+@pytest.mark.asyncio
+async def test_stream_dynamic_qr_sessions_sends_current_qr_immediately() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, 8, tzinfo=UTC)
+    metadata = build_qr_batch_metadata()
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    stream = service.stream_current_dynamic_qr_sessions(FakePool(), metadata.id)
+    try:
+        result = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    assert result.sequence == 0
+    assert result.qr_value == generate_dynamic_qr_value(metadata.id, 0, "test-secret")
+    assert result.valid_from == datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    assert result.expires_at == datetime(2026, 8, 6, 10, 0, 15, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_stream_dynamic_qr_sessions_uses_same_value_as_current_endpoint_logic() -> None:
+    current_time = datetime(2026, 8, 6, 10, 4, 20, tzinfo=UTC)
+    metadata = build_qr_batch_metadata()
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    current_result = await service.get_current_dynamic_qr_session(
+        FakePool(),
+        metadata.id,
+    )
+    stream = service.stream_current_dynamic_qr_sessions(
+        FakePool(),
+        metadata.id,
+        initial_qr_session=current_result,
+    )
+    try:
+        streamed_result = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    assert streamed_result == current_result
+
+
+@pytest.mark.asyncio
+async def test_stream_dynamic_qr_sessions_rotates_to_different_next_value() -> None:
+    clock_time = datetime(2026, 8, 6, 10, 0, 8, tzinfo=UTC)
+    metadata = build_qr_batch_metadata()
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: clock_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    async def advance_clock(seconds: float) -> None:
+        nonlocal clock_time
+        clock_time += timedelta(seconds=seconds)
+
+    stream = service.stream_current_dynamic_qr_sessions(
+        FakePool(),
+        metadata.id,
+        sleep=advance_clock,
+    )
+    try:
+        first_result = await anext(stream)
+        second_result = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    assert first_result.sequence == 0
+    assert second_result.sequence == 1
+    assert second_result.qr_value != first_result.qr_value
+
+
+@pytest.mark.asyncio
+async def test_stream_dynamic_qr_sessions_waits_until_activated_boundary() -> None:
+    clock_time = datetime(2026, 8, 6, 10, 0, 8, 500000, tzinfo=UTC)
+    metadata = build_qr_batch_metadata()
+    sleep_calls: list[float] = []
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: clock_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    async def advance_clock(seconds: float) -> None:
+        nonlocal clock_time
+        sleep_calls.append(seconds)
+        clock_time += timedelta(seconds=seconds)
+
+    stream = service.stream_current_dynamic_qr_sessions(
+        FakePool(),
+        metadata.id,
+        sleep=advance_clock,
+    )
+    try:
+        first_result = await anext(stream)
+        second_result = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    assert first_result.sequence == 0
+    assert second_result.sequence == 1
+    assert sleep_calls == [6.5]
+
+
+@pytest.mark.asyncio
+async def test_stream_dynamic_qr_sessions_stops_when_batch_closes() -> None:
+    clock_time = datetime(2026, 8, 6, 10, 0, 8, tzinfo=UTC)
+    metadata = build_qr_batch_metadata()
+    cache = FakeQrBatchCache(cached_metadata=metadata)
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=cache,
+        clock=lambda: clock_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    async def close_batch_after_wait(seconds: float) -> None:
+        nonlocal clock_time
+        clock_time += timedelta(seconds=seconds)
+        cache.cached_metadata = build_qr_batch_metadata(
+            status="inactive",
+            deactivated_at=clock_time,
+        )
+
+    stream = service.stream_current_dynamic_qr_sessions(
+        FakePool(),
+        metadata.id,
+        sleep=close_batch_after_wait,
+    )
+    try:
+        first_result = await anext(stream)
+        with pytest.raises(StopAsyncIteration):
+            await anext(stream)
+    finally:
+        await stream.aclose()
+
+    assert first_result.sequence == 0
+
+
+@pytest.mark.asyncio
+async def test_stream_dynamic_qr_sessions_stops_cleanly_on_client_disconnect() -> None:
+    metadata = build_qr_batch_metadata()
+    disconnect_checks = iter([False, True])
+    sleep_calls: list[float] = []
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: datetime(2026, 8, 6, 10, 0, 8, tzinfo=UTC),
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    async def is_disconnected() -> bool:
+        return next(disconnect_checks)
+
+    async def track_sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
+
+    stream = service.stream_current_dynamic_qr_sessions(
+        FakePool(),
+        metadata.id,
+        is_disconnected=is_disconnected,
+        sleep=track_sleep,
+    )
+    try:
+        first_result = await anext(stream)
+        with pytest.raises(StopAsyncIteration):
+            await anext(stream)
+    finally:
+        await stream.aclose()
+
+    assert first_result.sequence == 0
+    assert sleep_calls == []
+
+
+@pytest.mark.asyncio
+async def test_stream_dynamic_qr_sessions_does_not_create_tokens_or_cache_qr_values() -> None:
+    metadata = build_qr_batch_metadata()
+    repository = FakeRepository(None)
+    cache = FakeQrBatchCache(cached_metadata=metadata)
+    service = QrSessionService(
+        repository=repository,
+        qr_batch_cache=cache,
+        clock=lambda: datetime(2026, 8, 6, 10, 0, 8, tzinfo=UTC),
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    stream = service.stream_current_dynamic_qr_sessions(FakePool(), metadata.id)
+    try:
+        result = await anext(stream)
+    finally:
+        await stream.aclose()
+
+    assert result.qr_value
+    assert repository.inserted_token is None
     assert cache.set_calls == []
 
 
@@ -862,9 +1096,130 @@ async def test_verify_qr_session_does_not_pass_raw_qr_value_to_repository_or_log
     assert raw_qr_value not in caplog.text
 
 
+@pytest.mark.asyncio
+async def test_verify_dynamic_qr_session_accepts_current_hmac_value() -> None:
+    current_time = datetime(2026, 8, 6, 10, 4, 20, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeRepository(None)
+    repository.metadata = build_qr_batch_metadata(qr_session_id=qr_session_id)
+    repository.verification_record = build_qr_verification_record(
+        qr_session_id=qr_session_id,
+        qr_mode="dynamic",
+    )
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+    qr_value = generate_dynamic_qr_value(qr_session_id, 17, "test-secret")
+
+    result = await service.verify_qr_session(FakePool(), qr_session_id, qr_value)
+
+    assert result.status == "accepted"
+    assert result.verified_at == current_time
+
+
+@pytest.mark.asyncio
+async def test_verify_dynamic_qr_session_rejects_wrong_value() -> None:
+    current_time = datetime(2026, 8, 6, 10, 4, 20, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeRepository(None)
+    repository.metadata = build_qr_batch_metadata(qr_session_id=qr_session_id)
+    repository.verification_record = build_qr_verification_record(
+        qr_session_id=qr_session_id,
+        qr_mode="dynamic",
+    )
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    result = await service.verify_qr_session(FakePool(), qr_session_id, "wrong-value")
+
+    assert result.status == "invalid"
+
+
+@pytest.mark.asyncio
+async def test_verify_dynamic_qr_session_returns_expired_for_expired_batch() -> None:
+    current_time = datetime(2026, 8, 6, 10, 15, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeRepository(None)
+    repository.metadata = build_qr_batch_metadata(
+        qr_session_id=qr_session_id,
+        expires_at=current_time,
+    )
+    repository.verification_record = build_qr_verification_record(
+        qr_session_id=qr_session_id,
+        qr_mode="dynamic",
+    )
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    result = await service.verify_qr_session(FakePool(), qr_session_id, "any-value")
+
+    assert result.status == "expired"
+
+
+@pytest.mark.asyncio
+async def test_verify_dynamic_qr_session_returns_closed_for_closed_batch() -> None:
+    current_time = datetime(2026, 8, 6, 10, 4, 20, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeRepository(None)
+    repository.metadata = build_qr_batch_metadata(
+        qr_session_id=qr_session_id,
+        status="inactive",
+        deactivated_at=current_time - timedelta(seconds=1),
+    )
+    repository.verification_record = build_qr_verification_record(
+        qr_session_id=qr_session_id,
+        qr_mode="dynamic",
+    )
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    result = await service.verify_qr_session(FakePool(), qr_session_id, "any-value")
+
+    assert result.status == "closed"
+
+
+@pytest.mark.asyncio
+async def test_verify_dynamic_qr_session_does_not_create_tokens_or_cache_qr_values() -> None:
+    current_time = datetime(2026, 8, 6, 10, 4, 20, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeRepository(None)
+    cache = FakeQrBatchCache()
+    metadata = build_qr_batch_metadata(qr_session_id=qr_session_id)
+    repository.metadata = metadata
+    repository.verification_record = build_qr_verification_record(
+        qr_session_id=qr_session_id,
+        qr_mode="dynamic",
+    )
+    service = QrSessionService(
+        repository=repository,
+        qr_batch_cache=cache,
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+    qr_value = generate_dynamic_qr_value(qr_session_id, 17, "test-secret")
+
+    result = await service.verify_qr_session(FakePool(), qr_session_id, qr_value)
+
+    assert result.status == "accepted"
+    assert repository.inserted_token is None
+    assert all(qr_value != str(call) for call in cache.set_calls)
+
+
 def build_qr_verification_record(
     *,
     qr_session_id: UUID,
+    qr_mode: str = "static",
     batch_status: str = "active",
     batch_deactivated_at: datetime | None = None,
     attendance_session_id: UUID = UUID("40000000-0000-0000-0000-000000000001"),
@@ -886,7 +1241,7 @@ def build_qr_verification_record(
 ) -> QrVerificationRecord:
     return QrVerificationRecord(
         qr_session_id=qr_session_id,
-        qr_mode="static",
+        qr_mode=qr_mode,
         refresh_interval_seconds=None,
         batch_status=batch_status,
         batch_deactivated_at=batch_deactivated_at,
@@ -906,6 +1261,17 @@ def build_qr_batch_metadata(
     *,
     qr_session_id: UUID = UUID("50000000-0000-0000-0000-000000000001"),
     attendance_session_id: UUID = UUID("40000000-0000-0000-0000-000000000001"),
+    attendance_session_status: str | None = "active",
+    attendance_session_scheduled_end_at: datetime | None = datetime(
+        2026,
+        8,
+        6,
+        11,
+        0,
+        tzinfo=UTC,
+    ),
+    attendance_session_closed_at: datetime | None = None,
+    attendance_session_cancelled_at: datetime | None = None,
     mode: str = "dynamic",
     status: str = "active",
     activated_at: datetime = datetime(2026, 8, 6, 10, 0, tzinfo=UTC),
@@ -916,6 +1282,10 @@ def build_qr_batch_metadata(
     return QrBatchMetadata(
         id=qr_session_id,
         attendance_session_id=attendance_session_id,
+        attendance_session_status=attendance_session_status,
+        attendance_session_scheduled_end_at=attendance_session_scheduled_end_at,
+        attendance_session_closed_at=attendance_session_closed_at,
+        attendance_session_cancelled_at=attendance_session_cancelled_at,
         mode=mode,
         status=status,
         activated_at=activated_at,
