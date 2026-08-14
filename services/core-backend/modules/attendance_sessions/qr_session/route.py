@@ -6,11 +6,15 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from modules.attendance_sessions.qr_session.exception import (
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
+    DynamicQrConfigurationError,
+    DynamicQrSessionUnavailableError,
+    QrSessionNotFoundError,
 )
 from modules.attendance_sessions.qr_session.cache import QrBatchMetadataCache
 from modules.attendance_sessions.qr_session.schemas import (
     CreateQrSessionRequest,
     CreateQrSessionResponse,
+    CurrentDynamicQrSessionResponse,
     VerifyQrSessionRequest,
     VerifyQrSessionResponse,
 )
@@ -25,7 +29,12 @@ verify_qr_session_router = APIRouter(prefix="/qr-sessions/{qr_session_id}")
 
 def get_qr_session_service(request: Request) -> QrSessionService:
     redis_client = getattr(request.app.state, "redis_client", None)
-    return QrSessionService(qr_batch_cache=QrBatchMetadataCache(redis_client))
+    settings = getattr(request.app.state, "settings", None)
+    dynamic_qr_hmac_secret = getattr(settings, "dynamic_qr_hmac_secret", None)
+    return QrSessionService(
+        qr_batch_cache=QrBatchMetadataCache(redis_client),
+        dynamic_qr_hmac_secret=dynamic_qr_hmac_secret,
+    )
 
 
 @create_qr_session_router.post(
@@ -100,6 +109,46 @@ async def verify_qr_session(
         qr_session_id=verified_qr_session.qr_session_id,
         status=verified_qr_session.status,
         verified_at=verified_qr_session.verified_at,
+    )
+
+
+@verify_qr_session_router.get(
+    "/current",
+    response_model=CurrentDynamicQrSessionResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_current_dynamic_qr_session(
+    qr_session_id: UUID,
+    http_request: Request,
+    qr_session_service: QrSessionService = Depends(get_qr_session_service),
+) -> CurrentDynamicQrSessionResponse:
+    try:
+        current_qr_session = await qr_session_service.get_current_dynamic_qr_session(
+            http_request.app.state.db_pool,
+            qr_session_id,
+        )
+    except QrSessionNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="QR session was not found.",
+        ) from error
+    except DynamicQrSessionUnavailableError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=error.message,
+        ) from error
+    except DynamicQrConfigurationError as error:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error.message,
+        ) from error
+
+    return CurrentDynamicQrSessionResponse(
+        qr_session_id=current_qr_session.qr_session_id,
+        qr_value=current_qr_session.qr_value,
+        sequence=current_qr_session.sequence,
+        valid_from=current_qr_session.valid_from,
+        expires_at=current_qr_session.expires_at,
     )
 
 
