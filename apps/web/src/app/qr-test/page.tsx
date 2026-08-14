@@ -1,8 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
+
+type QrMode = "static" | "dynamic";
+type StreamStatus = "idle" | "connecting" | "connected" | "closed";
 
 type QrSessionResponse = {
   qrSessionId: string;
@@ -15,52 +18,109 @@ type QrSessionResponse = {
   expiresAt: string;
 };
 
-type QrMode = "static" | "dynamic";
+type DynamicQrStreamPayload = {
+  qrSessionId: string;
+  qrValue: string;
+  sequence: number;
+  validFrom: string;
+  expiresAt: string;
+};
 
 const DEFAULT_ATTENDANCE_SESSION_ID = "40000000-0000-0000-0000-000000000001";
 
 export default function QrTestPage() {
   const [sessionId, setSessionId] = useState(DEFAULT_ATTENDANCE_SESSION_ID);
   const [validForSeconds, setValidForSeconds] = useState("300");
+  const [refreshIntervalSeconds, setRefreshIntervalSeconds] = useState("15");
   const [mode, setMode] = useState<QrMode>("static");
   const [qrSession, setQrSession] = useState<QrSessionResponse | null>(null);
+  const [dynamicQr, setDynamicQr] = useState<DynamicQrStreamPayload | null>(
+    null,
+  );
+  const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
   const validityNumber = Number(validForSeconds);
+  const refreshIntervalNumber = Number(refreshIntervalSeconds);
   const canSubmit =
-    mode === "static" &&
     sessionId.trim().length > 0 &&
     Number.isInteger(validityNumber) &&
     validityNumber >= 30 &&
-    validityNumber <= 86400;
+    validityNumber <= 86400 &&
+    (mode === "static" ||
+      (Number.isInteger(refreshIntervalNumber) &&
+        refreshIntervalNumber >= 1 &&
+        refreshIntervalNumber <= 300));
+
+  const displayedQrValue =
+    qrSession?.mode === "dynamic" ? dynamicQr?.qrValue : qrSession?.qrValue;
+
+  const displayedExpiresAt =
+    qrSession?.mode === "dynamic" ? dynamicQr?.expiresAt : qrSession?.expiresAt;
+
+  const qrCodePayload = useMemo(() => {
+    if (!qrSession || !displayedQrValue) {
+      return "";
+    }
+
+    return JSON.stringify({
+      qrSessionId: qrSession.qrSessionId,
+      qrValue: displayedQrValue,
+    });
+  }, [displayedQrValue, qrSession]);
 
   const expiryLabel = useMemo(() => {
-    if (!qrSession?.qrValue) {
+    if (!displayedExpiresAt) {
       return "";
     }
 
     return new Intl.DateTimeFormat(undefined, {
       dateStyle: "medium",
       timeStyle: "medium",
-    }).format(new Date(qrSession.expiresAt));
+    }).format(new Date(displayedExpiresAt));
+  }, [displayedExpiresAt]);
+
+  useEffect(() => {
+    if (!qrSession || qrSession.mode !== "dynamic") {
+      return;
+    }
+
+    const source = new EventSource(
+      `/api/qr-sessions/${qrSession.qrSessionId}/stream`,
+    );
+
+    source.addEventListener("qr.rotate", (event) => {
+      try {
+        setDynamicQr(JSON.parse(event.data) as DynamicQrStreamPayload);
+        setStreamStatus("connected");
+        setError("");
+      } catch {
+        setStreamStatus("closed");
+        setError("Dynamic QR stream returned invalid data.");
+        source.close();
+      }
+    });
+
+    source.onerror = () => {
+      setStreamStatus((currentStatus) =>
+        currentStatus === "connected" ? "connected" : "closed",
+      );
+      setError((currentError) => currentError || "Dynamic QR stream is unavailable.");
+    };
+
+    return () => {
+      source.close();
+    };
   }, [qrSession]);
 
   function selectMode(nextMode: QrMode) {
     setMode(nextMode);
     setQrSession(null);
+    setDynamicQr(null);
+    setStreamStatus("idle");
     setError("");
   }
-  const qrCodePayload = useMemo(() => {
-    if (!qrSession) {
-      return "";
-    }
-
-    return JSON.stringify({
-      qrSessionId: qrSession.qrSessionId,
-      qrValue: qrSession.qrValue,
-    });
-  }, [qrSession]);
 
   async function generateQr() {
     if (!canSubmit) {
@@ -70,6 +130,8 @@ export default function QrTestPage() {
     setIsLoading(true);
     setError("");
     setQrSession(null);
+    setDynamicQr(null);
+    setStreamStatus("idle");
 
     try {
       const response = await fetch(
@@ -82,6 +144,9 @@ export default function QrTestPage() {
           body: JSON.stringify({
             mode,
             validForSeconds: validityNumber,
+            ...(mode === "dynamic"
+              ? { refreshIntervalSeconds: refreshIntervalNumber }
+              : {}),
           }),
         },
       );
@@ -98,6 +163,7 @@ export default function QrTestPage() {
         throw new Error("The backend did not return a static QR value.");
       }
 
+      setStreamStatus(createdSession.mode === "dynamic" ? "connecting" : "idle");
       setQrSession(createdSession);
     } catch (caughtError) {
       setError(
@@ -149,7 +215,7 @@ export default function QrTestPage() {
                       Static
                     </span>
                     <span className="mt-1 block text-xs text-zinc-400">
-                      One value until expiry
+                      Single QR value
                     </span>
                   </label>
 
@@ -172,7 +238,7 @@ export default function QrTestPage() {
                       Dynamic
                     </span>
                     <span className="mt-1 block text-xs text-amber-300">
-                      SSE integration pending
+                      SSE rotation
                     </span>
                   </label>
                 </div>
@@ -192,7 +258,7 @@ export default function QrTestPage() {
 
               <label className="block" htmlFor="validForSeconds">
                 <span className="text-sm font-medium text-zinc-300">
-                  Valid for seconds
+                  Session validity
                 </span>
                 <input
                   id="validForSeconds"
@@ -205,21 +271,46 @@ export default function QrTestPage() {
                   className="mt-2 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
                 />
                 <span className="mt-1 block text-xs text-zinc-500">
-                  Between 30 and 86,400 seconds
+                  30 to 86,400 seconds
                 </span>
               </label>
+
+              {mode === "dynamic" ? (
+                <label className="block" htmlFor="refreshIntervalSeconds">
+                  <span className="text-sm font-medium text-zinc-300">
+                    Rotation interval
+                  </span>
+                  <input
+                    id="refreshIntervalSeconds"
+                    value={refreshIntervalSeconds}
+                    onChange={(event) =>
+                      setRefreshIntervalSeconds(event.target.value)
+                    }
+                    inputMode="numeric"
+                    min={1}
+                    max={300}
+                    type="number"
+                    className="mt-2 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-amber-400"
+                  />
+                  <span className="mt-1 block text-xs text-zinc-500">
+                    1 to 300 seconds
+                  </span>
+                </label>
+              ) : null}
 
               <button
                 type="button"
                 onClick={generateQr}
                 disabled={isLoading || !canSubmit}
-                className="w-full rounded-md bg-cyan-400 px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+                className={`w-full rounded-md px-4 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400 ${
+                  mode === "dynamic"
+                    ? "bg-amber-400 text-zinc-950 hover:bg-amber-300"
+                    : "bg-cyan-400 text-zinc-950 hover:bg-cyan-300"
+                }`}
               >
                 {isLoading
-                  ? "Creating static QR session..."
-                  : mode === "dynamic"
-                    ? "Dynamic QR requires SSE"
-                    : "Create static QR session"}
+                  ? `Creating ${mode} QR session...`
+                  : `Create ${mode} QR session`}
               </button>
 
               {error ? (
@@ -241,31 +332,38 @@ export default function QrTestPage() {
                     marginSize={4}
                   />
 
-                  <p className="mt-5 rounded-full bg-emerald-100 px-3 py-1 text-sm font-medium text-emerald-800">
-                    Static QR session active
+                  <p
+                    className={`mt-5 rounded-full px-3 py-1 text-sm font-medium ${
+                      qrSession.mode === "dynamic"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-emerald-100 text-emerald-800"
+                    }`}
+                  >
+                    {qrSession.mode === "dynamic"
+                      ? `Dynamic QR ${streamStatus}`
+                      : "Static QR active"}
                   </p>
                   <p className="mt-4 max-w-xl break-all text-sm text-zinc-600">
                     {qrSession.qrSessionId}
                   </p>
+                  {dynamicQr ? (
+                    <p className="mt-2 text-sm text-zinc-500">
+                      Sequence {dynamicQr.sequence}
+                    </p>
+                  ) : null}
                   <p className="mt-2 text-sm text-zinc-500">
                     Expires {expiryLabel}
-                  </p>
-                  <p className="mt-4 max-w-md text-sm text-zinc-600">
-                    Scan this code in the mobile app. The app will send it to
-                    the backend and show the verification result.
                   </p>
                 </div>
               ) : (
                 <div className="text-center">
                   <p className="text-lg font-medium text-zinc-700">
-                    {mode === "dynamic"
-                      ? "Dynamic QR display is not enabled yet"
-                      : "No static QR generated yet"}
+                    {qrSession?.mode === "dynamic" && streamStatus === "connecting"
+                      ? "Opening dynamic QR stream"
+                      : "No QR session active"}
                   </p>
                   <p className="mt-2 text-sm text-zinc-500">
-                    {mode === "dynamic"
-                      ? "The upcoming SSE connection will stream rotating QR values here."
-                      : "Start the FastAPI backend, then create a session from the form."}
+                    Start the FastAPI backend, then create a QR session.
                   </p>
                 </div>
               )}
