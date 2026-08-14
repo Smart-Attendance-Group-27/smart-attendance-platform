@@ -186,7 +186,13 @@ export function DashboardScreen({
 
             <View style={styles.sectionHeading}>
               <Text style={styles.sectionTitle}>My courses</Text>
-              <Text style={styles.viewAll}>View all</Text>
+              <Pressable
+                onPress={() => router.push('/(student)/(tabs)/courses')}
+                accessibilityRole="button"
+                accessibilityLabel="View all courses"
+              >
+                <Text style={styles.viewAll}>View all</Text>
+              </Pressable>
             </View>
 
             <ScrollView
