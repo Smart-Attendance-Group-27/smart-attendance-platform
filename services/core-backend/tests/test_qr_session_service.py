@@ -7,7 +7,11 @@ import pytest
 from modules.attendance_sessions.qr_session.exception import (
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
+    DynamicQrConfigurationError,
+    DynamicQrSessionUnavailableError,
+    QrSessionNotFoundError,
 )
+from modules.attendance_sessions.qr_session.crypto import generate_dynamic_qr_value
 from modules.attendance_sessions.qr_session.repository import (
     AttendanceSessionRecord,
     QrVerificationRecord,
@@ -455,6 +459,186 @@ async def test_create_dynamic_qr_session_caches_active_dynamic_metadata() -> Non
     assert metadata.refresh_interval_seconds == 15
     assert metadata.expires_at == current_time + timedelta(minutes=15)
     assert ttl_seconds == 900
+
+
+@pytest.mark.asyncio
+async def test_get_current_dynamic_qr_session_generates_current_hmac_value() -> None:
+    current_time = datetime(2026, 8, 6, 10, 4, 20, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    metadata = build_qr_batch_metadata(qr_session_id=qr_session_id)
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    result = await service.get_current_dynamic_qr_session(FakePool(), qr_session_id)
+
+    assert result.qr_session_id == qr_session_id
+    assert result.sequence == 17
+    assert result.qr_value == generate_dynamic_qr_value(
+        qr_session_id,
+        17,
+        "test-secret",
+    )
+    assert result.valid_from == datetime(2026, 8, 6, 10, 4, 15, tzinfo=UTC)
+    assert result.expires_at == datetime(2026, 8, 6, 10, 4, 30, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_get_current_dynamic_qr_session_caps_window_at_batch_expiration() -> None:
+    current_time = datetime(2026, 8, 6, 10, 14, 55, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    metadata = build_qr_batch_metadata(
+        qr_session_id=qr_session_id,
+        expires_at=datetime(2026, 8, 6, 10, 15, 0, tzinfo=UTC),
+    )
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    result = await service.get_current_dynamic_qr_session(FakePool(), qr_session_id)
+
+    assert result.sequence == 59
+    assert result.valid_from == datetime(2026, 8, 6, 10, 14, 45, tzinfo=UTC)
+    assert result.expires_at == datetime(2026, 8, 6, 10, 15, 0, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_get_current_dynamic_qr_session_rejects_missing_secret() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    metadata = build_qr_batch_metadata()
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: current_time,
+    )
+
+    with pytest.raises(DynamicQrConfigurationError):
+        await service.get_current_dynamic_qr_session(FakePool(), metadata.id)
+
+
+@pytest.mark.asyncio
+async def test_get_current_dynamic_qr_session_rejects_static_qr_session() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    metadata = build_qr_batch_metadata(mode="static", refresh_interval_seconds=None)
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    with pytest.raises(DynamicQrSessionUnavailableError, match="not a dynamic"):
+        await service.get_current_dynamic_qr_session(FakePool(), metadata.id)
+
+
+@pytest.mark.asyncio
+async def test_get_current_dynamic_qr_session_rejects_closed_batch() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    metadata = build_qr_batch_metadata(
+        status="inactive",
+        deactivated_at=current_time - timedelta(seconds=1),
+    )
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    with pytest.raises(DynamicQrSessionUnavailableError, match="closed"):
+        await service.get_current_dynamic_qr_session(FakePool(), metadata.id)
+
+
+@pytest.mark.asyncio
+async def test_get_current_dynamic_qr_session_rejects_expired_batch() -> None:
+    current_time = datetime(2026, 8, 6, 10, 15, tzinfo=UTC)
+    metadata = build_qr_batch_metadata(expires_at=current_time)
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    with pytest.raises(DynamicQrSessionUnavailableError, match="expired"):
+        await service.get_current_dynamic_qr_session(FakePool(), metadata.id)
+
+
+@pytest.mark.asyncio
+async def test_get_current_dynamic_qr_session_rejects_missing_refresh_interval() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    metadata = build_qr_batch_metadata(refresh_interval_seconds=None)
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    with pytest.raises(DynamicQrSessionUnavailableError, match="missing"):
+        await service.get_current_dynamic_qr_session(FakePool(), metadata.id)
+
+
+@pytest.mark.asyncio
+async def test_get_current_dynamic_qr_session_rejects_missing_qr_session() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    repository = FakeRepository(None)
+    service = QrSessionService(
+        repository=repository,
+        qr_batch_cache=FakeQrBatchCache(),
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    with pytest.raises(QrSessionNotFoundError):
+        await service.get_current_dynamic_qr_session(
+            FakePool(),
+            UUID("50000000-0000-0000-0000-000000000001"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_current_dynamic_qr_session_does_not_store_token_records() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    repository = FakeRepository(None)
+    metadata = build_qr_batch_metadata()
+    service = QrSessionService(
+        repository=repository,
+        qr_batch_cache=FakeQrBatchCache(cached_metadata=metadata),
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    await service.get_current_dynamic_qr_session(FakePool(), metadata.id)
+
+    assert repository.inserted_token is None
+
+
+@pytest.mark.asyncio
+async def test_get_current_dynamic_qr_session_does_not_log_or_cache_generated_values(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    current_time = datetime(2026, 8, 6, 10, 4, 20, tzinfo=UTC)
+    metadata = build_qr_batch_metadata()
+    cache = FakeQrBatchCache(cached_metadata=metadata)
+    service = QrSessionService(
+        repository=FakeRepository(None),
+        qr_batch_cache=cache,
+        clock=lambda: current_time,
+        dynamic_qr_hmac_secret="test-secret",
+    )
+
+    result = await service.get_current_dynamic_qr_session(FakePool(), metadata.id)
+
+    assert result.qr_value not in caplog.text
+    assert "test-secret" not in caplog.text
+    assert cache.set_calls == []
 
 
 @pytest.mark.asyncio
