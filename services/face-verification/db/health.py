@@ -1,6 +1,7 @@
-import asyncpg
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 
-async def check_database_connection(pool: asyncpg.Pool) -> None:
-    async with pool.acquire() as connection:
-        await connection.fetchval("select 1")
+async def check_database_connection(engine: AsyncEngine) -> None:
+    async with engine.connect() as connection:
+        await connection.execute(text("SELECT 1"))
