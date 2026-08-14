@@ -25,6 +25,8 @@ class Settings(BaseSettings):
 
     redis_url: str | None = "redis://localhost:6379/0"
 
+    dynamic_qr_hmac_secret: SecretStr | None = None
+
     token_secret: SecretStr
 
     model_config = SettingsConfigDict(
@@ -44,6 +46,13 @@ class Settings(BaseSettings):
     @field_validator("redis_url", mode="before")
     @classmethod
     def normalize_blank_redis_url(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("dynamic_qr_hmac_secret", mode="before")
+    @classmethod
+    def normalize_blank_dynamic_qr_hmac_secret(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
             return None
         return value

@@ -25,6 +25,18 @@ def test_settings_normalizes_blank_redis_url() -> None:
     assert settings.redis_url is None
 
 
+def test_settings_normalizes_blank_dynamic_qr_hmac_secret() -> None:
+    settings = Settings(
+        db_host="localhost",
+        db_user="postgres",
+        db_password="password",
+        dynamic_qr_hmac_secret=" ",
+        token_secret="secret",
+    )
+
+    assert settings.dynamic_qr_hmac_secret is None
+
+
 def test_settings_rejects_invalid_ssl_mode() -> None:
     try:
         Settings(
