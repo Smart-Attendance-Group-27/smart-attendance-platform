@@ -156,6 +156,102 @@ ORDER BY session.id;
 Expected: two active rows, complete snapshots, and six eligible students for
 each session.
 
+## Prepare A Repeat Demonstration
+
+The seed makes both sessions active for seven days when an empty database
+volume is initialized. Existing volumes keep their original timestamps. Before
+a later demonstration, refresh only the two demo session windows in `psql`:
+
+```sql
+UPDATE attendance_session.sessions
+SET scheduled_start_at = now() - INTERVAL '5 minutes',
+    scheduled_end_at = now() + INTERVAL '7 days',
+    check_in_opens_at = now() - INTERVAL '2 minutes',
+    check_in_closes_at = now() + INTERVAL '7 days',
+    late_after_at = now() + INTERVAL '15 minutes',
+    status = 'active',
+    activated_at = now() - INTERVAL '2 minutes',
+    closed_at = NULL,
+    cancelled_at = NULL,
+    cancellation_reason = NULL,
+    updated_at = now()
+WHERE id IN (
+  '40000000-0000-0000-0000-000000000001',
+  '40000000-0000-0000-0000-000000000002'
+);
+```
+
+Each student may submit at most three geofence attempts per session. To repeat
+the demonstration for seeded student `230701A`, delete only that student's
+attempts for the two demo sessions. This does not delete sessions, enrolments,
+profiles, or attendance records:
+
+```sql
+BEGIN;
+
+DELETE FROM attendance_verification.geofence_validation_attempts AS geofence
+USING attendance_verification.verification_attempts AS verification
+WHERE geofence.verification_attempt_id = verification.id
+  AND verification.student_id = '23000000-0000-0000-0000-000000000001'
+  AND verification.session_id IN (
+    '40000000-0000-0000-0000-000000000001',
+    '40000000-0000-0000-0000-000000000002'
+  );
+
+DELETE FROM attendance_verification.verification_attempts
+WHERE student_id = '23000000-0000-0000-0000-000000000001'
+  AND session_id IN (
+    '40000000-0000-0000-0000-000000000001',
+    '40000000-0000-0000-0000-000000000002'
+  );
+
+COMMIT;
+```
+
+## Verify Recorded Outcomes
+
+After a phone attempt, inspect only the derived verification data. Exact phone
+coordinates are neither stored nor selected:
+
+```sql
+SELECT
+  session.session_title,
+  verification.status AS verification_status,
+  geofence.attempt_number,
+  geofence.accuracy_m,
+  geofence.distance_from_centre_m,
+  geofence.validation_status,
+  geofence.failure_reason,
+  geofence.captured_at,
+  geofence.validated_at
+FROM attendance_verification.geofence_validation_attempts AS geofence
+JOIN attendance_verification.verification_attempts AS verification
+  ON verification.id = geofence.verification_attempt_id
+JOIN attendance_session.sessions AS session
+  ON session.id = verification.session_id
+WHERE verification.student_id = '23000000-0000-0000-0000-000000000001'
+  AND verification.session_id IN (
+    '40000000-0000-0000-0000-000000000001',
+    '40000000-0000-0000-0000-000000000002'
+  )
+ORDER BY geofence.validated_at DESC;
+```
+
+Prove that geofence validation did not create final attendance:
+
+```sql
+SELECT count(*) AS final_attendance_records
+FROM attendance_verification.attendance_records
+WHERE student_id = '23000000-0000-0000-0000-000000000001'
+  AND session_id IN (
+    '40000000-0000-0000-0000-000000000001',
+    '40000000-0000-0000-0000-000000000002'
+  );
+```
+
+Expected: `0` unless a separate attendance workflow previously created a
+record for this student and session.
+
 ## Stop Or Reset
 
 Stop containers while preserving the database:

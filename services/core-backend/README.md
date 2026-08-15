@@ -5,7 +5,10 @@ FastAPI backend service for the smart attendance platform.
 ## Setup
 
 1. Create `services/core-backend/.env` from `.env.example`.
-2. Fill in the Supabase database connection and the Keycloak settings.
+2. Fill in the database connection and the Keycloak settings. For geofence
+   development, use the local PostgreSQL project documented in
+   [`infra/local/application-db/README.md`](../../infra/local/application-db/README.md);
+   do not connect to Supabase.
    `DB_URI` takes precedence: when it is set, the individual `DB_HOST`,
    `DB_PORT`, `DB_NAME`, `DB_USER` and `DB_PASSWORD` values are ignored. Use one
    style, not both. `TOKEN_SECRET` is deprecated and may stay empty.
@@ -67,6 +70,9 @@ student is derived from the token.
 ## Full setup and manual testing
 
 See [docs/backend/integration-and-manual-testing.md](../../docs/backend/integration-and-manual-testing.md).
+
+For the complete local geofence flow and physical Android demonstration, see
+[docs/geofence-validation-demo.md](../../docs/geofence-validation-demo.md).
 
 ## Static QR session creation
 
