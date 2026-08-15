@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -7,10 +8,14 @@ from main import create_app
 from modules.attendance_sessions.qr_session.exception import (
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
+    DynamicQrConfigurationError,
+    DynamicQrSessionUnavailableError,
+    QrSessionNotFoundError,
 )
 from modules.attendance_sessions.qr_session.route import get_qr_session_service
 from modules.attendance_sessions.qr_session.service import (
     CreatedQrSession,
+    CurrentDynamicQrSession,
     VerifiedQrSession,
 )
 
@@ -63,6 +68,32 @@ class SuccessfulQrSessionService:
             verified_at=datetime(2026, 8, 6, 10, 3, tzinfo=UTC),
         )
 
+    async def get_current_dynamic_qr_session(
+        self,
+        pool: object,
+        qr_session_id: UUID,
+    ) -> CurrentDynamicQrSession:
+        return CurrentDynamicQrSession(
+            qr_session_id=qr_session_id,
+            qr_value="current-dynamic-qr-value",
+            sequence=17,
+            valid_from=datetime(2026, 8, 6, 10, 4, 15, tzinfo=UTC),
+            expires_at=datetime(2026, 8, 6, 10, 4, 30, tzinfo=UTC),
+        )
+
+    async def stream_current_dynamic_qr_sessions(
+        self,
+        pool: object,
+        qr_session_id: UUID,
+        *,
+        initial_qr_session: CurrentDynamicQrSession | None = None,
+        is_disconnected: object | None = None,
+    ):
+        yield initial_qr_session or await self.get_current_dynamic_qr_session(
+            pool,
+            qr_session_id,
+        )
+
 
 class MissingAttendanceSessionService:
     async def create_static_qr_session(
@@ -82,6 +113,49 @@ class InactiveAttendanceSessionService:
         valid_for_seconds: int,
     ) -> CreatedQrSession:
         raise AttendanceSessionNotActiveError("Attendance session is not active.")
+
+
+class MissingQrSessionService(SuccessfulQrSessionService):
+    async def get_current_dynamic_qr_session(
+        self,
+        pool: object,
+        qr_session_id: UUID,
+    ) -> CurrentDynamicQrSession:
+        raise QrSessionNotFoundError()
+
+
+class StaticQrSessionCurrentService(SuccessfulQrSessionService):
+    async def get_current_dynamic_qr_session(
+        self,
+        pool: object,
+        qr_session_id: UUID,
+    ) -> CurrentDynamicQrSession:
+        raise DynamicQrSessionUnavailableError(
+            "QR session is not a dynamic QR session.",
+        )
+
+
+class MissingDynamicQrSecretService(SuccessfulQrSessionService):
+    async def get_current_dynamic_qr_session(
+        self,
+        pool: object,
+        qr_session_id: UUID,
+    ) -> CurrentDynamicQrSession:
+        raise DynamicQrConfigurationError(
+            "Dynamic QR HMAC secret is not configured.",
+        )
+
+
+class MissingDynamicQrSecretVerifyService(SuccessfulQrSessionService):
+    async def verify_qr_session(
+        self,
+        pool: object,
+        qr_session_id: UUID,
+        qr_value: str,
+    ) -> VerifiedQrSession:
+        raise DynamicQrConfigurationError(
+            "Dynamic QR HMAC secret is not configured.",
+        )
 
 
 def test_create_static_qr_session_route_returns_camel_case_response() -> None:
@@ -237,3 +311,130 @@ def test_verify_qr_session_route_rejects_missing_qr_value() -> None:
         )
 
     assert response.status_code == 422
+
+
+def test_verify_qr_session_route_maps_dynamic_config_error_to_500() -> None:
+    app = create_app(enable_database=False)
+    app.state.db_pool = object()
+    app.dependency_overrides[get_qr_session_service] = (
+        MissingDynamicQrSecretVerifyService
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/verify",
+            json={"qrValue": "dynamic-qr-value"},
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "detail": "Dynamic QR HMAC secret is not configured.",
+    }
+
+
+def test_get_current_dynamic_qr_session_route_returns_camel_case_response() -> None:
+    app = create_app(enable_database=False)
+    app.state.db_pool = object()
+    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/current",
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "qrSessionId": "50000000-0000-0000-0000-000000000001",
+        "qrValue": "current-dynamic-qr-value",
+        "sequence": 17,
+        "validFrom": "2026-08-06T10:04:15Z",
+        "expiresAt": "2026-08-06T10:04:30Z",
+    }
+
+
+def test_get_current_dynamic_qr_session_route_maps_missing_session_to_404() -> None:
+    app = create_app(enable_database=False)
+    app.state.db_pool = object()
+    app.dependency_overrides[get_qr_session_service] = MissingQrSessionService
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/current",
+        )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "QR session was not found."}
+
+
+def test_get_current_dynamic_qr_session_route_rejects_static_session() -> None:
+    app = create_app(enable_database=False)
+    app.state.db_pool = object()
+    app.dependency_overrides[get_qr_session_service] = StaticQrSessionCurrentService
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/current",
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "QR session is not a dynamic QR session.",
+    }
+
+
+def test_get_current_dynamic_qr_session_route_rejects_missing_secret() -> None:
+    app = create_app(enable_database=False)
+    app.state.db_pool = object()
+    app.dependency_overrides[get_qr_session_service] = MissingDynamicQrSecretService
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/current",
+        )
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "detail": "Dynamic QR HMAC secret is not configured.",
+    }
+
+
+def test_stream_dynamic_qr_session_route_sends_named_rotation_event() -> None:
+    app = create_app(enable_database=False)
+    app.state.db_pool = object()
+    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
+
+    with TestClient(app) as client:
+        with client.stream(
+            "GET",
+            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/stream",
+        ) as response:
+            body = next(response.iter_text())
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "event: qr.rotate" in body
+    assert "retry: 3000" in body
+    payload_line = next(line for line in body.splitlines() if line.startswith("data: "))
+    assert json.loads(payload_line.removeprefix("data: ")) == {
+        "qrSessionId": "50000000-0000-0000-0000-000000000001",
+        "qrValue": "current-dynamic-qr-value",
+        "sequence": 17,
+        "validFrom": "2026-08-06T10:04:15Z",
+        "expiresAt": "2026-08-06T10:04:30Z",
+    }
+
+
+def test_stream_dynamic_qr_session_route_rejects_static_session_before_streaming() -> None:
+    app = create_app(enable_database=False)
+    app.state.db_pool = object()
+    app.dependency_overrides[get_qr_session_service] = StaticQrSessionCurrentService
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/stream",
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "QR session is not a dynamic QR session.",
+    }

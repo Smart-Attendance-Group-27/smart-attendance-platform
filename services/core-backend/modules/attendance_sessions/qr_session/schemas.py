@@ -75,3 +75,13 @@ class VerifyQrSessionResponse(BaseModel):
     qr_session_id: UUID = Field(alias="qrSessionId")
     status: QrVerificationStatus
     verified_at: datetime = Field(alias="verifiedAt")
+
+
+class CurrentDynamicQrSessionResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    qr_session_id: UUID = Field(alias="qrSessionId")
+    qr_value: str = Field(alias="qrValue")
+    sequence: int
+    valid_from: datetime = Field(alias="validFrom")
+    expires_at: datetime = Field(alias="expiresAt")

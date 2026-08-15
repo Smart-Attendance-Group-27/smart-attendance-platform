@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
     app.state.db_pool = await create_database_pool(settings)
+    app.state.redis_client = await create_redis_client(settings)
     # Deliberately no connection details here: the URI, user and password must
     # never reach the logs.
     logger.info(

@@ -9,7 +9,7 @@ verification flow:
 ```text
 Keycloak login
 FastAPI core backend
-Next.js web QR test page
+Next.js web page
 Expo mobile app on a real Android phone
 ```
 
@@ -17,14 +17,14 @@ Expo mobile app on a real Android phone
 
 ```text
 smart-attendance-platform/
-|-- apps/
-|   |-- mobile/            Expo React Native student app
-|   `-- web/               Next.js / Vercel QR test web app
-|-- services/
-|   `-- core-backend/      FastAPI core API
-|-- infra/
-|   `-- local/keycloak/    Local Keycloak Docker setup
-`-- database/              Database schema and seed files
+├─ apps/
+│  ├─ mobile/              Expo React Native student app
+│  └─ web/                 Next.js QR test web app
+├─ services/
+│  └─ core-backend/        FastAPI core API
+├─ infra/
+│  └─ local/keycloak/      Local Keycloak Docker setup
+└─ database/               Database schema and seed files
 ```
 
 ## Prerequisites
@@ -103,13 +103,13 @@ cd services/core-backend
 python -m pip install -r requirements.txt
 ```
 
-For USB phone testing with `adb reverse`, run the backend on localhost:
+For laptop-only testing, this is enough:
 
 ```powershell
-python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn main:app --reload
 ```
 
-For LAN/Wi-Fi phone testing, expose the backend to your local network instead:
+For real mobile phone testing, expose the backend to your local network:
 
 ```powershell
 python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -122,13 +122,13 @@ curl.exe http://localhost:8000/health
 curl.exe http://localhost:8000/health/db
 ```
 
-If you use the LAN/Wi-Fi method, find your laptop IPv4 address:
+Then find your laptop IPv4 address:
 
 ```powershell
 ipconfig
 ```
 
-Then from your phone browser, open:
+From your phone browser, open:
 
 ```text
 http://YOUR_LAPTOP_IP:8000/health
@@ -147,11 +147,9 @@ If the phone cannot open this URL:
 - allow Python/Uvicorn through Windows Defender Firewall for private networks
 - confirm FastAPI was started with `--host 0.0.0.0`
 
-## 3. Run the Vercel / Next.js Web QR Test App
+## 3. Run the Web QR Test App
 
-The web app is a Next.js app intended for Vercel deployment later. For local
-development, run it with the Next.js dev server. It is currently used as the
-lecturer-side QR test screen.
+The web app is used as the lecturer-side QR test screen.
 
 From the repository root:
 
@@ -199,63 +197,8 @@ CORE_BACKEND_URL=http://127.0.0.1:8000
 
 ## 4. Configure Mobile for a Real Android Phone
 
-The Android emulator can use `10.0.2.2`. For a real Android phone, use one of
-these methods.
-
-### Method 1: USB forwarding with `adb reverse` (recommended)
-
-Use this when the phone is connected by USB with USB debugging enabled. This
-avoids changing IP addresses and avoids Windows firewall/LAN issues.
-
-Run:
-
-```powershell
-adb reverse tcp:8000 tcp:8000
-adb reverse tcp:8080 tcp:8080
-```
-
-Check active reverse rules:
-
-```powershell
-adb reverse --list
-```
-
-Expected entries:
-
-```text
-tcp:8000 tcp:8000
-tcp:8080 tcp:8080
-```
-
-Create or update:
-
-```text
-apps/mobile/.env
-```
-
-Use:
-
-```text
-EXPO_PUBLIC_KEYCLOAK_HOST=127.0.0.1
-EXPO_PUBLIC_CORE_API_URL=http://127.0.0.1:8000
-```
-
-With this method, start FastAPI on localhost:
-
-```powershell
-cd services/core-backend
-python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-Important notes:
-
-- This only works while the phone is connected by USB.
-- If you unplug or reconnect the phone, run the `adb reverse` commands again.
-- This is Android only, not iPhone.
-- You do not need Windows firewall/LAN IP access for backend/mobile testing
-  through USB.
-
-### Method 2: LAN/Wi-Fi IP address
+The Android emulator can use `10.0.2.2`, but a real phone must use your laptop's
+LAN IP address.
 
 Create or update:
 
@@ -280,9 +223,6 @@ http://YOUR_LAPTOP_IP:8000/health
 ```
 
 Both must work from the phone.
-
-Use this method if you want the phone and laptop to communicate through Wi-Fi
-instead of USB.
 
 ## 5. Run / Restart the Mobile App on a Real Phone
 
@@ -320,9 +260,7 @@ npx.cmd expo run:android --device
 ## Current QR Verification Flow
 
 1. Start Keycloak.
-2. Start FastAPI backend:
-   - USB method: `--host 127.0.0.1 --port 8000`
-   - LAN method: `--host 0.0.0.0 --port 8000`
+2. Start FastAPI backend with `--host 0.0.0.0 --port 8000`.
 3. Start the web app.
 4. Open `http://localhost:3000/qr-test`.
 5. Generate a QR session for:

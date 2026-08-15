@@ -78,6 +78,22 @@ class QrBatchMetadataCache:
         payload = {
             "id": str(metadata.id),
             "attendanceSessionId": str(metadata.attendance_session_id),
+            "attendanceSessionStatus": metadata.attendance_session_status,
+            "attendanceSessionScheduledEndAt": (
+                metadata.attendance_session_scheduled_end_at.isoformat()
+                if metadata.attendance_session_scheduled_end_at is not None
+                else None
+            ),
+            "attendanceSessionClosedAt": (
+                metadata.attendance_session_closed_at.isoformat()
+                if metadata.attendance_session_closed_at is not None
+                else None
+            ),
+            "attendanceSessionCancelledAt": (
+                metadata.attendance_session_cancelled_at.isoformat()
+                if metadata.attendance_session_cancelled_at is not None
+                else None
+            ),
             "mode": metadata.mode,
             "status": metadata.status,
             "activatedAt": metadata.activated_at.isoformat(),
@@ -97,6 +113,22 @@ class QrBatchMetadataCache:
         return QrBatchMetadata(
             id=UUID(value["id"]),
             attendance_session_id=UUID(value["attendanceSessionId"]),
+            attendance_session_status=value["attendanceSessionStatus"],
+            attendance_session_scheduled_end_at=(
+                _parse_datetime(value["attendanceSessionScheduledEndAt"])
+                if value["attendanceSessionScheduledEndAt"] is not None
+                else None
+            ),
+            attendance_session_closed_at=(
+                _parse_datetime(value["attendanceSessionClosedAt"])
+                if value["attendanceSessionClosedAt"] is not None
+                else None
+            ),
+            attendance_session_cancelled_at=(
+                _parse_datetime(value["attendanceSessionCancelledAt"])
+                if value["attendanceSessionCancelledAt"] is not None
+                else None
+            ),
             mode=value["mode"],
             status=value["status"],
             activated_at=_parse_datetime(value["activatedAt"]),

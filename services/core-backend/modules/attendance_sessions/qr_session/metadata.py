@@ -7,6 +7,10 @@ from uuid import UUID
 class QrBatchMetadata:
     id: UUID
     attendance_session_id: UUID
+    attendance_session_status: str | None
+    attendance_session_scheduled_end_at: datetime | None
+    attendance_session_closed_at: datetime | None
+    attendance_session_cancelled_at: datetime | None
     mode: str
     status: str | None
     activated_at: datetime

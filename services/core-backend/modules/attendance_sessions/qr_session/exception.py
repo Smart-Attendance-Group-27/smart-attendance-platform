@@ -12,3 +12,23 @@ class AttendanceSessionNotActiveError(QrSessionError):
     def __init__(self, message: str) -> None:
         super().__init__(message)
         self.message = message
+
+
+class QrSessionNotFoundError(QrSessionError):
+    """Raised when the target QR session does not exist."""
+
+
+class DynamicQrSessionUnavailableError(QrSessionError):
+    """Raised when current dynamic QR generation is not allowed."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
+class DynamicQrConfigurationError(QrSessionError):
+    """Raised when dynamic QR generation is invoked without required config."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message

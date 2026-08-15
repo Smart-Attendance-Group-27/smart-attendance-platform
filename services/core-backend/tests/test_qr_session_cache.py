@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -71,6 +72,27 @@ async def test_qr_batch_cache_redis_failures_are_safe() -> None:
 
 
 @pytest.mark.asyncio
+async def test_qr_batch_cache_treats_incomplete_metadata_as_miss() -> None:
+    redis = FakeRedis()
+    cache = QrBatchMetadataCache(redis)
+    metadata = build_metadata()
+    redis.values[f"qr:batch:{metadata.id}"] = json.dumps(
+        {
+            "id": str(metadata.id),
+            "attendanceSessionId": str(metadata.attendance_session_id),
+            "mode": metadata.mode,
+            "status": metadata.status,
+            "activatedAt": metadata.activated_at.isoformat(),
+            "deactivatedAt": None,
+            "refreshIntervalSeconds": metadata.refresh_interval_seconds,
+            "expiresAt": metadata.expires_at.isoformat(),
+        },
+    )
+
+    assert await cache.get_qr_batch_cache(metadata.id) is None
+
+
+@pytest.mark.asyncio
 async def test_qr_batch_cache_does_not_store_raw_qr_values_or_secrets() -> None:
     redis = FakeRedis()
     cache = QrBatchMetadataCache(redis)
@@ -89,6 +111,10 @@ def build_metadata() -> QrBatchMetadata:
     return QrBatchMetadata(
         id=UUID("50000000-0000-0000-0000-000000000001"),
         attendance_session_id=UUID("40000000-0000-0000-0000-000000000001"),
+        attendance_session_status="active",
+        attendance_session_scheduled_end_at=datetime(2026, 8, 6, 11, 0, tzinfo=UTC),
+        attendance_session_closed_at=None,
+        attendance_session_cancelled_at=None,
         mode="dynamic",
         status="active",
         activated_at=datetime(2026, 8, 6, 10, 0, tzinfo=UTC),

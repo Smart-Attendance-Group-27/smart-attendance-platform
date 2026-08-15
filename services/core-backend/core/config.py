@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     db_pool_max_size: int = Field(default=5, ge=1)
     db_command_timeout_seconds: float = Field(default=10, gt=0)
 
+    # Optional Redis cache used for QR batch metadata. A blank value disables
+    # caching while keeping the database-backed QR flow available.
+    redis_url: str | None = "redis://localhost:6379/0"
+
     # Keycloak access-token validation.
     # KEYCLOAK_EXPECTED_ISSUER must match the token `iss` claim exactly.
     # KEYCLOAK_JWKS_URL is resolved from the backend, so it may use a different
@@ -51,6 +55,9 @@ class Settings(BaseSettings):
     keycloak_jwks_timeout_seconds: float = Field(default=5, gt=0)
     keycloak_leeway_seconds: float = Field(default=0, ge=0)
 
+    # Required by dynamic QR generation and verification. Static QR sessions
+    # do not use this secret.
+    dynamic_qr_hmac_secret: SecretStr | None = None
     # General geofence safeguards. Session-specific radius, accuracy buffer and
     # maximum accuracy values are loaded from the session geofence snapshot.
     geofence_max_reading_age_seconds: float = Field(default=30, gt=0)
@@ -70,7 +77,14 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    @field_validator("db_uri", "db_host", "db_user", mode="before")
+    @field_validator(
+        "db_uri",
+        "db_host",
+        "db_user",
+        "redis_url",
+        "dynamic_qr_hmac_secret",
+        mode="before",
+    )
     @classmethod
     def normalize_blank_text(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():

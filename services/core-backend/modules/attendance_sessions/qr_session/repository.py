@@ -179,6 +179,10 @@ class QrSessionRepository:
             SELECT
                 batch.id,
                 batch.session_id,
+                session.status AS attendance_session_status,
+                session.scheduled_end_at AS attendance_session_scheduled_end_at,
+                session.closed_at AS attendance_session_closed_at,
+                session.cancelled_at AS attendance_session_cancelled_at,
                 batch.mode,
                 batch.status,
                 batch.activated_at,
@@ -186,6 +190,8 @@ class QrSessionRepository:
                 batch.refresh_interval_seconds,
                 batch.expires_at
             FROM attendance_session.qr_token_batches AS batch
+            LEFT JOIN attendance_session.sessions AS session
+                ON session.id = batch.session_id
             WHERE batch.id = $1
             """,
             qr_session_id,
@@ -197,6 +203,12 @@ class QrSessionRepository:
         return QrBatchMetadata(
             id=row["id"],
             attendance_session_id=row["session_id"],
+            attendance_session_status=row["attendance_session_status"],
+            attendance_session_scheduled_end_at=row[
+                "attendance_session_scheduled_end_at"
+            ],
+            attendance_session_closed_at=row["attendance_session_closed_at"],
+            attendance_session_cancelled_at=row["attendance_session_cancelled_at"],
             mode=row["mode"],
             status=row["status"],
             activated_at=row["activated_at"],
