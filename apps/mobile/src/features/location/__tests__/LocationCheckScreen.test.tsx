@@ -23,16 +23,11 @@ type ScreenTestProps = {
   onLocationValidated: (sessionId: string) => void;
 };
 
-const unsuccessfulOutcomes: readonly {
+const retryableOutcomes: readonly {
   result: LocationValidationResult;
   title: string;
   message: string;
 }[] = [
-  {
-    result: { status: 'outside_geofence' },
-    title: 'Outside classroom area',
-    message: 'Move inside the approved classroom area and check again.',
-  },
   {
     result: { status: 'permission_denied' },
     title: 'Location permission denied',
@@ -40,10 +35,22 @@ const unsuccessfulOutcomes: readonly {
       'Location permission is required to continue attendance verification.',
   },
   {
+    result: { status: 'services_disabled' },
+    title: 'Location services are turned off',
+    message:
+      'Turn on Location Services for your phone, then check again.',
+  },
+  {
     result: { status: 'poor_accuracy' },
     title: 'Location accuracy is too low',
     message:
       'Move closer to the classroom or wait a moment for a more accurate location.',
+  },
+  {
+    result: { status: 'retry_required' },
+    title: 'A clearer location is needed',
+    message:
+      'Your location overlaps the classroom boundary. Wait a moment, then check again.',
   },
   {
     result: { status: 'stale_location' },
@@ -56,6 +63,67 @@ const unsuccessfulOutcomes: readonly {
     title: 'Location is unavailable',
     message:
       'We could not obtain your current location. Check your location settings and try again.',
+  },
+  {
+    result: { status: 'invalid_request' },
+    title: 'Location reading was not accepted',
+    message:
+      'Capture a new location reading and try the verification again.',
+  },
+  {
+    result: { status: 'network_error' },
+    title: 'Cannot reach UniAttend',
+    message:
+      'Check your connection to the attendance server, then try again.',
+  },
+  {
+    result: { status: 'server_error' },
+    title: 'Location verification is unavailable',
+    message:
+      'The attendance server could not verify your location. Try again shortly.',
+  },
+];
+
+const terminalOutcomes: readonly {
+  result: LocationValidationResult;
+  title: string;
+  message: string;
+}[] = [
+  {
+    result: { status: 'outside_geofence' },
+    title: 'Outside classroom area',
+    message:
+      'This location attempt is outside the approved classroom area.',
+  },
+  {
+    result: { status: 'mock_location_detected' },
+    title: 'Mock location detected',
+    message:
+      'Attendance verification cannot continue with a simulated location.',
+  },
+  {
+    result: { status: 'session_unavailable' },
+    title: 'Attendance session unavailable',
+    message:
+      'This session is closed, inactive, or no longer accepting location attempts.',
+  },
+  {
+    result: { status: 'attempt_limit_reached' },
+    title: 'Location attempt limit reached',
+    message:
+      'No more location attempts are available for this attendance check-in.',
+  },
+  {
+    result: { status: 'unauthenticated' },
+    title: 'Sign-in required',
+    message:
+      'Your sign-in session has expired. Sign in again before checking attendance.',
+  },
+  {
+    result: { status: 'forbidden' },
+    title: 'Attendance access denied',
+    message:
+      'You are not eligible to check in to this attendance session.',
   },
 ];
 
@@ -153,7 +221,7 @@ describe('LocationCheckScreen', () => {
     await fireEvent.press(continueButton);
     await fireEvent.press(continueButton);
 
-    expect(await findByText('Checking location…')).toBeTruthy();
+    expect(await findByText('Checking location...')).toBeTruthy();
     expect(validateLocation).toHaveBeenCalledTimes(1);
     expect(validateLocation).toHaveBeenCalledWith(
       'attendance-session-active',
@@ -208,7 +276,7 @@ describe('LocationCheckScreen', () => {
     );
   });
 
-  test.each(unsuccessfulOutcomes)(
+  test.each(retryableOutcomes)(
     'shows $result.status guidance, supports retry, and blocks face navigation',
     async ({ result, title, message }) => {
       const { service, validateLocation } = createService(result);
@@ -248,10 +316,44 @@ describe('LocationCheckScreen', () => {
     },
   );
 
+  test.each(terminalOutcomes)(
+    'shows terminal $result.status guidance without another submission action',
+    async ({ result, title, message }) => {
+      const { service, validateLocation } = createService(result);
+      const props = createScreenProps(service);
+      const {
+        findByText,
+        getByRole,
+        queryByRole,
+      } = await renderScreen(props);
+
+      await fireEvent.press(
+        getByRole('button', {
+          name: 'Allow location access and check classroom location',
+        }),
+      );
+
+      expect(await findByText(title)).toBeTruthy();
+      expect(await findByText(message)).toBeTruthy();
+      expect(validateLocation).toHaveBeenCalledTimes(1);
+      expect(
+        queryByRole('button', {
+          name: 'Retry classroom location validation',
+        }),
+      ).toBeNull();
+      expect(
+        queryByRole('button', {
+          name: 'Continue to face verification',
+        }),
+      ).toBeNull();
+      expect(props.onLocationValidated).not.toHaveBeenCalled();
+    },
+  );
+
   test('replaces a failed result with success after a real retry', async () => {
     const validateLocation = jest.fn<LocationService['validateLocation']>();
     validateLocation
-      .mockResolvedValueOnce({ status: 'outside_geofence' })
+      .mockResolvedValueOnce({ status: 'retry_required' })
       .mockResolvedValueOnce({ status: 'inside_geofence' });
     const props = createScreenProps({ validateLocation });
     const {
@@ -266,7 +368,7 @@ describe('LocationCheckScreen', () => {
         name: 'Allow location access and check classroom location',
       }),
     );
-    await findByText('Outside classroom area');
+    await findByText('A clearer location is needed');
 
     await fireEvent.press(
       await findByRole('button', {
@@ -275,7 +377,7 @@ describe('LocationCheckScreen', () => {
     );
 
     expect(await findByText('Inside classroom area')).toBeTruthy();
-    expect(queryByText('Outside classroom area')).toBeNull();
+    expect(queryByText('A clearer location is needed')).toBeNull();
     expect(validateLocation).toHaveBeenCalledTimes(2);
     expect(props.onLocationValidated).not.toHaveBeenCalled();
     expect(
@@ -390,7 +492,7 @@ describe('LocationCheckScreen', () => {
         name: 'Allow location access and check classroom location',
       }),
     );
-    await findByText('Checking location…');
+    await findByText('Checking location...');
 
     await rerender(
       <LocationCheckScreen

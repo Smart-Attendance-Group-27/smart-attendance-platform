@@ -10,6 +10,7 @@ export type CoreApiFailureStatus =
   | 'forbidden'
   | 'not-found'
   | 'invalid-request'
+  | 'conflict'
   | 'server-error'
   | 'network-error';
 
@@ -58,6 +59,18 @@ export class CoreApiClient {
   }
 
   async get<TData>(path: string): Promise<CoreApiResult<TData>> {
+    return this.request<TData>(path, 'GET');
+  }
+
+  async post<TData>(path: string, body: unknown): Promise<CoreApiResult<TData>> {
+    return this.request<TData>(path, 'POST', body);
+  }
+
+  private async request<TData>(
+    path: string,
+    method: 'GET' | 'POST',
+    body?: unknown,
+  ): Promise<CoreApiResult<TData>> {
     const accessToken = await this.readAccessToken();
 
     if (!accessToken) {
@@ -72,17 +85,19 @@ export class CoreApiClient {
 
     try {
       const response = await fetch(`${this.baseUrl}${path}`, {
-        method: 'GET',
+        method,
         headers: {
           Accept: 'application/json',
           Authorization: `Bearer ${accessToken}`,
+          ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
         },
+        ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
         signal: abortController.signal,
       });
 
       if (!response.ok) {
         const failureStatus = mapHttpStatus(response.status);
-        logCoreApiFailure(path, failureStatus, response.status);
+        logCoreApiFailure(method, path, failureStatus, response.status);
         return { status: failureStatus };
       }
 
@@ -90,7 +105,7 @@ export class CoreApiClient {
     } catch {
       // A timeout, a DNS failure, an unreachable laptop, or a body that was
       // not JSON. Never include the caught value: it can echo the request.
-      logCoreApiFailure(path, 'network-error');
+      logCoreApiFailure(method, path, 'network-error');
       return { status: 'network-error' };
     } finally {
       clearTimeout(timeoutId);
@@ -124,6 +139,10 @@ function mapHttpStatus(httpStatus: number): CoreApiFailureStatus {
     return 'invalid-request';
   }
 
+  if (httpStatus === 409) {
+    return 'conflict';
+  }
+
   return 'server-error';
 }
 
@@ -132,12 +151,13 @@ function mapHttpStatus(httpStatus: number): CoreApiFailureStatus {
  * and any error object are deliberately excluded.
  */
 function logCoreApiFailure(
+  method: 'GET' | 'POST',
   path: string,
   failureStatus: CoreApiFailureStatus,
   httpStatus?: number,
 ) {
   const httpStatusSuffix = httpStatus === undefined ? '' : ` (HTTP ${httpStatus})`;
-  console.warn(`Core API GET ${path} failed: ${failureStatus}${httpStatusSuffix}`);
+  console.warn(`Core API ${method} ${path} failed: ${failureStatus}${httpStatusSuffix}`);
 }
 
 function stripTrailingSlash(url: string) {
