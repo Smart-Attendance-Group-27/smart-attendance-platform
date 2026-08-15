@@ -82,6 +82,7 @@ describe('CoreApiClient', () => {
     [404, 'not-found'],
     [422, 'invalid-request'],
     [400, 'invalid-request'],
+    [409, 'conflict'],
     [500, 'server-error'],
     [503, 'server-error'],
   ])('maps HTTP %i to %s', async (httpStatus, expectedStatus) => {
@@ -104,6 +105,45 @@ describe('CoreApiClient', () => {
     const result = await client.get('/api/v1/me');
 
     expect(result).toEqual({ status: 'network-error' });
+  });
+
+  test('posts authenticated JSON without logging the request body', async () => {
+    const warnMock = jest
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(jsonResponse(409, { detail: 'conflict' }));
+    const client = buildClient();
+    const body = { latitude: 6.795132, longitude: 79.900421 };
+
+    const result = await client.post('/api/v1/geofence-attempts', body);
+
+    expect(result).toEqual({ status: 'conflict' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://10.0.2.2:8000/api/v1/geofence-attempts',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Accept: 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify(body),
+      }),
+    );
+    expect(warnMock.mock.calls.flat().join(' ')).not.toContain('6.795132');
+    expect(warnMock.mock.calls.flat().join(' ')).not.toContain('79.900421');
+  });
+
+  test('does not post when there is no access token', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch');
+    const client = buildClient({ getAccessToken: () => undefined });
+
+    const result = await client.post('/api/v1/geofence-attempts', {});
+
+    expect(result).toEqual({ status: 'unauthenticated' });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   test('reports a network failure when the body is not JSON', async () => {

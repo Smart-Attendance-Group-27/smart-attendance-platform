@@ -1,0 +1,1 @@
+"""Attendance verification domain modules."""

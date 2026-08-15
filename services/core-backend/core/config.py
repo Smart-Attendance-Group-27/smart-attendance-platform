@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     # Required by dynamic QR generation and verification. Static QR sessions
     # do not use this secret.
     dynamic_qr_hmac_secret: SecretStr | None = None
+    # General geofence safeguards. Session-specific radius, accuracy buffer and
+    # maximum accuracy values are loaded from the session geofence snapshot.
+    geofence_max_reading_age_seconds: float = Field(default=30, gt=0)
+    geofence_max_future_skew_seconds: float = Field(default=5, ge=0)
+    geofence_max_attempts: int = Field(default=3, ge=1)
 
     # Deprecated: the pre-Keycloak development token secret. It is no longer
     # read by any code path and is never used to validate Keycloak tokens.

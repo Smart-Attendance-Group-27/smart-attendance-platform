@@ -1,0 +1,31 @@
+name: uniattend-local-application-db
+
+services:
+  application-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${APP_DB_NAME:-uniattend}
+      POSTGRES_USER: ${APP_DB_USER:-uniattend}
+      POSTGRES_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in the untracked application-db .env file}
+    ports:
+      - "127.0.0.1:${APP_DB_PORT:-5434}:5432"
+    volumes:
+      - application_db_data:/var/lib/postgresql/data
+      - ../../../database/smart_attendance_db_clean.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+      - ../../../database/migrations/0001_add_keycloak_user_id.sql:/docker-entrypoint-initdb.d/002_keycloak_user.sql:ro
+      - ../../../database/migrations/0002_add_session_geofence_snapshot.sql:/docker-entrypoint-initdb.d/003_geofence_snapshot.sql:ro
+      - ../../../database/smart_attendance_seed.sql:/docker-entrypoint-initdb.d/004_seed.sql:ro
+      - ./demo_seed.sql:/docker-entrypoint-initdb.d/005_geofence_demo.sql:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  application_db_data:

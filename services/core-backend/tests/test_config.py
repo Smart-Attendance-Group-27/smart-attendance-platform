@@ -62,6 +62,30 @@ def test_settings_defaults_to_a_small_development_pool() -> None:
     assert settings.db_ssl_mode == "require"
 
 
+def test_settings_defaults_to_the_initial_geofence_safeguards() -> None:
+    settings = build_settings()
+
+    assert settings.geofence_max_reading_age_seconds == 30
+    assert settings.geofence_max_future_skew_seconds == 5
+    assert settings.geofence_max_attempts == 3
+
+
+@pytest.mark.parametrize(
+    ("setting_name", "invalid_value"),
+    [
+        ("geofence_max_reading_age_seconds", 0),
+        ("geofence_max_future_skew_seconds", -1),
+        ("geofence_max_attempts", 0),
+    ],
+)
+def test_settings_rejects_invalid_geofence_safeguards(
+    setting_name: str,
+    invalid_value: int,
+) -> None:
+    with pytest.raises(ValueError):
+        build_settings(**{setting_name: invalid_value})
+
+
 def test_settings_rejects_a_max_pool_smaller_than_the_min_pool() -> None:
     with pytest.raises(ValueError) as error:
         build_settings(db_pool_min_size=5, db_pool_max_size=2)

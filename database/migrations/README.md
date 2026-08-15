@@ -53,7 +53,8 @@ deliberately. There is no automatic runner in this repository.
 **psql**
 
 ```powershell
-psql "$env:DB_URI" -f database/migrations/0001_add_keycloak_user_id.sql
+psql "$env:DB_URI" -v ON_ERROR_STOP=1 -f database/migrations/0001_add_keycloak_user_id.sql
+psql "$env:DB_URI" -v ON_ERROR_STOP=1 -f database/migrations/0002_add_session_geofence_snapshot.sql
 ```
 
 Read the connection string from an environment variable as shown. Do not type a
@@ -76,6 +77,28 @@ WHERE schemaname = 'identity'
 
 Both queries should return exactly one row.
 
+For `0002_add_session_geofence_snapshot`:
+
+```sql
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'attendance_session'
+  AND table_name = 'session_geofences'
+  AND column_name IN ('centre_latitude', 'centre_longitude', 'radius_m')
+ORDER BY column_name;
+
+SELECT conname
+FROM pg_constraint
+WHERE conrelid = 'attendance_session.session_geofences'::regclass
+  AND conname LIKE 'ck_session_geofences_%'
+ORDER BY conname;
+```
+
+The first query should return three nullable numeric columns. The second should
+return the six snapshot and policy constraints added by the migration. Nullable
+snapshot columns preserve legacy sessions that have no resolvable classroom;
+the all-or-none constraint prevents partially configured snapshots.
+
 ## Verifying A Migration Before It Reaches Supabase
 
 Shared Supabase is a team database, so prove a migration works on a throwaway
@@ -85,8 +108,9 @@ local one first. This uses Docker and touches nothing remote:
 docker run -d --name uniattend-sqlcheck -e POSTGRES_PASSWORD=throwaway_local_check -p 55432:5432 postgres:16-alpine
 
 docker exec -i uniattend-sqlcheck psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/smart_attendance_db_clean.sql
-docker exec -i uniattend-sqlcheck psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/smart_attendance_seed.sql
 docker exec -i uniattend-sqlcheck psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/migrations/0001_add_keycloak_user_id.sql
+docker exec -i uniattend-sqlcheck psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/migrations/0002_add_session_geofence_snapshot.sql
+docker exec -i uniattend-sqlcheck psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/smart_attendance_seed.sql
 
 # then run the verify queries above, and finally
 docker rm -f uniattend-sqlcheck
@@ -101,6 +125,7 @@ never substitute a real Supabase credential into these commands.
 | Migration | Purpose | Verified locally | Applied to shared Supabase |
 | --- | --- | --- | --- |
 | `0001_add_keycloak_user_id` | Adds `identity.users.keycloak_user_id` plus a partial unique index, so a Keycloak `sub` claim resolves to an internal application user | Yes — see below | **Not applied.** Pending a manual run by someone with Supabase project access |
+| `0002_add_session_geofence_snapshot` | Adds frozen centre coordinates and radius plus snapshot and policy checks to `attendance_session.session_geofences` | Yes - PostgreSQL 16, see below | **Not applied.** Supabase access is blocked; do not apply remotely |
 
 ### What The Local Verification Confirmed
 
@@ -121,3 +146,17 @@ and `smart_attendance_seed.sql`, and the following all held:
 - Row counts are unchanged. The migration adds a column and reads nothing.
 - The rollback script removes the column and index, leaves all user and profile
   rows intact, and the migration re-applies cleanly afterwards.
+
+### What The 0002 Local Verification Confirmed
+
+`0002` was applied to PostgreSQL 16 loaded with the baseline and development
+seed, without connecting to Supabase. The following all held:
+
+- The existing active session was backfilled from its timetable classroom.
+- Re-running the migration did not overwrite the frozen snapshot after the
+  classroom coordinates and radius changed.
+- Partial snapshots, out-of-range coordinates, and negative policy values were
+  rejected by database checks.
+- The rollback removed only the three snapshot columns and six checks. Session
+  geofence rows and verification-attempt tables remained intact.
+- The migration re-applied successfully after rollback.
