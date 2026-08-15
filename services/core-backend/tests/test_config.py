@@ -8,6 +8,7 @@ def build_settings(**overrides) -> Settings:
         "db_host": "localhost",
         "db_user": "postgres",
         "db_password": "password",
+        "_env_file": None,
     }
     values.update(overrides)
     return Settings(**values)
@@ -26,6 +27,7 @@ def test_settings_normalizes_blank_redis_url() -> None:
         db_password="password",
         redis_url=" ",
         token_secret="secret",
+        _env_file=None,
     )
 
     assert settings.redis_url is None
@@ -38,6 +40,7 @@ def test_settings_normalizes_blank_dynamic_qr_hmac_secret() -> None:
         db_password="password",
         dynamic_qr_hmac_secret=" ",
         token_secret="secret",
+        _env_file=None,
     )
 
     assert settings.dynamic_qr_hmac_secret is None
@@ -67,7 +70,10 @@ def test_settings_rejects_a_max_pool_smaller_than_the_min_pool() -> None:
 
 
 def test_db_uri_alone_is_enough() -> None:
-    settings = Settings(db_uri="postgresql://user:password@host:5432/postgres")
+    settings = Settings(
+        db_uri="postgresql://user:password@host:5432/postgres",
+        _env_file=None,
+    )
 
     assert settings.db_uri is not None
     assert settings.db_host is None
@@ -75,7 +81,13 @@ def test_db_uri_alone_is_enough() -> None:
 
 def test_missing_database_configuration_names_the_variables_only() -> None:
     with pytest.raises(ValueError) as error:
-        Settings(db_uri=None, db_host=None, db_user=None, db_password=None)
+        Settings(
+            db_uri=None,
+            db_host=None,
+            db_user=None,
+            db_password=None,
+            _env_file=None,
+        )
 
     message = str(error.value)
     assert "DB_HOST" in message
