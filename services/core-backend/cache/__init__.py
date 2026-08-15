@@ -1,0 +1,1 @@
+"""Shared cache infrastructure."""

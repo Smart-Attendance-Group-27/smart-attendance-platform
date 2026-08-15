@@ -7,6 +7,7 @@ from modules.attendance_sessions.qr_session.exception import (
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
 )
+from modules.attendance_sessions.qr_session.cache import QrBatchMetadataCache
 from modules.attendance_sessions.qr_session.schemas import (
     CreateQrSessionRequest,
     CreateQrSessionResponse,
@@ -22,8 +23,9 @@ create_qr_session_router = APIRouter(
 verify_qr_session_router = APIRouter(prefix="/qr-sessions/{qr_session_id}")
 
 
-def get_qr_session_service() -> QrSessionService:
-    return QrSessionService()
+def get_qr_session_service(request: Request) -> QrSessionService:
+    redis_client = getattr(request.app.state, "redis_client", None)
+    return QrSessionService(qr_batch_cache=QrBatchMetadataCache(redis_client))
 
 
 @create_qr_session_router.post(
@@ -31,7 +33,7 @@ def get_qr_session_service() -> QrSessionService:
     response_model=CreateQrSessionResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_static_qr_session(
+async def create_qr_session(
     session_id: UUID,
     http_request: Request,
     payload: Annotated[CreateQrSessionRequest | None, Body()] = None,
@@ -40,11 +42,20 @@ async def create_static_qr_session(
     request_payload = payload or CreateQrSessionRequest()
 
     try:
-        created_qr_session = await qr_session_service.create_static_qr_session(
-            http_request.app.state.db_pool,
-            session_id,
-            request_payload.valid_for_seconds,
-        )
+        if request_payload.mode == "dynamic":
+            assert request_payload.refresh_interval_seconds is not None
+            created_qr_session = await qr_session_service.create_dynamic_qr_session(
+                http_request.app.state.db_pool,
+                session_id,
+                request_payload.valid_for_seconds,
+                request_payload.refresh_interval_seconds,
+            )
+        else:
+            created_qr_session = await qr_session_service.create_static_qr_session(
+                http_request.app.state.db_pool,
+                session_id,
+                request_payload.valid_for_seconds,
+            )
     except AttendanceSessionNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -59,7 +70,9 @@ async def create_static_qr_session(
     return CreateQrSessionResponse(
         qr_session_id=created_qr_session.qr_session_id,
         attendance_session_id=created_qr_session.attendance_session_id,
+        mode=created_qr_session.mode,
         qr_value=created_qr_session.qr_value,
+        refresh_interval_seconds=created_qr_session.refresh_interval_seconds,
         status=created_qr_session.status,
         valid_from=created_qr_session.valid_from,
         expires_at=created_qr_session.expires_at,
