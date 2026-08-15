@@ -11,9 +11,7 @@ describe('MockProfileService', () => {
   test('returns the default mock profile for the signed-in student', async () => {
     const service = new MockProfileService();
 
-    await expect(
-      service.getStudentProfile('keycloak-student-user'),
-    ).resolves.toEqual({
+    await expect(service.getMyStudentProfile()).resolves.toEqual({
       status: 'found',
       profile: {
         id: 'mock-student-profile-1',
@@ -24,7 +22,7 @@ describe('MockProfileService', () => {
     });
   });
 
-  test('returns a valid student profile for a known user id', async () => {
+  test('returns a supplied student profile', async () => {
     const profile: StudentProfile = {
       id: 'profile-1',
       registrationNumber: 'UA-1001',
@@ -32,43 +30,45 @@ describe('MockProfileService', () => {
       universityEmail: 'jordan.sample@students.uniattend.test',
       profileImageUrl: 'https://assets.uniattend.test/profiles/jordan.png',
     };
-    const service = new MockProfileService({
-      profilesByUserId: {
-        'student-user-1': profile,
-      },
-      fallbackProfile: null,
-    });
+    const service = new MockProfileService({ profile });
 
-    await expect(
-      service.getStudentProfile('student-user-1'),
-    ).resolves.toEqual({
+    await expect(service.getMyStudentProfile()).resolves.toEqual({
       status: 'found',
       profile,
     });
   });
 
-  test('returns missing when no profile exists for the user id', async () => {
-    const service = new MockProfileService({
-      profilesByUserId: {},
-      fallbackProfile: null,
-    });
+  test('returns missing when no profile is configured', async () => {
+    const service = new MockProfileService({ profile: null });
 
-    await expect(
-      service.getStudentProfile('unknown-student-user'),
-    ).resolves.toEqual({
+    await expect(service.getMyStudentProfile()).resolves.toEqual({
       status: 'missing',
     });
   });
 
   test('simulates profile retrieval failure', async () => {
+    const service = new MockProfileService({ result: { status: 'failed' } });
+
+    await expect(service.getMyStudentProfile()).resolves.toEqual({
+      status: 'failed',
+    });
+  });
+
+  test('simulates an expired session', async () => {
     const service = new MockProfileService({
-      simulateProfileFailure: true,
+      result: { status: 'unauthenticated' },
     });
 
-    await expect(
-      service.getStudentProfile('mock-student-user-1'),
-    ).resolves.toEqual({
-      status: 'failed',
+    await expect(service.getMyStudentProfile()).resolves.toEqual({
+      status: 'unauthenticated',
+    });
+  });
+
+  test('simulates a non-student account', async () => {
+    const service = new MockProfileService({ result: { status: 'forbidden' } });
+
+    await expect(service.getMyStudentProfile()).resolves.toEqual({
+      status: 'forbidden',
     });
   });
 });

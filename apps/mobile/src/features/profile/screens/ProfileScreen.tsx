@@ -18,12 +18,11 @@ import {
 } from '../../../theme';
 import type { AuthenticatedSession } from '../../auth/types/auth.types';
 import type { ProfileService } from '../services/profile.service';
-import { MockProfileService } from '../services/mockProfileService';
 import type { StudentProfile } from '../types/profile.types';
 
 type ProfileScreenProps = {
   readonly onSignOutPress: () => void | Promise<void>;
-  readonly profileService?: ProfileService;
+  readonly profileService: ProfileService;
   readonly session: AuthenticatedSession;
 };
 
@@ -31,6 +30,8 @@ type ProfileScreenState =
   | { status: 'loading' }
   | { status: 'ready'; profile: StudentProfile }
   | { status: 'missing' }
+  | { status: 'unauthenticated' }
+  | { status: 'forbidden' }
   | { status: 'error' };
 
 type StateMessageProps = {
@@ -40,11 +41,9 @@ type StateMessageProps = {
   readonly title: string;
 };
 
-const defaultProfileService = new MockProfileService();
-
 export function ProfileScreen({
   onSignOutPress,
-  profileService = defaultProfileService,
+  profileService,
   session,
 }: ProfileScreenProps) {
   const [screenState, setScreenState] = useState<ProfileScreenState>({
@@ -56,7 +55,7 @@ export function ProfileScreen({
     let isMounted = true;
 
     profileService
-      .getStudentProfile(session.userId)
+      .getMyStudentProfile()
       .then((result) => {
         if (!isMounted) {
           return;
@@ -67,9 +66,9 @@ export function ProfileScreen({
           return;
         }
 
-        setScreenState({
-          status: result.status === 'missing' ? 'missing' : 'error',
-        });
+        // Every other outcome is shown as itself. Mock data is never
+        // substituted for a real failure.
+        setScreenState({ status: toScreenStatus(result.status) });
       })
       .catch(() => {
         if (isMounted) {
@@ -83,7 +82,6 @@ export function ProfileScreen({
   }, [
     profileService,
     requestNumber,
-    session.userId,
   ]);
 
   const retry = useCallback(() => {
@@ -136,6 +134,39 @@ export function ProfileScreen({
         />
       ) : null}
 
+      {screenState.status === 'unauthenticated' ? (
+        <StateMessage
+          action={(
+            <View style={styles.stateAction}>
+              <AppButton
+                accessibilityLabel="Sign out and sign in again"
+                onPress={() => void onSignOutPress()}
+                title="Sign in again"
+              />
+            </View>
+          )}
+          icon={{
+            ios: 'lock',
+            android: 'lock',
+            web: 'lock',
+          }}
+          message="Your session is no longer valid. Please sign in again."
+          title="Session expired"
+        />
+      ) : null}
+
+      {screenState.status === 'forbidden' ? (
+        <StateMessage
+          icon={{
+            ios: 'hand.raised',
+            android: 'block',
+            web: 'block',
+          }}
+          message="This account does not have student access to UniAttend."
+          title="Student access required"
+        />
+      ) : null}
+
       {screenState.status === 'error' ? (
         <StateMessage
           action={(
@@ -158,6 +189,21 @@ export function ProfileScreen({
       ) : null}
     </ScreenContainer>
   );
+}
+
+function toScreenStatus(
+  resultStatus: 'missing' | 'unauthenticated' | 'forbidden' | 'failed',
+): 'missing' | 'unauthenticated' | 'forbidden' | 'error' {
+  switch (resultStatus) {
+    case 'missing':
+      return 'missing';
+    case 'unauthenticated':
+      return 'unauthenticated';
+    case 'forbidden':
+      return 'forbidden';
+    default:
+      return 'error';
+  }
 }
 
 function ProfileContent({

@@ -1,33 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { CourseScreen } from '../../../features/courses/screens/CourseScreen';
 
-import { ScreenContainer } from '../../../components/ui';
-import { lightColors, spacing, typography } from '../../../theme';
+export default CourseScreen;
 
-export default function CoursesScreen() {
-  return (
-    <ScreenContainer>
-      <View style={styles.content}>
-        <Text accessibilityRole="header" style={styles.title}>
-          Courses
-        </Text>
-        <Text style={styles.description}>
-          Your enrolled course information will appear here.
-        </Text>
-      </View>
-    </ScreenContainer>
-  );
-}
-
-const styles = StyleSheet.create({
-  content: {
-    gap: spacing.xs,
-  },
-  title: {
-    ...typography.screenTitle,
-    color: lightColors.textPrimary,
-  },
-  description: {
-    ...typography.body,
-    color: lightColors.textSecondary,
-  },
-});
