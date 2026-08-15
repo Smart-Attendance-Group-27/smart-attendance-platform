@@ -12,6 +12,7 @@ from modules.attendance_sessions.qr_session.repository import (
     AttendanceSessionRecord,
     QrVerificationRecord,
 )
+from modules.attendance_sessions.qr_session.metadata import QrBatchMetadata
 from modules.attendance_sessions.qr_session.service import QrSessionService
 
 
@@ -51,8 +52,11 @@ class FakeRepository:
     def __init__(self, session: AttendanceSessionRecord | None) -> None:
         self.session = session
         self.closed_session_id: UUID | None = None
-        self.inserted_batch: tuple[UUID, UUID, datetime] | None = None
+        self.inserted_batch: tuple[UUID, UUID, str, int | None, datetime, datetime] | None = None
         self.inserted_token: tuple[UUID, UUID, str, datetime, datetime] | None = None
+        self.deactivated_batch_ids: list[UUID] = []
+        self.metadata: QrBatchMetadata | None = None
+        self.fetched_qr_session_id: UUID | None = None
 
     async def lock_attendance_session(
         self,
@@ -66,17 +70,28 @@ class FakeRepository:
         connection: FakeConnection,
         session_id: UUID,
         deactivated_at: datetime,
-    ) -> None:
+    ) -> list[UUID]:
         self.closed_session_id = session_id
+        return self.deactivated_batch_ids
 
     async def insert_qr_batch(
         self,
         connection: FakeConnection,
         qr_session_id: UUID,
         attendance_session_id: UUID,
+        mode: str,
+        refresh_interval_seconds: int | None,
         activated_at: datetime,
+        expires_at: datetime,
     ) -> None:
-        self.inserted_batch = (qr_session_id, attendance_session_id, activated_at)
+        self.inserted_batch = (
+            qr_session_id,
+            attendance_session_id,
+            mode,
+            refresh_interval_seconds,
+            activated_at,
+            expires_at,
+        )
 
     async def insert_qr_token(
         self,
@@ -88,6 +103,14 @@ class FakeRepository:
         expires_at: datetime,
     ) -> None:
         self.inserted_token = (qr_token_id, qr_session_id, token_hash, valid_from, expires_at)
+
+    async def fetch_qr_batch_metadata(
+        self,
+        connection: FakeConnection,
+        qr_session_id: UUID,
+    ) -> QrBatchMetadata | None:
+        self.fetched_qr_session_id = qr_session_id
+        return self.metadata
 
 
 class FakeVerificationRepository:
@@ -102,6 +125,39 @@ class FakeVerificationRepository:
     ) -> QrVerificationRecord | None:
         self.requested_qr_session_id = qr_session_id
         return self.record
+
+
+class FakeQrBatchCache:
+    def __init__(
+        self,
+        cached_metadata: QrBatchMetadata | None = None,
+        fail_reads: bool = False,
+    ) -> None:
+        self.cached_metadata = cached_metadata
+        self.fail_reads = fail_reads
+        self.get_calls: list[UUID] = []
+        self.set_calls: list[tuple[UUID, QrBatchMetadata, int]] = []
+        self.delete_calls: list[UUID] = []
+
+    async def get_qr_batch_cache(
+        self,
+        qr_session_id: UUID,
+    ) -> QrBatchMetadata | None:
+        self.get_calls.append(qr_session_id)
+        if self.fail_reads:
+            return None
+        return self.cached_metadata
+
+    async def set_qr_batch_cache(
+        self,
+        qr_session_id: UUID,
+        metadata: QrBatchMetadata,
+        ttl_seconds: int,
+    ) -> None:
+        self.set_calls.append((qr_session_id, metadata, ttl_seconds))
+
+    async def delete_qr_batch_cache(self, qr_session_id: UUID) -> None:
+        self.delete_calls.append(qr_session_id)
 
 
 @pytest.mark.asyncio
@@ -137,11 +193,20 @@ async def test_create_static_qr_session_hashes_raw_value_and_caps_expiration() -
 
     assert result.qr_session_id == qr_session_id
     assert result.attendance_session_id == attendance_session_id
+    assert result.mode == "static"
     assert result.qr_value == "raw-test-token"
+    assert result.refresh_interval_seconds is None
     assert result.valid_from == current_time
     assert result.expires_at == current_time + timedelta(minutes=20)
     assert repository.closed_session_id == attendance_session_id
-    assert repository.inserted_batch == (qr_session_id, attendance_session_id, current_time)
+    assert repository.inserted_batch == (
+        qr_session_id,
+        attendance_session_id,
+        "static",
+        None,
+        current_time,
+        current_time + timedelta(minutes=20),
+    )
     assert repository.inserted_token == (
         qr_token_id,
         qr_session_id,
@@ -185,6 +250,211 @@ async def test_create_static_qr_session_rejects_ended_session() -> None:
 
     with pytest.raises(AttendanceSessionNotActiveError, match="already ended"):
         await service.create_static_qr_session(FakePool(), attendance_session_id, 300)
+
+
+@pytest.mark.asyncio
+async def test_create_dynamic_qr_session_creates_batch_without_token_history() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    attendance_session_id = UUID("40000000-0000-0000-0000-000000000001")
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeRepository(
+        AttendanceSessionRecord(
+            id=attendance_session_id,
+            status="active",
+            scheduled_end_at=current_time + timedelta(minutes=30),
+            closed_at=None,
+            cancelled_at=None,
+        )
+    )
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        uuid_factory=lambda: qr_session_id,
+    )
+
+    result = await service.create_dynamic_qr_session(
+        FakePool(),
+        attendance_session_id,
+        valid_for_seconds=900,
+        refresh_interval_seconds=15,
+    )
+
+    assert result.qr_session_id == qr_session_id
+    assert result.attendance_session_id == attendance_session_id
+    assert result.mode == "dynamic"
+    assert result.qr_value is None
+    assert result.refresh_interval_seconds == 15
+    assert result.valid_from == current_time
+    assert result.expires_at == current_time + timedelta(minutes=15)
+    assert repository.closed_session_id == attendance_session_id
+    assert repository.inserted_batch == (
+        qr_session_id,
+        attendance_session_id,
+        "dynamic",
+        15,
+        current_time,
+        current_time + timedelta(minutes=15),
+    )
+    assert repository.inserted_token is None
+
+
+@pytest.mark.asyncio
+async def test_get_qr_batch_metadata_returns_cached_metadata_on_cache_hit() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    metadata = build_qr_batch_metadata(
+        expires_at=current_time + timedelta(minutes=15),
+    )
+    repository = FakeRepository(None)
+    cache = FakeQrBatchCache(cached_metadata=metadata)
+    service = QrSessionService(
+        repository=repository,
+        qr_batch_cache=cache,
+        clock=lambda: current_time,
+    )
+
+    result = await service.get_qr_batch_metadata(FakePool(), metadata.id)
+
+    assert result == metadata
+    assert cache.get_calls == [metadata.id]
+    assert repository.fetched_qr_session_id is None
+
+
+@pytest.mark.asyncio
+async def test_get_qr_batch_metadata_cache_miss_falls_back_to_database() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    metadata = build_qr_batch_metadata(
+        expires_at=current_time + timedelta(minutes=15),
+    )
+    repository = FakeRepository(None)
+    repository.metadata = metadata
+    cache = FakeQrBatchCache()
+    service = QrSessionService(
+        repository=repository,
+        qr_batch_cache=cache,
+        clock=lambda: current_time,
+    )
+
+    result = await service.get_qr_batch_metadata(FakePool(), metadata.id)
+
+    assert result == metadata
+    assert repository.fetched_qr_session_id == metadata.id
+
+
+@pytest.mark.asyncio
+async def test_get_qr_batch_metadata_cache_miss_populates_redis_with_ttl() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    metadata = build_qr_batch_metadata(
+        expires_at=current_time + timedelta(seconds=90),
+    )
+    repository = FakeRepository(None)
+    repository.metadata = metadata
+    cache = FakeQrBatchCache()
+    service = QrSessionService(
+        repository=repository,
+        qr_batch_cache=cache,
+        clock=lambda: current_time,
+    )
+
+    result = await service.get_qr_batch_metadata(FakePool(), metadata.id)
+
+    assert result == metadata
+    assert cache.set_calls == [(metadata.id, metadata, 90)]
+
+
+@pytest.mark.asyncio
+async def test_get_qr_batch_metadata_redis_failure_falls_back_to_database() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    metadata = build_qr_batch_metadata(
+        expires_at=current_time + timedelta(minutes=15),
+    )
+    repository = FakeRepository(None)
+    repository.metadata = metadata
+    cache = FakeQrBatchCache(fail_reads=True)
+    service = QrSessionService(
+        repository=repository,
+        qr_batch_cache=cache,
+        clock=lambda: current_time,
+    )
+
+    result = await service.get_qr_batch_metadata(FakePool(), metadata.id)
+
+    assert result == metadata
+    assert repository.fetched_qr_session_id == metadata.id
+
+
+@pytest.mark.asyncio
+async def test_create_dynamic_qr_session_invalidates_replaced_batch_cache() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    attendance_session_id = UUID("40000000-0000-0000-0000-000000000001")
+    old_qr_session_id = UUID("50000000-0000-0000-0000-000000000009")
+    new_qr_session_id = UUID("50000000-0000-0000-0000-000000000010")
+    repository = FakeRepository(
+        AttendanceSessionRecord(
+            id=attendance_session_id,
+            status="active",
+            scheduled_end_at=current_time + timedelta(minutes=30),
+            closed_at=None,
+            cancelled_at=None,
+        )
+    )
+    repository.deactivated_batch_ids = [old_qr_session_id]
+    cache = FakeQrBatchCache()
+    service = QrSessionService(
+        repository=repository,
+        qr_batch_cache=cache,
+        clock=lambda: current_time,
+        uuid_factory=lambda: new_qr_session_id,
+    )
+
+    await service.create_dynamic_qr_session(
+        FakePool(),
+        attendance_session_id,
+        valid_for_seconds=900,
+        refresh_interval_seconds=15,
+    )
+
+    assert cache.delete_calls == [old_qr_session_id]
+
+
+@pytest.mark.asyncio
+async def test_create_dynamic_qr_session_caches_active_dynamic_metadata() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    attendance_session_id = UUID("40000000-0000-0000-0000-000000000001")
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeRepository(
+        AttendanceSessionRecord(
+            id=attendance_session_id,
+            status="active",
+            scheduled_end_at=current_time + timedelta(minutes=30),
+            closed_at=None,
+            cancelled_at=None,
+        )
+    )
+    cache = FakeQrBatchCache()
+    service = QrSessionService(
+        repository=repository,
+        qr_batch_cache=cache,
+        clock=lambda: current_time,
+        uuid_factory=lambda: qr_session_id,
+    )
+
+    await service.create_dynamic_qr_session(
+        FakePool(),
+        attendance_session_id,
+        valid_for_seconds=900,
+        refresh_interval_seconds=15,
+    )
+
+    assert len(cache.set_calls) == 1
+    cached_qr_session_id, metadata, ttl_seconds = cache.set_calls[0]
+    assert cached_qr_session_id == qr_session_id
+    assert metadata.id == qr_session_id
+    assert metadata.attendance_session_id == attendance_session_id
+    assert metadata.mode == "dynamic"
+    assert metadata.status == "active"
+    assert metadata.refresh_interval_seconds == 15
+    assert metadata.expires_at == current_time + timedelta(minutes=15)
+    assert ttl_seconds == 900
 
 
 @pytest.mark.asyncio
@@ -432,6 +702,8 @@ def build_qr_verification_record(
 ) -> QrVerificationRecord:
     return QrVerificationRecord(
         qr_session_id=qr_session_id,
+        qr_mode="static",
+        refresh_interval_seconds=None,
         batch_status=batch_status,
         batch_deactivated_at=batch_deactivated_at,
         attendance_session_id=attendance_session_id,
@@ -443,4 +715,27 @@ def build_qr_verification_record(
         token_valid_from=token_valid_from,
         token_expires_at=token_expires_at,
         token_revoked_at=token_revoked_at,
+    )
+
+
+def build_qr_batch_metadata(
+    *,
+    qr_session_id: UUID = UUID("50000000-0000-0000-0000-000000000001"),
+    attendance_session_id: UUID = UUID("40000000-0000-0000-0000-000000000001"),
+    mode: str = "dynamic",
+    status: str = "active",
+    activated_at: datetime = datetime(2026, 8, 6, 10, 0, tzinfo=UTC),
+    deactivated_at: datetime | None = None,
+    refresh_interval_seconds: int | None = 15,
+    expires_at: datetime = datetime(2026, 8, 6, 10, 15, tzinfo=UTC),
+) -> QrBatchMetadata:
+    return QrBatchMetadata(
+        id=qr_session_id,
+        attendance_session_id=attendance_session_id,
+        mode=mode,
+        status=status,
+        activated_at=activated_at,
+        deactivated_at=deactivated_at,
+        refresh_interval_seconds=refresh_interval_seconds,
+        expires_at=expires_at,
     )

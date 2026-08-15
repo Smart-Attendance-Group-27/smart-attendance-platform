@@ -25,10 +25,30 @@ class SuccessfulQrSessionService:
         return CreatedQrSession(
             qr_session_id=UUID("50000000-0000-0000-0000-000000000001"),
             attendance_session_id=attendance_session_id,
+            mode="static",
             qr_value="raw-test-token",
+            refresh_interval_seconds=None,
             status="active",
             valid_from=datetime(2026, 8, 6, 10, 0, tzinfo=UTC),
             expires_at=datetime(2026, 8, 6, 10, 5, tzinfo=UTC),
+        )
+
+    async def create_dynamic_qr_session(
+        self,
+        pool: object,
+        attendance_session_id: UUID,
+        valid_for_seconds: int,
+        refresh_interval_seconds: int,
+    ) -> CreatedQrSession:
+        return CreatedQrSession(
+            qr_session_id=UUID("50000000-0000-0000-0000-000000000002"),
+            attendance_session_id=attendance_session_id,
+            mode="dynamic",
+            qr_value=None,
+            refresh_interval_seconds=refresh_interval_seconds,
+            status="active",
+            valid_from=datetime(2026, 8, 6, 10, 0, tzinfo=UTC),
+            expires_at=datetime(2026, 8, 6, 10, 15, tzinfo=UTC),
         )
 
     async def verify_qr_session(
@@ -79,7 +99,9 @@ def test_create_static_qr_session_route_returns_camel_case_response() -> None:
     assert response.json() == {
         "qrSessionId": "50000000-0000-0000-0000-000000000001",
         "attendanceSessionId": "40000000-0000-0000-0000-000000000001",
+        "mode": "static",
         "qrValue": "raw-test-token",
+        "refreshIntervalSeconds": None,
         "status": "active",
         "validFrom": "2026-08-06T10:00:00Z",
         "expiresAt": "2026-08-06T10:05:00Z",
@@ -97,6 +119,34 @@ def test_create_static_qr_session_route_accepts_optional_body() -> None:
         )
 
     assert response.status_code == 201
+
+
+def test_create_qr_session_route_accepts_dynamic_mode_contract() -> None:
+    app = create_app(enable_database=False)
+    app.state.db_pool = object()
+    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/attendance-sessions/40000000-0000-0000-0000-000000000001/qr-sessions",
+            json={
+                "mode": "dynamic",
+                "validForSeconds": 900,
+                "refreshIntervalSeconds": 15,
+            },
+        )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "qrSessionId": "50000000-0000-0000-0000-000000000002",
+        "attendanceSessionId": "40000000-0000-0000-0000-000000000001",
+        "mode": "dynamic",
+        "qrValue": None,
+        "refreshIntervalSeconds": 15,
+        "status": "active",
+        "validFrom": "2026-08-06T10:00:00Z",
+        "expiresAt": "2026-08-06T10:15:00Z",
+    }
 
 
 def test_create_static_qr_session_route_rejects_invalid_validity() -> None:

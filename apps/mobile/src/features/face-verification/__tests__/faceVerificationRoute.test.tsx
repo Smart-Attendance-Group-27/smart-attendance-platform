@@ -34,7 +34,7 @@ jest.mock('../screens/FaceVerificationScreen', () => {
       sessionId: string;
     }) => (
       <Pressable
-        accessibilityLabel="Continue to check-in result"
+        accessibilityLabel="Continue to QR scanner"
         accessibilityRole="button"
         onPress={() => onFaceVerified(sessionId)}
       >
@@ -52,7 +52,7 @@ describe('FaceVerificationRoute', () => {
     };
   });
 
-  test('opens check-in success with the normalized session ID after face verification', async () => {
+  test('opens QR scanner with the normalized session ID after face verification', async () => {
     mockSearchParams = {
       sessionId: [' attendance-session-active ', 'ignored-session'],
     };
@@ -60,14 +60,14 @@ describe('FaceVerificationRoute', () => {
 
     await fireEvent.press(
       getByRole('button', {
-        name: 'Continue to check-in result',
+        name: 'Continue to QR scanner',
       }),
     );
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledWith({
       pathname:
-        '/(student)/attendance/[sessionId]/check-in-success',
+        '/(student)/attendance/[sessionId]/qr-scanner',
       params: {
         sessionId: 'attendance-session-active',
       },
@@ -87,7 +87,7 @@ describe('FaceVerificationRoute', () => {
     ).toBeTruthy();
     expect(
       queryByRole('button', {
-        name: 'Continue to check-in result',
+        name: 'Continue to QR scanner',
       }),
     ).toBeNull();
     expect(mockPush).not.toHaveBeenCalled();

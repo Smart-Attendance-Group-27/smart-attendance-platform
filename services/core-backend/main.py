@@ -4,6 +4,7 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 
+from cache.redis import close_redis_client, create_redis_client
 from core.config import get_settings
 from db.pool import close_database_pool, create_database_pool
 from modules.academic.student_profile.route import router as student_profile_router
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await close_redis_client(app.state.redis_client)
         await close_database_pool(app.state.db_pool)
 
 
