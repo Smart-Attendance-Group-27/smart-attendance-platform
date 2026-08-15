@@ -5,9 +5,8 @@ import type {
 import type { StudentProfile } from '../types/profile.types';
 
 type MockProfileServiceOptions = {
-  readonly profilesByUserId?: Readonly<Record<string, StudentProfile>>;
-  readonly fallbackProfile?: StudentProfile | null;
-  readonly simulateProfileFailure?: boolean;
+  readonly profile?: StudentProfile | null;
+  readonly result?: StudentProfileResult;
 };
 
 const defaultStudentProfile: StudentProfile = {
@@ -17,37 +16,31 @@ const defaultStudentProfile: StudentProfile = {
   universityEmail: 'manushanh.23@cse.mrt.ac.lk',
 };
 
-const defaultProfilesByUserId: Readonly<Record<string, StudentProfile>> = {
-  'mock-student-user-1': defaultStudentProfile,
-};
-
+/**
+ * In-memory profile service for tests and isolated UI work.
+ *
+ * It is never used as a fallback for a failed API call: the real service
+ * reports real failures so the screen can show them.
+ */
 export class MockProfileService implements ProfileService {
-  private readonly profilesByUserId: Readonly<Record<string, StudentProfile>>;
+  private readonly profile: StudentProfile | null;
 
-  private readonly fallbackProfile: StudentProfile | null;
-
-  private readonly simulateProfileFailure: boolean;
+  private readonly result: StudentProfileResult | null;
 
   constructor({
-    profilesByUserId = defaultProfilesByUserId,
-    fallbackProfile = defaultStudentProfile,
-    simulateProfileFailure = false,
+    profile = defaultStudentProfile,
+    result,
   }: MockProfileServiceOptions = {}) {
-    this.profilesByUserId = profilesByUserId;
-    this.fallbackProfile = fallbackProfile;
-    this.simulateProfileFailure = simulateProfileFailure;
+    this.profile = profile;
+    this.result = result ?? null;
   }
 
-  async getStudentProfile(userId: string): Promise<StudentProfileResult> {
-    if (this.simulateProfileFailure) {
-      return {
-        status: 'failed',
-      };
+  async getMyStudentProfile(): Promise<StudentProfileResult> {
+    if (this.result) {
+      return this.result;
     }
 
-    const profile = this.profilesByUserId[userId] ?? this.fallbackProfile;
-
-    if (!profile) {
+    if (!this.profile) {
       return {
         status: 'missing',
       };
@@ -55,7 +48,7 @@ export class MockProfileService implements ProfileService {
 
     return {
       status: 'found',
-      profile,
+      profile: this.profile,
     };
   }
 }

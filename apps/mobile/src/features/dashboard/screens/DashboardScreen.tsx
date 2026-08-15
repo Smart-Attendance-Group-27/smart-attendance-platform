@@ -18,18 +18,14 @@ import { MockDashboardService } from '../services/mockDashboardService';
 import type { Lecture, AttendanceSession } from '../types';
 import type { ProfileService } from '../../profile/services/profile.service';
 import { MockProfileService } from '../../profile/services/mockProfileService';
-import type { AuthService, AuthSignInResult } from '../../auth/services/auth.service';
-import { MockAuthService } from '../../auth/services/mockAuthService';
 
 type DashboardScreenProps = {
   dashboardService?: DashboardService;
   profileService?: ProfileService;
-  authService?: AuthService;
   onSignOutPress?: () => void;
 };
 
 export function DashboardScreen({
-  authService,
   dashboardService,
   onSignOutPress,
   profileService,
@@ -37,7 +33,6 @@ export function DashboardScreen({
   const router = useRouter();
   const service = useMemo(() => dashboardService ?? new MockDashboardService(), [dashboardService]);
   const profileServiceInstance = profileService ?? new MockProfileService();
-  const authServiceInstance = authService ?? new MockAuthService();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,27 +58,15 @@ export function DashboardScreen({
     setError(null);
 
     try {
-      // fetch authenticated user id and profile
+      // Fetch the signed-in student's display name. The backend derives the
+      // student from the access token, so no sign-in call and no user ID
+      // lookup happens here: authentication stays inside AuthContext.
       try {
-        const signInResult = (await authServiceInstance.signIn?.()) as AuthSignInResult | undefined;
-        let userId: string | undefined;
-
-        if (signInResult && 'success' in signInResult && signInResult.success) {
-          userId = (signInResult.session as any).userId;
-        } else {
-          const restored = await authServiceInstance.restoreSession?.();
-          if (restored && (restored as any).status === 'authenticated') {
-            userId = (restored as any).userId;
-          }
-        }
-
-        if (userId) {
-          const profileResult = await profileServiceInstance.getStudentProfile(userId);
-          if (profileResult.status === 'found') {
-            const full = profileResult.profile.fullName;
-            const first = full.split(' ')[0] ?? full;
-            setUserName(first);
-          }
+        const profileResult = await profileServiceInstance.getMyStudentProfile();
+        if (profileResult.status === 'found') {
+          const full = profileResult.profile.fullName;
+          const first = full.split(' ')[0] ?? full;
+          setUserName(first);
         }
       } catch {
         // ignore profile errors - non-blocking
@@ -186,7 +169,13 @@ export function DashboardScreen({
 
             <View style={styles.sectionHeading}>
               <Text style={styles.sectionTitle}>My courses</Text>
-              <Text style={styles.viewAll}>View all</Text>
+              <Pressable
+                onPress={() => router.push('/(student)/(tabs)/courses')}
+                accessibilityRole="button"
+                accessibilityLabel="View all courses"
+              >
+                <Text style={styles.viewAll}>View all</Text>
+              </Pressable>
             </View>
 
             <ScrollView

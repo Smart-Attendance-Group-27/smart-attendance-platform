@@ -2,7 +2,7 @@ import ssl
 
 import asyncpg
 
-from core.config import Settings
+from core.config import ConfigurationError, Settings
 
 
 def _build_ssl_context(settings: Settings) -> ssl.SSLContext | bool:
@@ -20,6 +20,7 @@ def _build_ssl_context(settings: Settings) -> ssl.SSLContext | bool:
 async def create_database_pool(settings: Settings) -> asyncpg.Pool:
     ssl_context = _build_ssl_context(settings)
 
+    # DB_URI wins when present; the individual DB_* fields are the fallback.
     if settings.db_uri:
         return await asyncpg.create_pool(
             dsn=settings.db_uri,
@@ -28,6 +29,12 @@ async def create_database_pool(settings: Settings) -> asyncpg.Pool:
             command_timeout=settings.db_command_timeout_seconds,
             ssl=ssl_context,
             statement_cache_size=0,
+        )
+
+    if not settings.db_host or not settings.db_user or settings.db_password is None:
+        raise ConfigurationError(
+            "Database configuration is incomplete. Set DB_URI, or set DB_HOST, "
+            "DB_USER and DB_PASSWORD in services/core-backend/.env.",
         )
 
     return await asyncpg.create_pool(
