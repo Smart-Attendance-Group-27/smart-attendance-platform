@@ -91,12 +91,9 @@ export default async function SessionMonitorPage(props: PageProps<"/lecturer/ses
           <Button>Apply filters</Button>
         </FilterBar>
 
-        {session.students.length === 0 ? (
-          <p className="p-6 text-center text-xs text-[var(--muted)]">
-            No students have checked in yet — this session has not opened its check-in window.
-          </p>
-        ) : (
-          <DataTable<SessionStudentRow>
+        <DataTable<SessionStudentRow>
+            emptyTitle="No students have checked in yet"
+            emptyDescription="This session has not opened its check-in window."
             columns={[
               {
                 key: "student",
@@ -130,7 +127,6 @@ export default async function SessionMonitorPage(props: PageProps<"/lecturer/ses
             rows={session.students}
             getRowKey={(row) => row.studentId}
           />
-        )}
       </Card>
     </div>
   );

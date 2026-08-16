@@ -16,6 +16,8 @@ export default async function LecturerSessionsPage() {
 
       <Card flush>
         <DataTable<TodayLecture>
+          emptyTitle="No attendance sessions yet"
+          emptyDescription="Sessions from your assigned courses will appear here."
           columns={[
             {
               key: "course",

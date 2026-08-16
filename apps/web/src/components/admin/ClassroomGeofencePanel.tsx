@@ -26,6 +26,7 @@ export function ClassroomGeofencePanel({ classrooms }: { classrooms: Classroom[]
           }
         >
           <DataTable<Classroom>
+            emptyTitle="No classrooms configured yet"
             columns={[
               { key: "room", header: "Room", render: (row) => <span className="font-semibold text-[var(--link)]">{row.room}</span> },
               { key: "building", header: "Building", render: (row) => row.building },

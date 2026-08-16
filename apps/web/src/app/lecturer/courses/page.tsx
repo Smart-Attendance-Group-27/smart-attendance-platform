@@ -38,6 +38,8 @@ export default async function LecturerCoursesPage() {
         }
       >
         <DataTable<LecturerCourse>
+          emptyTitle="No assigned courses yet"
+          emptyDescription="Courses synchronised from University systems will appear here."
           columns={[
             { key: "code", header: "Code", render: (row) => <span className="font-semibold text-[var(--link)]">{row.courseCode}</span> },
             {
@@ -71,6 +73,7 @@ export default async function LecturerCoursesPage() {
             actions={<Button>Request timetable correction</Button>}
           >
             <DataTable<TimetableEntry>
+              emptyTitle="No timetable entries yet"
               columns={[
                 { key: "day", header: "Day", render: (row) => row.day },
                 { key: "time", header: "Time", render: (row) => row.timeRange },
@@ -95,6 +98,7 @@ export default async function LecturerCoursesPage() {
         <div className="lg:col-span-4">
           <Card title="Source status">
             <ActivityList
+              emptyTitle="No sync activity yet"
               items={sourceStatus.map((item) => ({
                 id: item.id,
                 time: item.time,

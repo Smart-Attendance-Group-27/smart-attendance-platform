@@ -75,6 +75,8 @@ export default async function LecturerDashboardPage() {
         <div className="lg:col-span-8">
           <Card title="Today's scheduled lectures" subtitle="Generated from the academic timetable" flush>
             <DataTable<TodayLecture>
+              emptyTitle="No lectures scheduled today"
+              emptyDescription="Sessions generated from the academic timetable will appear here."
               columns={[
                 {
                   key: "course",
@@ -135,6 +137,7 @@ export default async function LecturerDashboardPage() {
             }
           >
             <ActivityList
+              emptyTitle="Nothing needs your attention right now"
               items={attentionItems.map((item) => ({
                 id: item.id,
                 time: item.time,
@@ -164,6 +167,7 @@ export default async function LecturerDashboardPage() {
         <div className="lg:col-span-5">
           <Card title="Recent session activity">
             <ActivityList
+              emptyTitle="No session activity yet today"
               items={recentActivity.map((item) => ({
                 id: item.id,
                 time: item.time,

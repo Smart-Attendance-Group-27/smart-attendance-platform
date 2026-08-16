@@ -89,6 +89,8 @@ export default async function LecturerReportsPage() {
             }
           >
             <DataTable<AtRiskStudent>
+              emptyTitle="No students below the attendance threshold"
+              emptyDescription="Great news — every student in this period is meeting the target."
               columns={[
                 {
                   key: "student",

@@ -112,6 +112,7 @@ export default async function AdminDashboardPage() {
             }
           >
             <ActivityList
+              emptyTitle="No synchronisation activity yet"
               items={academicSync.map((item) => {
                 const display = syncStatusDisplay(item.status);
                 return {

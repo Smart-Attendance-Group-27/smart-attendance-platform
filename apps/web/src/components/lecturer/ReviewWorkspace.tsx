@@ -84,10 +84,9 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_345px]">
         <div className="overflow-x-auto">
-          {filtered.length === 0 ? (
-            <EmptyState title="No matching cases" description="Adjust your search or filters." />
-          ) : (
             <DataTable<ReviewCase>
+              emptyTitle={cases.length === 0 ? "No cases pending review" : "No matching cases"}
+              emptyDescription={cases.length === 0 ? "New verification issues will appear here." : "Adjust your search or filters."}
               columns={[
                 {
                   key: "student",
@@ -127,7 +126,6 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
               getRowKey={(row) => row.caseId}
               onRowClick={(row) => setSelectedId(row.caseId)}
             />
-          )}
         </div>
 
         <aside aria-label="Selected verification case" className="border-t border-[var(--line)] bg-[#fbfcfd] p-4 lg:border-l lg:border-t-0">
