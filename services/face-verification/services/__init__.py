@@ -10,6 +10,12 @@ from .reference_enrollment_service import (
     ReferenceEnrollmentService,
     ReferenceEnrollmentStatus,
 )
+from .readiness_verification_service import (
+    ReadinessVerificationPersistenceError,
+    ReadinessVerificationResult,
+    ReadinessVerificationService,
+    ReadinessVerificationStatus,
+)
 
 __all__ = [
     "cosine_similarity",
@@ -20,4 +26,8 @@ __all__ = [
     "ReferenceEnrollmentResult",
     "ReferenceEnrollmentService",
     "ReferenceEnrollmentStatus",
+    "ReadinessVerificationPersistenceError",
+    "ReadinessVerificationResult",
+    "ReadinessVerificationService",
+    "ReadinessVerificationStatus",
 ]

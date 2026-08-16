@@ -1,6 +1,7 @@
 from .face_profile_repository import (
     FaceProfileRepository,
     ReadinessStatus,
+    StoredFaceEmbedding,
 )
 from .student_profile_repository import (
     StudentProfileReference,
