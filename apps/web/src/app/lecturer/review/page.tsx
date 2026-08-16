@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/ui/PageHeader";
-import { EmptyState } from "@/components/ui/EmptyState";
+import { ReviewWorkspace } from "@/components/lecturer/ReviewWorkspace";
+import { MOCK_REVIEW_CASES } from "@/mocks/lecturer";
 
 export default function LecturerReviewPage() {
   return (
@@ -8,7 +9,7 @@ export default function LecturerReviewPage() {
         title="Verification review"
         description="Review uncertain verification results and authorised manual attendance requests."
       />
-      <EmptyState title="Review queue lands in Stage 2" description="The master-detail review workflow is built next." />
+      <ReviewWorkspace initialCases={MOCK_REVIEW_CASES} />
     </div>
   );
 }
