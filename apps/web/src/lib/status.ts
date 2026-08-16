@@ -103,6 +103,14 @@ export function geofenceResultDisplay(result: "within_radius" | "boundary" | "ou
   }
 }
 
+export function classroomStatusDisplay(status: "active" | "needs_review"): StatusDisplay {
+  return status === "active" ? { label: "Active", tone: "success" } : { label: "Needs review", tone: "warning" };
+}
+
+export function syncStatusDisplay(status: "current" | "review"): StatusDisplay {
+  return status === "current" ? { label: "Current", tone: "success" } : { label: "Review", tone: "warning" };
+}
+
 export function riskLevelDisplay(risk: "high" | "medium" | "low"): StatusDisplay {
   switch (risk) {
     case "high":
