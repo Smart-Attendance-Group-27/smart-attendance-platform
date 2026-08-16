@@ -2,6 +2,17 @@
 
 Expo mobile application for UniAttend student attendance.
 
+## Geofence Demonstration
+
+The attendance check-in captures one fresh, high-accuracy foreground location
+reading and sends it to the Core API. The phone does not calculate the distance
+or decide whether the student passed. No background-location permission or
+last-known location is used.
+
+For the complete local PostgreSQL, Keycloak, FastAPI, USB forwarding, and
+physical-phone walkthrough, see
+[`docs/geofence-validation-demo.md`](../../docs/geofence-validation-demo.md).
+
 ## Local Keycloak Login
 
 The mobile app uses Keycloak for credential entry. The app must not collect and
@@ -17,7 +28,8 @@ http://10.0.2.2:8080/realms/uniattend
 running.
 
 For physical Android phone testing over USB or Wi-Fi, point the app at the
-computer's LAN IP instead. Create `apps/mobile/.env`:
+computer through USB forwarding or its LAN IP. Create
+`apps/mobile/.env.local` from `.env.example`. For Wi-Fi, use values like:
 
 ```text
 EXPO_PUBLIC_KEYCLOAK_HOST=192.168.1.25

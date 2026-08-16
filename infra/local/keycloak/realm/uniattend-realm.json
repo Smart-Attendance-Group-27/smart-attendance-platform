@@ -23,6 +23,55 @@
   },
   "clients": [
     {
+      "clientId": "uniattend-api",
+      "name": "UniAttend Core API",
+      "description": "Bearer-only resource server. It never performs a login and has no secret; it exists so that access tokens can carry the uniattend-api audience the FastAPI backend requires.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "uniattend-postman",
+      "name": "UniAttend Postman Client",
+      "description": "Public client used only for manual API testing from Postman. Authorization Code with PKCE, exactly like the mobile app. Direct Access Grants stay disabled so no password ever reaches Postman.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "https://oauth.pstmn.io/v1/callback",
+        "http://localhost/callback"
+      ],
+      "webOrigins": [
+        "https://oauth.pstmn.io"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "uniattend-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "uniattend-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
       "clientId": "uniattend-mobile",
       "name": "UniAttend Mobile App",
       "description": "Public mobile client for student authentication",
@@ -44,7 +93,21 @@
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "uniattend://*##exp://*"
-      }
+      },
+      "protocolMappers": [
+        {
+          "name": "uniattend-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "uniattend-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     }
   ]
 }

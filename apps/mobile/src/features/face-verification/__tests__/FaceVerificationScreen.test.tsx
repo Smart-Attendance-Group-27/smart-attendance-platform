@@ -298,7 +298,7 @@ describe('FaceVerificationScreen', () => {
     ).toBeTruthy();
     expect(
       await screen.findByRole('button', {
-        name: 'Continue to check-in result',
+        name: 'Continue to QR scanner',
       }),
     ).toBeTruthy();
     expect(props.onFaceVerified).not.toHaveBeenCalled();
@@ -313,7 +313,7 @@ describe('FaceVerificationScreen', () => {
 
     await captureAndVerify(screen);
     const continueButton = await screen.findByRole('button', {
-      name: 'Continue to check-in result',
+      name: 'Continue to QR scanner',
     });
 
     await fireEvent.press(continueButton);

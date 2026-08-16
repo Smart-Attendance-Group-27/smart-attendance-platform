@@ -5,8 +5,15 @@ FastAPI backend service for the smart attendance platform.
 ## Setup
 
 1. Create `services/core-backend/.env` from `.env.example`.
-2. Fill in the Supabase database credentials and `TOKEN_SECRET`.
-3. Install dependencies:
+2. Fill in the database connection and the Keycloak settings. For geofence
+   development, use the local PostgreSQL project documented in
+   [`infra/local/application-db/README.md`](../../infra/local/application-db/README.md);
+   do not connect to Supabase.
+   `DB_URI` takes precedence: when it is set, the individual `DB_HOST`,
+   `DB_PORT`, `DB_NAME`, `DB_USER` and `DB_PASSWORD` values are ignored. Use one
+   style, not both. `TOKEN_SECRET` is deprecated and may stay empty.
+3. Install dependencies (Python 3.11-3.13 from python.org; the MSYS2 build
+   cannot install `pydantic-core`):
 
 ```powershell
 cd services/core-backend
@@ -19,10 +26,53 @@ python -m pip install -r requirements.txt
 python -m uvicorn main:app --reload
 ```
 
+5. Run the tests:
+
+```powershell
+python -m pytest
+```
+
+Never commit `.env`, and never paste the connection URI into logs or tickets.
+
 ## Health checks
 
 - `GET /health` verifies the API process is running.
 - `GET /health/db` verifies the API can connect to PostgreSQL.
+
+## Authenticated endpoints
+
+Both require `Authorization: Bearer <keycloak-access-token>`.
+
+```http
+GET /api/v1/me
+GET /api/v1/students/me/profile
+```
+
+The token is validated against Keycloak's JWKS: RS256 only, live expiry, an
+exactly matching issuer and the `uniattend-api` audience. The verified `sub`
+claim is then resolved through `identity.users.keycloak_user_id` to the internal
+`identity.users.id`, which stays the permanent application user ID. The backend
+never queries Keycloak's own database.
+
+| Situation | Status |
+| --- | ---: |
+| Missing, malformed, invalid, expired, wrong-issuer or wrong-audience token | 401 |
+| Keycloak user not linked to an application user | 404 |
+| Application account not active | 403 |
+| Non-student requesting the student profile | 403 |
+| Student profile missing or not active | 404 |
+| Valid linked active student | 200 |
+| Keycloak settings absent from `.env` | 503 |
+
+`GET /api/v1/students/me/profile` takes no identifier from the request; the
+student is derived from the token.
+
+## Full setup and manual testing
+
+See [docs/backend/integration-and-manual-testing.md](../../docs/backend/integration-and-manual-testing.md).
+
+For the complete local geofence flow and physical Android demonstration, see
+[docs/geofence-validation-demo.md](../../docs/geofence-validation-demo.md).
 
 ## Static QR session creation
 

@@ -4,7 +4,9 @@ const CORE_BACKEND_URL =
   process.env.CORE_BACKEND_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
 
 type QrSessionRequestBody = {
+  mode?: "static" | "dynamic";
   validForSeconds?: number;
+  refreshIntervalSeconds?: number;
 };
 
 function isQrSessionRequestBody(value: unknown): value is QrSessionRequestBody {
@@ -14,8 +16,13 @@ function isQrSessionRequestBody(value: unknown): value is QrSessionRequestBody {
 
   const candidate = value as Record<string, unknown>;
   return (
-    candidate.validForSeconds === undefined ||
-    typeof candidate.validForSeconds === "number"
+    (candidate.mode === undefined ||
+      candidate.mode === "static" ||
+      candidate.mode === "dynamic") &&
+    (candidate.validForSeconds === undefined ||
+      typeof candidate.validForSeconds === "number") &&
+    (candidate.refreshIntervalSeconds === undefined ||
+      typeof candidate.refreshIntervalSeconds === "number")
   );
 }
 
@@ -28,7 +35,7 @@ export async function POST(
 
   if (!isQrSessionRequestBody(requestBody)) {
     return NextResponse.json(
-      { detail: "Request body must contain numeric validForSeconds." },
+      { detail: "Request body contains invalid QR session fields." },
       { status: 400 },
     );
   }

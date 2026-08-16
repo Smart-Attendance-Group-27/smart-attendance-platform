@@ -13,23 +13,23 @@ import { CourseSummaryCard, DashboardTopBar, UpcomingAttendanceList, courseSumma
 import { ActiveSessionCard } from '../../../components/dashboard/ActiveSessionCard';
 import { ScreenContainer } from '../../../components/ui';
 import { lightColors, spacing, typography } from '../../../theme';
+import type { ActiveAttendanceSessionService } from '../services/activeAttendanceSessionService';
 import type { DashboardService } from '../services/dashboardService';
 import { MockDashboardService } from '../services/mockDashboardService';
 import type { Lecture, AttendanceSession } from '../types';
+import type { ActiveAttendanceSession } from '../types/activeAttendanceSession';
 import type { ProfileService } from '../../profile/services/profile.service';
 import { MockProfileService } from '../../profile/services/mockProfileService';
-import type { AuthService, AuthSignInResult } from '../../auth/services/auth.service';
-import { MockAuthService } from '../../auth/services/mockAuthService';
 
 type DashboardScreenProps = {
+  activeSessionService?: ActiveAttendanceSessionService;
   dashboardService?: DashboardService;
   profileService?: ProfileService;
-  authService?: AuthService;
   onSignOutPress?: () => void;
 };
 
 export function DashboardScreen({
-  authService,
+  activeSessionService,
   dashboardService,
   onSignOutPress,
   profileService,
@@ -37,12 +37,11 @@ export function DashboardScreen({
   const router = useRouter();
   const service = useMemo(() => dashboardService ?? new MockDashboardService(), [dashboardService]);
   const profileServiceInstance = profileService ?? new MockProfileService();
-  const authServiceInstance = authService ?? new MockAuthService();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lectures, setLectures] = useState<Lecture[]>([]);
-  const [activeSession, setActiveSession] = useState<AttendanceSession | null>(null);
+  const [activeSessions, setActiveSessions] = useState<AttendanceSession[]>([]);
   const [userName, setUserName] = useState<string>('');
 
   const today = useMemo(() => new Date(), []);
@@ -63,37 +62,28 @@ export function DashboardScreen({
     setError(null);
 
     try {
-      // fetch authenticated user id and profile
+      // Fetch the signed-in student's display name. The backend derives the
+      // student from the access token, so no sign-in call and no user ID
+      // lookup happens here: authentication stays inside AuthContext.
       try {
-        const signInResult = (await authServiceInstance.signIn?.()) as AuthSignInResult | undefined;
-        let userId: string | undefined;
-
-        if (signInResult && 'success' in signInResult && signInResult.success) {
-          userId = (signInResult.session as any).userId;
-        } else {
-          const restored = await authServiceInstance.restoreSession?.();
-          if (restored && (restored as any).status === 'authenticated') {
-            userId = (restored as any).userId;
-          }
-        }
-
-        if (userId) {
-          const profileResult = await profileServiceInstance.getStudentProfile(userId);
-          if (profileResult.status === 'found') {
-            const full = profileResult.profile.fullName;
-            const first = full.split(' ')[0] ?? full;
-            setUserName(first);
-          }
+        const profileResult = await profileServiceInstance.getMyStudentProfile();
+        if (profileResult.status === 'found') {
+          const full = profileResult.profile.fullName;
+          const first = full.split(' ')[0] ?? full;
+          setUserName(first);
         }
       } catch {
         // ignore profile errors - non-blocking
       }
 
       const upcoming = await service.getUpcomingLectures();
-      const active = await service.getActiveAttendanceSession();
+      const active = await loadActiveSessions(
+        service,
+        activeSessionService,
+      );
 
       setLectures(upcoming);
-      setActiveSession(active);
+      setActiveSessions(active);
     } catch (err: any) {
       setError(err?.message ?? 'Unknown error');
     } finally {
@@ -111,11 +101,14 @@ export function DashboardScreen({
 
       try {
         const upcoming = await service.getUpcomingLectures();
-        const active = await service.getActiveAttendanceSession();
+        const active = await loadActiveSessions(
+          service,
+          activeSessionService,
+        );
 
         if (!mounted) return;
         setLectures(upcoming);
-        setActiveSession(active);
+        setActiveSessions(active);
       } catch (err: any) {
         if (!mounted) return;
         setError(err?.message ?? 'Unknown error');
@@ -128,7 +121,7 @@ export function DashboardScreen({
     return () => {
       mounted = false;
     };
-  }, [service]);
+  }, [activeSessionService, service]);
 
   const handleStart = (sessionId?: string) => {
     if (!sessionId) return;
@@ -180,13 +173,23 @@ export function DashboardScreen({
           </View>
         ) : (
           <>
-            {activeSession ? (
-              <ActiveSessionCard session={activeSession} onStart={() => handleStart(activeSession.id)} />
-            ) : null}
+            {activeSessions.map((activeSession) => (
+              <ActiveSessionCard
+                key={activeSession.id}
+                onStart={() => handleStart(activeSession.id)}
+                session={activeSession}
+              />
+            ))}
 
             <View style={styles.sectionHeading}>
               <Text style={styles.sectionTitle}>My courses</Text>
-              <Text style={styles.viewAll}>View all</Text>
+              <Pressable
+                onPress={() => router.push('/(student)/(tabs)/courses')}
+                accessibilityRole="button"
+                accessibilityLabel="View all courses"
+              >
+                <Text style={styles.viewAll}>View all</Text>
+              </Pressable>
             </View>
 
             <ScrollView
@@ -216,6 +219,40 @@ export function DashboardScreen({
 }
 
 export default DashboardScreen;
+
+async function loadActiveSessions(
+  dashboardService: DashboardService,
+  activeSessionService?: ActiveAttendanceSessionService,
+): Promise<AttendanceSession[]> {
+  if (!activeSessionService) {
+    const session = await dashboardService.getActiveAttendanceSession();
+    return session ? [session] : [];
+  }
+
+  const result = await activeSessionService.listMyActiveSessions();
+  if (result.status !== 'loaded') {
+    throw new Error(`Active session request failed: ${result.status}`);
+  }
+
+  return result.sessions.map(toDashboardSession);
+}
+
+function toDashboardSession(
+  session: ActiveAttendanceSession,
+): AttendanceSession {
+  return {
+    id: session.id,
+    lectureId: session.id,
+    courseCode: session.courseCode,
+    courseName: session.courseName,
+    startTime: session.scheduledStartAt,
+    endTime: session.checkInClosesAt,
+    lateThreshold: session.lateAfterAt ?? session.checkInClosesAt,
+    checkInStatus: 'open',
+    sessionTitle: session.sessionTitle,
+    venue: session.venue ?? undefined,
+  };
+}
 
 const styles = StyleSheet.create({
   screen: {
