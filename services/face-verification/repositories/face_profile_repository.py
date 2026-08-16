@@ -77,7 +77,6 @@ class FaceProfileRepository:
 
         statement = (update(FaceProfile).where(FaceProfile.id == profile_id)
             .values(
-                embedding=None,
                 embedding_encrypted=encrypted_embedding,
                 embedding_model_name=normalized_model_name,
                 embedding_model_version=selected_model_version,
@@ -109,7 +108,7 @@ class FaceProfileRepository:
             raise ValueError("Generated profile is missing encrypted embedding data")
 
         expected_dimension = profile.embedding_dimension
-        
+
         if expected_dimension is None or expected_dimension <= 0:
             raise ValueError("Generated profile has an invalid embedding dimension")
 
@@ -123,7 +122,6 @@ class FaceProfileRepository:
     async def mark_generation_failed(self, profile_id: UUID,) -> FaceProfile | None:
         statement = (update(FaceProfile).where(FaceProfile.id == profile_id)
             .values(
-                embedding=None,
                 embedding_encrypted=None,
                 embedding_model_name=None,
                 embedding_model_version=None,

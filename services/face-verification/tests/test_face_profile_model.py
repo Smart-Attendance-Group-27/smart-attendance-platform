@@ -12,7 +12,6 @@ def test_face_profile_maps_to_expected_table() -> None:
     assert set(table.columns.keys()) == {
         "id",
         "student_id",
-        "embedding",
         "embedding_encrypted",
         "embedding_model_name",
         "embedding_model_version",
@@ -32,8 +31,6 @@ def test_face_profile_column_requirements_match_migrations() -> None:
 
     assert table.c.id.primary_key is True
     assert table.c.student_id.nullable is False
-    assert isinstance(table.c.embedding.type, ARRAY)
-    assert table.c.embedding.nullable is True
     assert isinstance(table.c.embedding_encrypted.type, LargeBinary)
     assert table.c.embedding_encrypted.nullable is True
     assert table.c.embedding_model_name.nullable is True

@@ -4,7 +4,6 @@ from uuid import UUID
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    Double,
     ForeignKey,
     Index,
     Integer,
@@ -13,7 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID as PostgreSQLUUID
+from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -80,10 +79,6 @@ class FaceProfile(Base):
             ondelete="RESTRICT",
         ),
         nullable=False,
-    )
-    embedding: Mapped[list[float] | None] = mapped_column(
-        ARRAY(Double),
-        nullable=True,
     )
 
     embedding_encrypted: Mapped[bytes | None] = mapped_column(
