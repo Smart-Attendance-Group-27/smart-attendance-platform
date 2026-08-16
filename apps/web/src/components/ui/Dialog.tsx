@@ -53,6 +53,7 @@ type ConfirmationDialogProps = {
   onConfirm: () => void;
   onCancel: () => void;
   danger?: boolean;
+  busy?: boolean;
 };
 
 export function ConfirmationDialog({
@@ -63,15 +64,16 @@ export function ConfirmationDialog({
   onConfirm,
   onCancel,
   danger = false,
+  busy = false,
 }: ConfirmationDialogProps) {
   return (
     <Dialog open={open} title={title} onClose={onCancel}>
       <p className="mb-4 text-xs leading-relaxed text-[var(--muted)]">{description}</p>
       <div className="flex justify-end gap-2">
-        <Button variant="default" onClick={onCancel}>
+        <Button variant="default" onClick={onCancel} disabled={busy}>
           Cancel
         </Button>
-        <Button variant={danger ? "danger" : "primary"} onClick={onConfirm}>
+        <Button variant={danger ? "danger" : "primary"} onClick={onConfirm} disabled={busy}>
           {confirmLabel}
         </Button>
       </div>
