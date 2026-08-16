@@ -150,7 +150,7 @@ def test_returns_none_when_no_profile_for_decrypted_comparison_embedding() -> No
     session.execute.return_value = query_result
     repository = create_repository(session)
 
-    result = asyncio.run(repository.get_decrypted_embedding_for_comparison(uuid4()))
+    result = asyncio.run(repository.get_stored_embedding_for_comparison(uuid4()))
 
     assert result is None
 
@@ -164,7 +164,7 @@ def test_returns_none_when_profile_is_not_generated_for_comparison_embedding() -
     session.execute.return_value = query_result
     repository = create_repository(session)
 
-    result = asyncio.run(repository.get_decrypted_embedding_for_comparison(uuid4()))
+    result = asyncio.run(repository.get_stored_embedding_for_comparison(uuid4()))
 
     assert result is None
 
@@ -172,17 +172,34 @@ def test_returns_none_when_profile_is_not_generated_for_comparison_embedding() -
 def test_returns_decrypted_embedding_for_generated_profile() -> None:
     session = create_session()
     query_result = MagicMock()
+
+    profile_id = uuid4()
+    student_id = uuid4()
+
     profile = MagicMock(spec=FaceProfile)
+    profile.id = profile_id
+    profile.student_id = student_id
     profile.embedding_generation_status = "generated"
     profile.embedding_encrypted = b"encrypted-embedding"
+    profile.embedding_model_name = "buffalo_l"
+    profile.embedding_model_version = "1"
     profile.embedding_dimension = 3
+
     query_result.scalar_one_or_none.return_value = profile
     session.execute.return_value = query_result
     repository = create_repository(session)
 
-    result = asyncio.run(repository.get_decrypted_embedding_for_comparison(uuid4()))
+    result = asyncio.run(
+        repository.get_stored_embedding_for_comparison(student_id)
+    )
 
-    assert result == (0.1, 0.2, 0.3)
+    assert result is not None
+    assert result.profile_id == profile_id
+    assert result.student_id == student_id
+    assert result.embedding == (0.1, 0.2, 0.3)
+    assert result.model_name == "buffalo_l"
+    assert result.model_version == "1"
+    assert result.dimension == 3 
 
 
 def test_rejects_generated_profile_with_dimension_mismatch() -> None:
@@ -200,4 +217,4 @@ def test_rejects_generated_profile_with_dimension_mismatch() -> None:
         ValueError,
         match="Decrypted embedding dimension does not match stored metadata",
     ):
-        asyncio.run(repository.get_decrypted_embedding_for_comparison(uuid4()))
+        asyncio.run(repository.get_stored_embedding_for_comparison(uuid4()))

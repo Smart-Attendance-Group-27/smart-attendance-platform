@@ -11,6 +11,7 @@ from .verification_config_repository import VerificationConfigRepository
 __all__ = [
     "FaceProfileRepository",
     "ReadinessStatus",
+    "StoredFaceEmbedding",
     "StudentProfileReference",
     "StudentProfileRepository",
     "VerificationConfigRepository",
