@@ -196,6 +196,41 @@ identity system. Any temporary copy used by UniAttend must be protected and
 deleted after embedding generation according to the approved retention policy.
 Administrators must not be able to view or download the generated embedding.
 
+### Administrator batch enrollment script
+
+The service includes a local administrator CLI for official photographs named
+with the student's exact registration number, for example:
+
+```text
+approved-reference-photos/
+    230734J.png
+    230735K.jpg
+```
+
+Run it from `services/face-verification`. It performs a safe dry run by default:
+
+```powershell
+python -m scripts.enroll_reference_faces "C:\path\to\approved-reference-photos"
+```
+
+The dry run checks that each filename resolves to one active row in
+`academic.student_profiles`. It does not load InsightFace or write embeddings.
+After reviewing the summary, explicitly enable database writes:
+
+```powershell
+python -m scripts.enroll_reference_faces "C:\path\to\approved-reference-photos" --commit
+```
+
+The script accepts `.jpg`, `.jpeg`, and `.png` files directly inside the
+specified directory. It skips duplicate registration numbers, inactive
+students, revoked profiles, and profiles that are already enrolled. It never
+prints an embedding or database secret.
+
+The current development schema stores embeddings as a PostgreSQL array. Do not
+use this script with genuine student data until the approved embedding
+encryption, key-management, model-metadata, authorization, audit, and source
+photo retention controls are implemented.
+
 ## Readiness Period
 
 The university will provide an initial readiness period before real attendance
@@ -443,4 +478,3 @@ Integration tests should cover:
 
 Model evaluation must use a separately approved dataset and report false
 acceptance and false rejection behavior before activating a threshold.
-
