@@ -12,8 +12,9 @@ import { ConfirmationDialog } from "@/components/ui/Dialog";
 import { Notice } from "@/components/ui/Notice";
 import { geofenceResultDisplay, reviewCaseStatusDisplay } from "@/lib/status";
 import { ReviewCase } from "@/types/lecturer";
+import { ReviewDecisionKind, submitReviewDecision } from "@/app/actions/review";
 
-type DecisionKind = "approve" | "reject" | "retry" | "escalate";
+type DecisionKind = ReviewDecisionKind;
 
 function initialsFor(name: string): string {
   return name
@@ -30,6 +31,8 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
   const [query, setQuery] = useState("");
   const [pendingDecision, setPendingDecision] = useState<DecisionKind | null>(null);
   const [reason, setReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -42,14 +45,22 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
 
   const selected = cases.find((item) => item.caseId === selectedId) ?? null;
 
-  function resolveSelected(kind: DecisionKind) {
+  async function resolveSelected(kind: DecisionKind) {
     if (!selected) return;
-    const remaining = cases.filter((item) => item.caseId !== selected.caseId);
-    setCases(remaining);
-    setSelectedId(remaining[0]?.caseId ?? null);
-    setPendingDecision(null);
-    setReason("");
-    void kind; // MOCK: no backend to persist the decision or reason against yet.
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      await submitReviewDecision(selected.caseId, kind, reason.trim() || undefined);
+      const remaining = cases.filter((item) => item.caseId !== selected.caseId);
+      setCases(remaining);
+      setSelectedId(remaining[0]?.caseId ?? null);
+      setPendingDecision(null);
+      setReason("");
+    } catch {
+      setSubmitError("Couldn't submit this decision. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -209,19 +220,20 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
             rows={3}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            className="mb-4 w-full border border-[#c7cfd6] p-2 text-xs"
+            className="mb-2 w-full border border-[#c7cfd6] p-2 text-xs"
             placeholder="Explain the decision for the audit log"
           />
+          {submitError ? <p className="mb-2 text-xs text-[var(--danger)]">{submitError}</p> : null}
           <div className="flex justify-end gap-2">
-            <Button variant="default" onClick={() => setPendingDecision(null)}>
+            <Button variant="default" onClick={() => setPendingDecision(null)} disabled={isSubmitting}>
               Cancel
             </Button>
             <Button
               variant={pendingDecision === "approve" ? "primary" : "danger"}
-              disabled={!reason.trim()}
+              disabled={!reason.trim() || isSubmitting}
               onClick={() => resolveSelected(pendingDecision)}
             >
-              {pendingDecision === "approve" ? "Approve" : "Reject"}
+              {isSubmitting ? "Submitting..." : pendingDecision === "approve" ? "Approve" : "Reject"}
             </Button>
           </div>
         </Dialog>
@@ -231,17 +243,19 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
         open={pendingDecision === "retry"}
         title="Request retry"
         description={selected ? `Ask ${selected.studentName} to resubmit verification for ${selected.courseCode}.` : ""}
-        confirmLabel="Request retry"
+        confirmLabel={isSubmitting ? "Submitting..." : "Request retry"}
         onConfirm={() => resolveSelected("retry")}
         onCancel={() => setPendingDecision(null)}
+        busy={isSubmitting}
       />
       <ConfirmationDialog
         open={pendingDecision === "escalate"}
         title="Escalate case"
         description={selected ? `Escalate ${selected.studentName}'s case to an administrator.` : ""}
-        confirmLabel="Escalate"
+        confirmLabel={isSubmitting ? "Submitting..." : "Escalate"}
         onConfirm={() => resolveSelected("escalate")}
         onCancel={() => setPendingDecision(null)}
+        busy={isSubmitting}
       />
     </Card>
   );

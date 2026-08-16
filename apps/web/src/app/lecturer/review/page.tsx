@@ -1,15 +1,17 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReviewWorkspace } from "@/components/lecturer/ReviewWorkspace";
-import { MOCK_REVIEW_CASES } from "@/mocks/lecturer";
+import { getReviewCases } from "@/services/lecturerService";
 
-export default function LecturerReviewPage() {
+export default async function LecturerReviewPage() {
+  const cases = await getReviewCases();
+
   return (
     <div>
       <PageHeader
         title="Verification review"
         description="Review uncertain verification results and authorised manual attendance requests."
       />
-      <ReviewWorkspace initialCases={MOCK_REVIEW_CASES} />
+      <ReviewWorkspace initialCases={cases} />
     </div>
   );
 }
