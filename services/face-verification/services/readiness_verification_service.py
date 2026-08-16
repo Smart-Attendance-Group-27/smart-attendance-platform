@@ -77,7 +77,7 @@ class ReadinessVerificationService:
         self._session = session
         self._face_engine = face_engine
         self._face_profile_repository = (face_profile_repository or FaceProfileRepository(session))
-        self._verification_config_repository = (verification_config_repositoryor VerificationConfigRepository(session))
+        self._verification_config_repository = (verification_config_repository or VerificationConfigRepository(session))
         self._model_version = normalized_model_version
         self._clock = clock
 
