@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 export type ActivityItem = {
   id: string;
@@ -10,9 +11,14 @@ export type ActivityItem = {
 
 type ActivityListProps = {
   items: ActivityItem[];
+  emptyTitle?: string;
 };
 
-export function ActivityList({ items }: ActivityListProps) {
+export function ActivityList({ items, emptyTitle = "Nothing to show yet" }: ActivityListProps) {
+  if (items.length === 0) {
+    return <EmptyState title={emptyTitle} />;
+  }
+
   return (
     <ul className="list-none p-0">
       {items.map((item) => (

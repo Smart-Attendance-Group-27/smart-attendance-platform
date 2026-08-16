@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 export type DataTableColumn<T> = {
   key: string;
@@ -12,9 +13,22 @@ type DataTableProps<T> = {
   rows: T[];
   getRowKey: (row: T) => string;
   onRowClick?: (row: T) => void;
+  emptyTitle?: string;
+  emptyDescription?: string;
 };
 
-export function DataTable<T>({ columns, rows, getRowKey, onRowClick }: DataTableProps<T>) {
+export function DataTable<T>({
+  columns,
+  rows,
+  getRowKey,
+  onRowClick,
+  emptyTitle = "No records yet",
+  emptyDescription,
+}: DataTableProps<T>) {
+  if (rows.length === 0) {
+    return <EmptyState title={emptyTitle} description={emptyDescription} />;
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[640px] border-collapse text-xs">
