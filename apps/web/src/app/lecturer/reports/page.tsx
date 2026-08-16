@@ -7,12 +7,12 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
-import { MOCK_LECTURER_REPORTS } from "@/mocks/lecturer";
+import { getLecturerReports } from "@/services/lecturerService";
 import { riskLevelDisplay } from "@/lib/status";
 import { AtRiskStudent } from "@/types/lecturer";
 
-export default function LecturerReportsPage() {
-  const { summary, attendanceTrend, attendanceByCourse, atRiskStudents } = MOCK_LECTURER_REPORTS;
+export default async function LecturerReportsPage() {
+  const { summary, attendanceTrend, attendanceByCourse, atRiskStudents } = await getLecturerReports();
 
   return (
     <div>

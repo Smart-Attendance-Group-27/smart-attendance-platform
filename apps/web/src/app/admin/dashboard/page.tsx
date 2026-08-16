@@ -7,11 +7,11 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { FormField, fieldInputClassName } from "@/components/ui/FormField";
 import { ClassroomGeofencePanel } from "@/components/admin/ClassroomGeofencePanel";
-import { MOCK_ADMIN_DASHBOARD } from "@/mocks/admin";
+import { getAdminDashboard } from "@/services/adminService";
 import { syncStatusDisplay } from "@/lib/status";
 
-export default function AdminDashboardPage() {
-  const { summary, classrooms, policy, academicSync } = MOCK_ADMIN_DASHBOARD;
+export default async function AdminDashboardPage() {
+  const { summary, classrooms, policy, academicSync } = await getAdminDashboard();
 
   return (
     <div>

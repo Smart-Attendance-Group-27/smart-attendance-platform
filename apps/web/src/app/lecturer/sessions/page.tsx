@@ -3,11 +3,13 @@ import { Card } from "@/components/ui/Card";
 import { DataTable, CellPrimary } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LinkButton } from "@/components/ui/LinkButton";
-import { MOCK_SESSION_LIST } from "@/mocks/lecturer";
+import { getSessionList } from "@/services/lecturerService";
 import { sessionStatusDisplay } from "@/lib/status";
 import { TodayLecture } from "@/types/lecturer";
 
-export default function LecturerSessionsPage() {
+export default async function LecturerSessionsPage() {
+  const sessions = await getSessionList();
+
   return (
     <div>
       <PageHeader title="Attendance sessions" description="View and monitor your attendance sessions." />
@@ -58,7 +60,7 @@ export default function LecturerSessionsPage() {
               ),
             },
           ]}
-          rows={MOCK_SESSION_LIST}
+          rows={sessions}
           getRowKey={(row) => row.sessionId}
         />
       </Card>

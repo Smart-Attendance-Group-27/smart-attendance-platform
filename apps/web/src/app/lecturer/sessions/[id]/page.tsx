@@ -7,7 +7,7 @@ import { DataTable, CellPrimary } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { LinkButton } from "@/components/ui/LinkButton";
-import { MOCK_SESSION_DETAILS } from "@/mocks/lecturer";
+import { getSessionDetail } from "@/services/lecturerService";
 import { finalStatusDisplay, verificationOutcomeDisplay, verificationOutcomeLabel } from "@/lib/status";
 import { SessionStudentRow } from "@/types/lecturer";
 
@@ -19,7 +19,7 @@ function VerificationCell({ outcome }: { outcome: SessionStudentRow["initialFace
 
 export default async function SessionMonitorPage(props: PageProps<"/lecturer/sessions/[id]">) {
   const { id } = await props.params;
-  const session = MOCK_SESSION_DETAILS[id];
+  const session = await getSessionDetail(id);
 
   if (!session) {
     notFound();

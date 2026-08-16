@@ -5,12 +5,12 @@ import { DataTable, CellPrimary } from "@/components/ui/DataTable";
 import { ActivityList } from "@/components/ui/ActivityList";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
-import { MOCK_LECTURER_COURSES } from "@/mocks/lecturer";
+import { getLecturerCourses } from "@/services/lecturerService";
 import { courseStatusDisplay } from "@/lib/status";
 import { LecturerCourse, TimetableEntry } from "@/types/lecturer";
 
-export default function LecturerCoursesPage() {
-  const { semesterLabel, courses, timetable, sourceStatus } = MOCK_LECTURER_COURSES;
+export default async function LecturerCoursesPage() {
+  const { semesterLabel, courses, timetable, sourceStatus } = await getLecturerCourses();
 
   return (
     <div>
