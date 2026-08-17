@@ -13,9 +13,10 @@ vi.mock("server-only", () => ({}));
 const { decryptSession, encryptSession } = await import("@/lib/auth/session");
 
 const SAMPLE_PAYLOAD: SessionPayload = {
-  userId: "mock-lecturer",
+  userId: "11111111-1111-1111-1111-111111111111",
   name: "Prof. Dulani Meedeniya",
   role: "lecturer",
+  refreshToken: "sample-refresh-token",
   expiresAt: new Date(Date.now() + 60_000).toISOString(),
 };
 
@@ -41,5 +42,17 @@ describe("encryptSession / decryptSession", () => {
   it("returns null for an expired token", async () => {
     const expired = await encryptSession({ ...SAMPLE_PAYLOAD, expiresAt: new Date(Date.now() - 1000).toISOString() });
     expect(await decryptSession(expired)).toBeNull();
+  });
+
+  it("stays well under the ~4096-byte browser cookie limit with realistic Keycloak token sizes", async () => {
+    // Regression test: an earlier version of this cookie stored access+refresh+ID
+    // tokens together and measured ~4931 bytes against a real local Keycloak —
+    // over the limit, so the browser silently dropped the cookie and every login
+    // appeared to redirect to the dashboard but left the user signed out. Only the
+    // refresh token is persisted now; this pins that this stays safely under the
+    // limit even with a realistic (not minimal) refresh token size.
+    const realisticRefreshToken = "x".repeat(750); // observed real Keycloak refresh_token: 726 chars
+    const token = await encryptSession({ ...SAMPLE_PAYLOAD, refreshToken: realisticRefreshToken });
+    expect(token.length).toBeLessThan(2048);
   });
 });
