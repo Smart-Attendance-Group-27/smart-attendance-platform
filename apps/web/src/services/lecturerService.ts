@@ -4,6 +4,8 @@ import {
   ApiLecturerSession,
   ApiManualReviewQueueItem,
   ApiSessionStatus,
+  getLecturerAtRiskStudents,
+  getLecturerAttendanceTrend,
   getLecturerCourses as fetchLecturerCourses,
   getLecturerDashboardOverview,
   getLecturerSessionDetail,
@@ -12,7 +14,7 @@ import {
   getLecturerTimetable,
   getManualReviewQueue,
 } from "@/lib/api/lecturer";
-import { formatClockTime, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
+import { formatClockTime, formatDateLabel, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
 import {
   AtRiskStudent,
   LecturerCoursesData,
@@ -28,11 +30,12 @@ import {
 } from "@/types/lecturer";
 
 // Stage 6: every export below now calls the real core-backend API (see
-// lib/api/lecturer.ts) through the caller's own Keycloak session. Several
-// fields the original mock UI expected — weekly/trend history, at-risk
-// detection, a live activity feed — have no backing feature in core-backend
-// yet. Those are returned as empty/neutral rather than fabricated; see the
-// Stage 6 report for the full list.
+// lib/api/lecturer.ts) through the caller's own Keycloak session.
+// Stage 9 added real weekly attendance trends and at-risk-student detection
+// (both computed server-side from attendance_records — see
+// modules/academic/lecturer_reports). One field still has no backing
+// feature: a live "recent activity" / "attention items" event feed. That
+// stays an empty array rather than fabricated content.
 
 function mapSessionStatus(status: ApiSessionStatus): SessionStatus {
   return status === "active" ? "in_progress" : status;
@@ -56,6 +59,16 @@ function isCheckInOpen(session: ApiLecturerSession, now: Date): boolean {
   return current >= opensAt && current < closesAt;
 }
 
+// Delta between the two most recent points in a weekly trend series. Needs at
+// least two real weeks of data to mean anything; returns a neutral 0 rather
+// than a fabricated number when there's only one point (or none).
+function computeLatestWeekDelta(trend: { attendanceRate: number }[]): number {
+  if (trend.length < 2) return 0;
+  const latest = trend[trend.length - 1].attendanceRate;
+  const previous = trend[trend.length - 2].attendanceRate;
+  return roundToOneDecimal(latest - previous);
+}
+
 function mapToTodayLecture(session: ApiLecturerSession): TodayLecture {
   return {
     sessionId: session.id,
@@ -71,9 +84,10 @@ function mapToTodayLecture(session: ApiLecturerSession): TodayLecture {
 }
 
 export async function getLecturerOverview(): Promise<LecturerOverview> {
-  const [sessions, overview] = await Promise.all([
+  const [sessions, overview, trend] = await Promise.all([
     getLecturerSessions(),
     getLecturerDashboardOverview(),
+    getLecturerAttendanceTrend(),
   ]);
 
   const now = new Date();
@@ -92,16 +106,14 @@ export async function getLecturerOverview(): Promise<LecturerOverview> {
       // rest of the pending-review queue, so this mirrors the total.
       pendingReviewNeedingAction: overview.pendingReviewCount,
       attendanceRatePercent: roundToOneDecimal(overview.averageAttendanceRatePercent),
-      // No historical baseline exists to compute a week-over-week delta from.
-      attendanceRateDeltaPercent: 0,
+      attendanceRateDeltaPercent: computeLatestWeekDelta(trend),
     },
     todayLectures: todaySessions
       .sort((a, b) => a.scheduledStartAt.localeCompare(b.scheduledStartAt))
       .map(mapToTodayLecture),
     // No event feed exists yet for "items needing attention".
     attentionItems: [],
-    // No historical daily/weekly attendance series exists yet.
-    weeklyTrend: [],
+    weeklyTrend: trend.map((point) => ({ label: point.label, attendanceRate: point.attendanceRate })),
     // No recent-activity feed exists yet.
     recentActivity: [],
   };
@@ -314,11 +326,17 @@ export async function getReviewCases(): Promise<ReviewCase[]> {
   });
 }
 
+function mapRiskLevel(attendanceRatePercent: number): AtRiskStudent["riskLevel"] {
+  return attendanceRatePercent < 50 ? "high" : "medium";
+}
+
 export async function getLecturerReports(): Promise<LecturerReportsData> {
-  const [sessions, overview, courses] = await Promise.all([
+  const [sessions, overview, courses, trend, atRiskStudents] = await Promise.all([
     getLecturerSessions(),
     getLecturerDashboardOverview(),
     fetchLecturerCourses(),
+    getLecturerAttendanceTrend(),
+    getLecturerAtRiskStudents(),
   ]);
 
   const closedSessions = sessions.filter((session) => session.status === "closed");
@@ -331,19 +349,26 @@ export async function getLecturerReports(): Promise<LecturerReportsData> {
       overallAttendancePercent: roundToOneDecimal(overview.averageAttendanceRatePercent),
       sessionsCompleted: closedSessions.length,
       averageLateRatePercent,
-      // No historical baseline exists to compute a delta from.
+      // No historical late-rate-specific series exists to compare against —
+      // only the overall attendance trend does (see attendanceRateDeltaPercent
+      // on the dashboard for that comparison).
       averageLateRateDeltaPercent: 0,
-      // No at-risk detection exists yet — see attendanceByCourse for real
-      // per-course rates instead.
-      studentsAtRiskCount: 0,
+      studentsAtRiskCount: atRiskStudents.length,
     },
-    // No historical weekly attendance series exists yet.
-    attendanceTrend: [],
+    attendanceTrend: trend.map((point) => ({ label: point.label, attendanceRate: point.attendanceRate })),
     attendanceByCourse: courses.map((course) => ({
       courseCode: course.courseCode,
       attendanceRatePercent: roundToOneDecimal(course.attendanceRatePercent),
     })),
-    // No at-risk-student detection exists yet.
-    atRiskStudents: [] as AtRiskStudent[],
+    atRiskStudents: atRiskStudents.map((student) => ({
+      studentId: student.studentId,
+      studentIndex: student.registrationNumber,
+      studentName: student.fullName,
+      courseCode: student.courseCode,
+      attendanceRatePercent: roundToOneDecimal(student.attendanceRatePercent),
+      lateCount: student.lateCount,
+      lastAttendedLabel: formatDateLabel(student.lastAttendedAt),
+      riskLevel: mapRiskLevel(student.attendanceRatePercent),
+    })),
   };
 }

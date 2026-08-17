@@ -108,6 +108,21 @@ export type ApiCourseSessionReport = {
   pendingReviewCount: number;
 };
 
+export type ApiWeeklyTrendPoint = {
+  label: string;
+  attendanceRate: number;
+};
+
+export type ApiAtRiskStudent = {
+  studentId: string;
+  registrationNumber: string;
+  fullName: string;
+  courseCode: string;
+  attendanceRatePercent: number;
+  lateCount: number;
+  lastAttendedAt: string | null;
+};
+
 export function getLecturerCourses(): Promise<ApiLecturerCourse[]> {
   return coreBackendFetch("/api/v1/lecturers/me/courses");
 }
@@ -161,4 +176,12 @@ export function getLecturerDashboardOverview(): Promise<ApiLecturerDashboardOver
 
 export function getCourseSessionReport(courseOfferingId: string): Promise<ApiCourseSessionReport[]> {
   return coreBackendFetch(`/api/v1/lecturers/me/reports/courses/${courseOfferingId}`);
+}
+
+export function getLecturerAttendanceTrend(): Promise<ApiWeeklyTrendPoint[]> {
+  return coreBackendFetch("/api/v1/lecturers/me/reports/attendance-trend");
+}
+
+export function getLecturerAtRiskStudents(): Promise<ApiAtRiskStudent[]> {
+  return coreBackendFetch("/api/v1/lecturers/me/reports/at-risk-students");
 }
