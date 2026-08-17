@@ -28,10 +28,10 @@ export const MOCK_ADMIN_DASHBOARD: AdminDashboardData = {
     policyAlertsCount: 2,
   },
   classrooms: [
-    { classroomId: "room-cs-lab-01", classroomCode: "CS-LAB-01", room: "CS-Lab-01", building: "CSE Building", floorNumber: 1, capacity: 60, latitude: 6.7961, longitude: 79.9007, defaultGeofenceRadiusMeters: 25, assignedCoursesCount: 3, status: "active" },
-    { classroomId: "room-lt-301", classroomCode: "LT-301", room: "LT-301", building: "Sumanadasa Building", floorNumber: 3, capacity: 120, latitude: 6.7963, longitude: 79.9009, defaultGeofenceRadiusMeters: 30, assignedCoursesCount: 4, status: "active" },
-    { classroomId: "room-lt-204", classroomCode: "LT-204", room: "LT-204", building: "CSE Building", floorNumber: 2, capacity: 90, latitude: 6.7960, longitude: 79.9005, defaultGeofenceRadiusMeters: 30, assignedCoursesCount: 2, status: "active" },
-    { classroomId: "room-ai-lab-02", classroomCode: "AI-LAB-02", room: "AI-Lab-02", building: "Innovation Hub", floorNumber: 1, capacity: 40, latitude: 6.7965, longitude: 79.9012, defaultGeofenceRadiusMeters: 20, assignedCoursesCount: 2, status: "needs_review" },
+    { classroomId: "room-cs-lab-01", classroomCode: "CS-LAB-01", room: "CS-Lab-01", building: "CSE Building", buildingId: "building-cse", floorNumber: 1, capacity: 60, latitude: 6.7961, longitude: 79.9007, defaultGeofenceRadiusMeters: 25, assignedCoursesCount: 3, status: "active", rawStatus: "active" },
+    { classroomId: "room-lt-301", classroomCode: "LT-301", room: "LT-301", building: "Sumanadasa Building", buildingId: "building-sumanadasa", floorNumber: 3, capacity: 120, latitude: 6.7963, longitude: 79.9009, defaultGeofenceRadiusMeters: 30, assignedCoursesCount: 4, status: "active", rawStatus: "active" },
+    { classroomId: "room-lt-204", classroomCode: "LT-204", room: "LT-204", building: "CSE Building", buildingId: "building-cse", floorNumber: 2, capacity: 90, latitude: 6.7960, longitude: 79.9005, defaultGeofenceRadiusMeters: 30, assignedCoursesCount: 2, status: "active", rawStatus: "active" },
+    { classroomId: "room-ai-lab-02", classroomCode: "AI-LAB-02", room: "AI-Lab-02", building: "Innovation Hub", buildingId: "building-innovation-hub", floorNumber: 1, capacity: 40, latitude: 6.7965, longitude: 79.9012, defaultGeofenceRadiusMeters: 20, assignedCoursesCount: 2, status: "needs_review", rawStatus: "inactive" },
   ],
   policy: {
     checkInWindowMinutes: 10,

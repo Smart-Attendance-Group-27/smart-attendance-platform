@@ -148,6 +148,17 @@ export function getAdminDashboardOverview(): Promise<ApiAdminOverview> {
   return coreBackendFetch("/api/v1/administrators/me/dashboard-overview");
 }
 
+export type ApiClassroomWriteRequest = {
+  buildingId: string;
+  classroomCode: string;
+  floorNumber: number | null;
+  capacity: number | null;
+  latitude: number;
+  longitude: number;
+  defaultGeofenceRadiusM: number;
+  status: string;
+};
+
 export function getBuildings(): Promise<ApiBuilding[]> {
   return coreBackendFetch("/api/v1/administrators/me/buildings");
 }
@@ -156,8 +167,32 @@ export function getClassrooms(): Promise<ApiClassroom[]> {
   return coreBackendFetch("/api/v1/administrators/me/classrooms");
 }
 
+export function createClassroom(body: ApiClassroomWriteRequest): Promise<ApiClassroom> {
+  return coreBackendFetch("/api/v1/administrators/me/classrooms", { method: "POST", body });
+}
+
+export function updateClassroom(
+  classroomId: string,
+  body: ApiClassroomWriteRequest,
+): Promise<ApiClassroom> {
+  return coreBackendFetch(`/api/v1/administrators/me/classrooms/${classroomId}`, {
+    method: "PUT",
+    body,
+  });
+}
+
 export function getUserDirectory(): Promise<ApiUserDirectory> {
   return coreBackendFetch("/api/v1/administrators/me/users");
+}
+
+export function updateAccountStatus(
+  userId: string,
+  accountStatus: "active" | "suspended",
+): Promise<{ userId: string; accountStatus: string }> {
+  return coreBackendFetch(`/api/v1/administrators/me/users/${userId}/account-status`, {
+    method: "PATCH",
+    body: { accountStatus },
+  });
 }
 
 export function getAcademicData(): Promise<ApiAcademicData> {

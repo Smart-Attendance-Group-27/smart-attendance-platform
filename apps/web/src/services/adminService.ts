@@ -3,6 +3,7 @@ import {
   getAcademicData as fetchAcademicData,
   getAdminDashboardOverview,
   getAuditLogs as fetchAuditLogs,
+  getBuildings as fetchBuildings,
   getClassrooms,
   getReferenceFaces as fetchReferenceFaces,
   getUserDirectory as fetchUserDirectory,
@@ -13,6 +14,7 @@ import {
   AcademicData,
   AdminDashboardData,
   AuditLogEntry,
+  BuildingOption,
   Classroom,
   InstitutionReportsData,
   ReadinessStatus,
@@ -44,6 +46,11 @@ function mapReadinessStatus(status: string): ReadinessStatus {
   return "not_checked";
 }
 
+export async function getBuildingOptions(): Promise<BuildingOption[]> {
+  const buildings = await fetchBuildings();
+  return buildings.map((building) => ({ id: building.id, buildingName: building.buildingName }));
+}
+
 export async function getAdminDashboard(): Promise<AdminDashboardData> {
   const [overview, classrooms] = await Promise.all([getAdminDashboardOverview(), getClassrooms()]);
 
@@ -61,6 +68,7 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
       classroomCode: classroom.classroomCode,
       room: classroom.classroomCode,
       building: classroom.buildingName,
+      buildingId: classroom.buildingId,
       floorNumber: classroom.floorNumber ?? 0,
       capacity: classroom.capacity ?? 0,
       latitude: classroom.latitude,
@@ -68,6 +76,7 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
       defaultGeofenceRadiusMeters: classroom.defaultGeofenceRadiusM,
       assignedCoursesCount: classroom.assignedCoursesCount,
       status: mapClassroomStatus(classroom.status),
+      rawStatus: classroom.status,
     })),
     // Not backed by a real table yet — see the module comment above.
     policy: MOCK_ADMIN_DASHBOARD.policy,

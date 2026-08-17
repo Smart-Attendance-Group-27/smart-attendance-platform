@@ -18,6 +18,7 @@ export type Classroom = {
   classroomCode: string;
   room: string;
   building: string;
+  buildingId: string;
   floorNumber: number;
   capacity: number;
   latitude: number;
@@ -25,6 +26,12 @@ export type Classroom = {
   defaultGeofenceRadiusMeters: number;
   assignedCoursesCount: number;
   status: ClassroomStatus;
+  rawStatus: string;
+};
+
+export type BuildingOption = {
+  id: string;
+  buildingName: string;
 };
 
 export type AttendancePolicy = {
