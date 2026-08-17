@@ -29,6 +29,15 @@ jest.mock('expo-camera', () => {
   };
 });
 
+jest.mock('../../auth/context/AuthContext', () => ({
+  useAuth: () => ({
+    session: {
+      status: 'authenticated',
+      accessToken: 'header.payload.signature',
+    },
+  }),
+}));
+
 describe('QrScannerRoute', () => {
   beforeEach(() => {
     mockParams = { sessionId: 'session-1' };
