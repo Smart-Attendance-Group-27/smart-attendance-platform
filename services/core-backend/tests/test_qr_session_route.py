@@ -4,13 +4,26 @@ from uuid import UUID
 
 from fastapi.testclient import TestClient
 
+from conftest import (
+    LINKED_LECTURER_SUBJECT,
+    LINKED_STUDENT_SUBJECT,
+    FakePool,
+    build_authentication_service_for_tests,
+    build_settings,
+    default_connection,
+)
 from main import create_app
 from modules.attendance_sessions.qr_session.exception import (
+    ActiveStudentProfileNotFoundError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
     DynamicQrConfigurationError,
     DynamicQrSessionUnavailableError,
+    LecturerSessionAccessError,
+    QrNotRequiredError,
     QrSessionNotFoundError,
+    StudentNotEligibleError,
+    VerificationNotStartedError,
 )
 from modules.attendance_sessions.qr_session.route import get_qr_session_service
 from modules.attendance_sessions.qr_session.service import (
@@ -18,6 +31,22 @@ from modules.attendance_sessions.qr_session.service import (
     CurrentDynamicQrSession,
     VerifiedQrSession,
 )
+from modules.identity.auth.dependencies import get_authentication_service
+
+SESSION_ID = "40000000-0000-0000-0000-000000000001"
+QR_SESSION_ID = "50000000-0000-0000-0000-000000000001"
+
+
+def authorize(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def lecturer_token(make_access_token) -> str:
+    return make_access_token(subject=LINKED_LECTURER_SUBJECT, roles=("lecturer",))
+
+
+def student_token(make_access_token) -> str:
+    return make_access_token(subject=LINKED_STUDENT_SUBJECT, roles=("student",))
 
 
 class SuccessfulQrSessionService:
@@ -26,6 +55,7 @@ class SuccessfulQrSessionService:
         pool: object,
         attendance_session_id: UUID,
         valid_for_seconds: int,
+        lecturer_id: UUID,
     ) -> CreatedQrSession:
         return CreatedQrSession(
             qr_session_id=UUID("50000000-0000-0000-0000-000000000001"),
@@ -44,6 +74,7 @@ class SuccessfulQrSessionService:
         attendance_session_id: UUID,
         valid_for_seconds: int,
         refresh_interval_seconds: int,
+        lecturer_id: UUID,
     ) -> CreatedQrSession:
         return CreatedQrSession(
             qr_session_id=UUID("50000000-0000-0000-0000-000000000002"),
@@ -61,12 +92,21 @@ class SuccessfulQrSessionService:
         pool: object,
         qr_session_id: UUID,
         qr_value: str,
+        student_user_id: UUID,
     ) -> VerifiedQrSession:
         return VerifiedQrSession(
             qr_session_id=qr_session_id,
             status="accepted",
             verified_at=datetime(2026, 8, 6, 10, 3, tzinfo=UTC),
         )
+
+    async def assert_lecturer_owns_qr_session(
+        self,
+        pool: object,
+        qr_session_id: UUID,
+        lecturer_id: UUID,
+    ) -> None:
+        return None
 
     async def get_current_dynamic_qr_session(
         self,
@@ -95,33 +135,68 @@ class SuccessfulQrSessionService:
         )
 
 
-class MissingAttendanceSessionService:
+class MissingAttendanceSessionService(SuccessfulQrSessionService):
     async def create_static_qr_session(
         self,
         pool: object,
         attendance_session_id: UUID,
         valid_for_seconds: int,
+        lecturer_id: UUID,
     ) -> CreatedQrSession:
         raise AttendanceSessionNotFoundError()
 
 
-class InactiveAttendanceSessionService:
+class InactiveAttendanceSessionService(SuccessfulQrSessionService):
     async def create_static_qr_session(
         self,
         pool: object,
         attendance_session_id: UUID,
         valid_for_seconds: int,
+        lecturer_id: UUID,
     ) -> CreatedQrSession:
         raise AttendanceSessionNotActiveError("Attendance session is not active.")
 
 
+class NotOwnedAttendanceSessionService(SuccessfulQrSessionService):
+    async def create_static_qr_session(
+        self,
+        pool: object,
+        attendance_session_id: UUID,
+        valid_for_seconds: int,
+        lecturer_id: UUID,
+    ) -> CreatedQrSession:
+        raise LecturerSessionAccessError()
+
+
+class QrNotRequiredService(SuccessfulQrSessionService):
+    async def create_static_qr_session(
+        self,
+        pool: object,
+        attendance_session_id: UUID,
+        valid_for_seconds: int,
+        lecturer_id: UUID,
+    ) -> CreatedQrSession:
+        raise QrNotRequiredError()
+
+
 class MissingQrSessionService(SuccessfulQrSessionService):
-    async def get_current_dynamic_qr_session(
+    async def assert_lecturer_owns_qr_session(
         self,
         pool: object,
         qr_session_id: UUID,
-    ) -> CurrentDynamicQrSession:
+        lecturer_id: UUID,
+    ) -> None:
         raise QrSessionNotFoundError()
+
+
+class NotOwnedQrSessionService(SuccessfulQrSessionService):
+    async def assert_lecturer_owns_qr_session(
+        self,
+        pool: object,
+        qr_session_id: UUID,
+        lecturer_id: UUID,
+    ) -> None:
+        raise LecturerSessionAccessError()
 
 
 class StaticQrSessionCurrentService(SuccessfulQrSessionService):
@@ -152,20 +227,65 @@ class MissingDynamicQrSecretVerifyService(SuccessfulQrSessionService):
         pool: object,
         qr_session_id: UUID,
         qr_value: str,
+        student_user_id: UUID,
     ) -> VerifiedQrSession:
         raise DynamicQrConfigurationError(
             "Dynamic QR HMAC secret is not configured.",
         )
 
 
-def test_create_static_qr_session_route_returns_camel_case_response() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
+class InactiveStudentProfileVerifyService(SuccessfulQrSessionService):
+    async def verify_qr_session(
+        self,
+        pool: object,
+        qr_session_id: UUID,
+        qr_value: str,
+        student_user_id: UUID,
+    ) -> VerifiedQrSession:
+        raise ActiveStudentProfileNotFoundError()
 
-    with TestClient(app) as client:
+
+class IneligibleStudentVerifyService(SuccessfulQrSessionService):
+    async def verify_qr_session(
+        self,
+        pool: object,
+        qr_session_id: UUID,
+        qr_value: str,
+        student_user_id: UUID,
+    ) -> VerifiedQrSession:
+        raise StudentNotEligibleError()
+
+
+class VerificationNotStartedVerifyService(SuccessfulQrSessionService):
+    async def verify_qr_session(
+        self,
+        pool: object,
+        qr_session_id: UUID,
+        qr_value: str,
+        student_user_id: UUID,
+    ) -> VerifiedQrSession:
+        raise VerificationNotStartedError()
+
+
+def build_client(jwks_document, service) -> TestClient:
+    app = create_app(enable_database=False)
+    app.state.settings = build_settings()
+    app.state.db_pool = FakePool(default_connection())
+    app.dependency_overrides[get_authentication_service] = (
+        lambda: build_authentication_service_for_tests(jwks_document)
+    )
+    app.dependency_overrides[get_qr_session_service] = lambda: service
+    return TestClient(app)
+
+
+def test_create_static_qr_session_route_returns_camel_case_response(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
         response = client.post(
-            "/api/v1/attendance-sessions/40000000-0000-0000-0000-000000000001/qr-sessions",
+            f"/api/v1/attendance-sessions/{SESSION_ID}/qr-sessions",
+            headers=authorize(lecturer_token(make_access_token)),
             json={"validForSeconds": 300},
         )
 
@@ -182,27 +302,51 @@ def test_create_static_qr_session_route_returns_camel_case_response() -> None:
     }
 
 
-def test_create_static_qr_session_route_accepts_optional_body() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
-
-    with TestClient(app) as client:
+def test_create_qr_session_route_rejects_non_lecturer_role(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
         response = client.post(
-            "/api/v1/attendance-sessions/40000000-0000-0000-0000-000000000001/qr-sessions",
+            f"/api/v1/attendance-sessions/{SESSION_ID}/qr-sessions",
+            headers=authorize(student_token(make_access_token)),
+            json={"validForSeconds": 300},
+        )
+
+    assert response.status_code == 403
+
+
+def test_create_qr_session_route_requires_bearer_token(jwks_document) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
+        response = client.post(
+            f"/api/v1/attendance-sessions/{SESSION_ID}/qr-sessions",
+            json={"validForSeconds": 300},
+        )
+
+    assert response.status_code == 401
+
+
+def test_create_static_qr_session_route_accepts_optional_body(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
+        response = client.post(
+            f"/api/v1/attendance-sessions/{SESSION_ID}/qr-sessions",
+            headers=authorize(lecturer_token(make_access_token)),
         )
 
     assert response.status_code == 201
 
 
-def test_create_qr_session_route_accepts_dynamic_mode_contract() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
-
-    with TestClient(app) as client:
+def test_create_qr_session_route_accepts_dynamic_mode_contract(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
         response = client.post(
-            "/api/v1/attendance-sessions/40000000-0000-0000-0000-000000000001/qr-sessions",
+            f"/api/v1/attendance-sessions/{SESSION_ID}/qr-sessions",
+            headers=authorize(lecturer_token(make_access_token)),
             json={
                 "mode": "dynamic",
                 "validForSeconds": 900,
@@ -223,42 +367,70 @@ def test_create_qr_session_route_accepts_dynamic_mode_contract() -> None:
     }
 
 
-def test_create_static_qr_session_route_rejects_invalid_validity() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
-
-    with TestClient(app) as client:
+def test_create_static_qr_session_route_rejects_invalid_validity(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
         response = client.post(
-            "/api/v1/attendance-sessions/40000000-0000-0000-0000-000000000001/qr-sessions",
+            f"/api/v1/attendance-sessions/{SESSION_ID}/qr-sessions",
+            headers=authorize(lecturer_token(make_access_token)),
             json={"validForSeconds": 10},
         )
 
     assert response.status_code == 422
 
 
-def test_create_static_qr_session_route_maps_missing_session_to_404() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = MissingAttendanceSessionService
-
-    with TestClient(app) as client:
+def test_create_static_qr_session_route_maps_missing_session_to_404(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, MissingAttendanceSessionService()) as client:
         response = client.post(
-            "/api/v1/attendance-sessions/40000000-0000-0000-0000-000000000001/qr-sessions",
+            f"/api/v1/attendance-sessions/{SESSION_ID}/qr-sessions",
+            headers=authorize(lecturer_token(make_access_token)),
             json={"validForSeconds": 300},
         )
 
     assert response.status_code == 404
 
 
-def test_create_static_qr_session_route_maps_inactive_session_to_409() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = InactiveAttendanceSessionService
-
-    with TestClient(app) as client:
+def test_create_static_qr_session_route_maps_not_owned_session_to_404(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, NotOwnedAttendanceSessionService()) as client:
         response = client.post(
-            "/api/v1/attendance-sessions/40000000-0000-0000-0000-000000000001/qr-sessions",
+            f"/api/v1/attendance-sessions/{SESSION_ID}/qr-sessions",
+            headers=authorize(lecturer_token(make_access_token)),
+            json={"validForSeconds": 300},
+        )
+
+    assert response.status_code == 404
+
+
+def test_create_static_qr_session_route_maps_qr_not_required_to_409(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, QrNotRequiredService()) as client:
+        response = client.post(
+            f"/api/v1/attendance-sessions/{SESSION_ID}/qr-sessions",
+            headers=authorize(lecturer_token(make_access_token)),
+            json={"validForSeconds": 300},
+        )
+
+    assert response.status_code == 409
+
+
+def test_create_static_qr_session_route_maps_inactive_session_to_409(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, InactiveAttendanceSessionService()) as client:
+        response = client.post(
+            f"/api/v1/attendance-sessions/{SESSION_ID}/qr-sessions",
+            headers=authorize(lecturer_token(make_access_token)),
             json={"validForSeconds": 300},
         )
 
@@ -266,14 +438,14 @@ def test_create_static_qr_session_route_maps_inactive_session_to_409() -> None:
     assert response.json() == {"detail": "Attendance session is not active."}
 
 
-def test_verify_qr_session_route_returns_camel_case_response() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
-
-    with TestClient(app) as client:
+def test_verify_qr_session_route_returns_camel_case_response(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
         response = client.post(
-            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/verify",
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/verify",
+            headers=authorize(student_token(make_access_token)),
             json={"qrValue": "raw-test-token"},
         )
 
@@ -285,44 +457,66 @@ def test_verify_qr_session_route_returns_camel_case_response() -> None:
     }
 
 
-def test_verify_qr_session_route_rejects_malformed_uuid() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
+def test_verify_qr_session_route_rejects_non_student_role(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
+        response = client.post(
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/verify",
+            headers=authorize(lecturer_token(make_access_token)),
+            json={"qrValue": "raw-test-token"},
+        )
 
-    with TestClient(app) as client:
+    assert response.status_code == 403
+
+
+def test_verify_qr_session_route_requires_bearer_token(jwks_document) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
+        response = client.post(
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/verify",
+            json={"qrValue": "raw-test-token"},
+        )
+
+    assert response.status_code == 401
+
+
+def test_verify_qr_session_route_rejects_malformed_uuid(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
         response = client.post(
             "/api/v1/qr-sessions/not-a-uuid/verify",
+            headers=authorize(student_token(make_access_token)),
             json={"qrValue": "raw-test-token"},
         )
 
     assert response.status_code == 422
 
 
-def test_verify_qr_session_route_rejects_missing_qr_value() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
-
-    with TestClient(app) as client:
+def test_verify_qr_session_route_rejects_missing_qr_value(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
         response = client.post(
-            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/verify",
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/verify",
+            headers=authorize(student_token(make_access_token)),
             json={},
         )
 
     assert response.status_code == 422
 
 
-def test_verify_qr_session_route_maps_dynamic_config_error_to_500() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = (
-        MissingDynamicQrSecretVerifyService
-    )
-
-    with TestClient(app) as client:
+def test_verify_qr_session_route_maps_dynamic_config_error_to_500(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, MissingDynamicQrSecretVerifyService()) as client:
         response = client.post(
-            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/verify",
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/verify",
+            headers=authorize(student_token(make_access_token)),
             json={"qrValue": "dynamic-qr-value"},
         )
 
@@ -332,14 +526,56 @@ def test_verify_qr_session_route_maps_dynamic_config_error_to_500() -> None:
     }
 
 
-def test_get_current_dynamic_qr_session_route_returns_camel_case_response() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
+def test_verify_qr_session_route_maps_missing_student_profile_to_404(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, InactiveStudentProfileVerifyService()) as client:
+        response = client.post(
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/verify",
+            headers=authorize(student_token(make_access_token)),
+            json={"qrValue": "raw-test-token"},
+        )
 
-    with TestClient(app) as client:
+    assert response.status_code == 404
+
+
+def test_verify_qr_session_route_maps_ineligible_student_to_403(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, IneligibleStudentVerifyService()) as client:
+        response = client.post(
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/verify",
+            headers=authorize(student_token(make_access_token)),
+            json={"qrValue": "raw-test-token"},
+        )
+
+    assert response.status_code == 403
+
+
+def test_verify_qr_session_route_maps_verification_not_started_to_409(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, VerificationNotStartedVerifyService()) as client:
+        response = client.post(
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/verify",
+            headers=authorize(student_token(make_access_token)),
+            json={"qrValue": "raw-test-token"},
+        )
+
+    assert response.status_code == 409
+
+
+def test_get_current_dynamic_qr_session_route_returns_camel_case_response(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
         response = client.get(
-            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/current",
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/current",
+            headers=authorize(lecturer_token(make_access_token)),
         )
 
     assert response.status_code == 200
@@ -352,28 +588,53 @@ def test_get_current_dynamic_qr_session_route_returns_camel_case_response() -> N
     }
 
 
-def test_get_current_dynamic_qr_session_route_maps_missing_session_to_404() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = MissingQrSessionService
-
-    with TestClient(app) as client:
+def test_get_current_dynamic_qr_session_route_rejects_non_lecturer_role(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
         response = client.get(
-            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/current",
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/current",
+            headers=authorize(student_token(make_access_token)),
+        )
+
+    assert response.status_code == 403
+
+
+def test_get_current_dynamic_qr_session_route_maps_not_owned_to_404(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, NotOwnedQrSessionService()) as client:
+        response = client.get(
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/current",
+            headers=authorize(lecturer_token(make_access_token)),
         )
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "QR session was not found."}
 
 
-def test_get_current_dynamic_qr_session_route_rejects_static_session() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = StaticQrSessionCurrentService
-
-    with TestClient(app) as client:
+def test_get_current_dynamic_qr_session_route_maps_missing_session_to_404(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, MissingQrSessionService()) as client:
         response = client.get(
-            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/current",
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/current",
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    assert response.status_code == 404
+
+
+def test_get_current_dynamic_qr_session_route_rejects_static_session(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, StaticQrSessionCurrentService()) as client:
+        response = client.get(
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/current",
+            headers=authorize(lecturer_token(make_access_token)),
         )
 
     assert response.status_code == 409
@@ -382,14 +643,14 @@ def test_get_current_dynamic_qr_session_route_rejects_static_session() -> None:
     }
 
 
-def test_get_current_dynamic_qr_session_route_rejects_missing_secret() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = MissingDynamicQrSecretService
-
-    with TestClient(app) as client:
+def test_get_current_dynamic_qr_session_route_rejects_missing_secret(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, MissingDynamicQrSecretService()) as client:
         response = client.get(
-            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/current",
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/current",
+            headers=authorize(lecturer_token(make_access_token)),
         )
 
     assert response.status_code == 500
@@ -398,15 +659,15 @@ def test_get_current_dynamic_qr_session_route_rejects_missing_secret() -> None:
     }
 
 
-def test_stream_dynamic_qr_session_route_sends_named_rotation_event() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = SuccessfulQrSessionService
-
-    with TestClient(app) as client:
+def test_stream_dynamic_qr_session_route_sends_named_rotation_event(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
         with client.stream(
             "GET",
-            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/stream",
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/stream",
+            headers=authorize(lecturer_token(make_access_token)),
         ) as response:
             body = next(response.iter_text())
 
@@ -424,17 +685,24 @@ def test_stream_dynamic_qr_session_route_sends_named_rotation_event() -> None:
     }
 
 
-def test_stream_dynamic_qr_session_route_rejects_static_session_before_streaming() -> None:
-    app = create_app(enable_database=False)
-    app.state.db_pool = object()
-    app.dependency_overrides[get_qr_session_service] = StaticQrSessionCurrentService
-
-    with TestClient(app) as client:
+def test_stream_dynamic_qr_session_route_rejects_static_session_before_streaming(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, StaticQrSessionCurrentService()) as client:
         response = client.get(
-            "/api/v1/qr-sessions/50000000-0000-0000-0000-000000000001/stream",
+            f"/api/v1/qr-sessions/{QR_SESSION_ID}/stream",
+            headers=authorize(lecturer_token(make_access_token)),
         )
 
     assert response.status_code == 409
     assert response.json() == {
         "detail": "QR session is not a dynamic QR session.",
     }
+
+
+def test_stream_dynamic_qr_session_route_requires_bearer_token(jwks_document) -> None:
+    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
+        response = client.get(f"/api/v1/qr-sessions/{QR_SESSION_ID}/stream")
+
+    assert response.status_code == 401

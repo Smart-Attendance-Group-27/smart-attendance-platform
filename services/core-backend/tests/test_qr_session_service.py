@@ -5,11 +5,16 @@ from uuid import UUID
 import pytest
 
 from modules.attendance_sessions.qr_session.exception import (
+    ActiveStudentProfileNotFoundError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
     DynamicQrConfigurationError,
     DynamicQrSessionUnavailableError,
+    LecturerSessionAccessError,
+    QrNotRequiredError,
     QrSessionNotFoundError,
+    StudentNotEligibleError,
+    VerificationNotStartedError,
 )
 from modules.attendance_sessions.qr_session.crypto import generate_dynamic_qr_value
 from modules.attendance_sessions.qr_session.repository import (
@@ -18,6 +23,15 @@ from modules.attendance_sessions.qr_session.repository import (
 )
 from modules.attendance_sessions.qr_session.metadata import QrBatchMetadata
 from modules.attendance_sessions.qr_session.service import QrSessionService
+from modules.attendance_verification.geofence.repository import (
+    IN_PROGRESS_STATUS,
+    StudentProfileRecord,
+    VerificationAttemptRecord,
+)
+
+LECTURER_ID = UUID("20000000-0000-0000-0000-000000000002")
+STUDENT_USER_ID = UUID("20000000-0000-0000-0000-000000000011")
+STUDENT_PROFILE_ID = UUID("23000000-0000-0000-0000-000000000001")
 
 
 class FakeTransaction:
@@ -56,12 +70,17 @@ class FakeRepository:
     def __init__(self, session: AttendanceSessionRecord | None) -> None:
         self.session = session
         self.closed_session_id: UUID | None = None
-        self.inserted_batch: tuple[UUID, UUID, str, int | None, datetime, datetime] | None = None
+        self.inserted_batch: tuple[UUID, UUID, str, int | None, datetime, datetime, UUID] | None = None
         self.inserted_token: tuple[UUID, UUID, str, datetime, datetime] | None = None
         self.deactivated_batch_ids: list[UUID] = []
         self.metadata: QrBatchMetadata | None = None
         self.verification_record: QrVerificationRecord | None = None
         self.fetched_qr_session_id: UUID | None = None
+        self.owns_session = True
+        self.owns_qr_session = True
+        self.qr_token_id_for_batch: UUID | None = None
+        self.next_attempt_number = 1
+        self.inserted_qr_validation_attempts: list[tuple] = []
 
     async def lock_attendance_session(
         self,
@@ -69,6 +88,22 @@ class FakeRepository:
         session_id: UUID,
     ) -> AttendanceSessionRecord | None:
         return self.session
+
+    async def session_owned_by_lecturer(
+        self,
+        connection: FakeConnection,
+        session_id: UUID,
+        lecturer_id: UUID,
+    ) -> bool:
+        return self.owns_session
+
+    async def qr_batch_owned_by_lecturer(
+        self,
+        connection: FakeConnection,
+        qr_session_id: UUID,
+        lecturer_id: UUID,
+    ) -> bool:
+        return self.owns_qr_session
 
     async def close_existing_active_qr_sessions(
         self,
@@ -88,6 +123,7 @@ class FakeRepository:
         refresh_interval_seconds: int | None,
         activated_at: datetime,
         expires_at: datetime,
+        issued_by: UUID,
     ) -> None:
         self.inserted_batch = (
             qr_session_id,
@@ -96,6 +132,7 @@ class FakeRepository:
             refresh_interval_seconds,
             activated_at,
             expires_at,
+            issued_by,
         )
 
     async def insert_qr_token(
@@ -125,11 +162,51 @@ class FakeRepository:
         self.fetched_qr_session_id = qr_session_id
         return self.verification_record
 
+    async def find_qr_token_id_for_batch(
+        self,
+        connection: FakeConnection,
+        qr_batch_id: UUID,
+    ) -> UUID | None:
+        return self.qr_token_id_for_batch
+
+    async def next_qr_attempt_number(
+        self,
+        connection: FakeConnection,
+        verification_attempt_id: UUID,
+    ) -> int:
+        return self.next_attempt_number
+
+    async def insert_qr_validation_attempt(
+        self,
+        connection: FakeConnection,
+        qr_validation_attempt_id: UUID,
+        verification_attempt_id: UUID,
+        qr_token_id: UUID | None,
+        attempt_number: int,
+        validation_status: str,
+        failure_reason: str | None,
+        validated_at: datetime,
+    ) -> None:
+        self.inserted_qr_validation_attempts.append(
+            (
+                qr_validation_attempt_id,
+                verification_attempt_id,
+                qr_token_id,
+                attempt_number,
+                validation_status,
+                failure_reason,
+                validated_at,
+            )
+        )
+
 
 class FakeVerificationRepository:
     def __init__(self, record: QrVerificationRecord | None) -> None:
         self.record = record
         self.requested_qr_session_id: UUID | None = None
+        self.qr_token_id_for_batch: UUID | None = None
+        self.next_attempt_number = 1
+        self.inserted_qr_validation_attempts: list[tuple] = []
 
     async def fetch_qr_verification_record(
         self,
@@ -138,6 +215,97 @@ class FakeVerificationRepository:
     ) -> QrVerificationRecord | None:
         self.requested_qr_session_id = qr_session_id
         return self.record
+
+    async def find_qr_token_id_for_batch(
+        self,
+        connection: FakeConnection,
+        qr_batch_id: UUID,
+    ) -> UUID | None:
+        return self.qr_token_id_for_batch
+
+    async def next_qr_attempt_number(
+        self,
+        connection: FakeConnection,
+        verification_attempt_id: UUID,
+    ) -> int:
+        return self.next_attempt_number
+
+    async def insert_qr_validation_attempt(
+        self,
+        connection: FakeConnection,
+        qr_validation_attempt_id: UUID,
+        verification_attempt_id: UUID,
+        qr_token_id: UUID | None,
+        attempt_number: int,
+        validation_status: str,
+        failure_reason: str | None,
+        validated_at: datetime,
+    ) -> None:
+        self.inserted_qr_validation_attempts.append(
+            (
+                qr_validation_attempt_id,
+                verification_attempt_id,
+                qr_token_id,
+                attempt_number,
+                validation_status,
+                failure_reason,
+                validated_at,
+            )
+        )
+
+
+_UNSET = object()
+_DEFAULT_ATTEMPT = VerificationAttemptRecord(
+    id=UUID("70000000-0000-0000-0000-000000000001"),
+    status=IN_PROGRESS_STATUS,
+    failure_reason=None,
+)
+
+
+class FakeStudentVerificationRepository:
+    """Stands in for GeofenceRepository's student-side lookups QR reuses."""
+
+    def __init__(
+        self,
+        *,
+        student: StudentProfileRecord | None = None,
+        eligible: bool = True,
+        attempt: object = _UNSET,
+    ) -> None:
+        self.student = (
+            student
+            if student is not None
+            else StudentProfileRecord(id=STUDENT_PROFILE_ID, profile_status="active")
+        )
+        self.eligible = eligible
+        self.attempt = _DEFAULT_ATTEMPT if attempt is _UNSET else attempt
+        self.requested_user_id: UUID | None = None
+
+    async def lock_student_profile_for_user(
+        self,
+        connection: FakeConnection,
+        user_id: UUID,
+    ) -> StudentProfileRecord | None:
+        self.requested_user_id = user_id
+        return self.student
+
+    async def lock_student_eligibility(
+        self,
+        connection: FakeConnection,
+        session_id: UUID,
+        student_id: UUID,
+    ) -> bool:
+        return self.eligible
+
+    async def find_verification_attempt(
+        self,
+        connection: FakeConnection,
+        session_id: UUID,
+        student_id: UUID,
+        *,
+        lock_for_update: bool = False,
+    ) -> VerificationAttemptRecord | None:
+        return self.attempt
 
 
 class FakeQrBatchCache:
@@ -200,6 +368,7 @@ async def test_create_static_qr_session_hashes_raw_value_and_caps_expiration() -
         FakePool(),
         attendance_session_id,
         valid_for_seconds=3600,
+        lecturer_id=LECTURER_ID,
     )
 
     expected_hash = sha256("raw-test-token".encode("utf-8")).hexdigest()
@@ -219,6 +388,7 @@ async def test_create_static_qr_session_hashes_raw_value_and_caps_expiration() -
         None,
         current_time,
         current_time + timedelta(minutes=20),
+        LECTURER_ID,
     )
     assert repository.inserted_token == (
         qr_token_id,
@@ -241,6 +411,7 @@ async def test_create_static_qr_session_rejects_missing_attendance_session() -> 
             FakePool(),
             UUID("40000000-0000-0000-0000-000000000001"),
             valid_for_seconds=300,
+            lecturer_id=LECTURER_ID,
         )
 
 
@@ -262,7 +433,7 @@ async def test_create_static_qr_session_rejects_ended_session() -> None:
     )
 
     with pytest.raises(AttendanceSessionNotActiveError, match="already ended"):
-        await service.create_static_qr_session(FakePool(), attendance_session_id, 300)
+        await service.create_static_qr_session(FakePool(), attendance_session_id, 300, LECTURER_ID)
 
 
 @pytest.mark.asyncio
@@ -290,6 +461,7 @@ async def test_create_dynamic_qr_session_creates_batch_without_token_history() -
         attendance_session_id,
         valid_for_seconds=900,
         refresh_interval_seconds=15,
+        lecturer_id=LECTURER_ID,
     )
 
     assert result.qr_session_id == qr_session_id
@@ -307,6 +479,7 @@ async def test_create_dynamic_qr_session_creates_batch_without_token_history() -
         15,
         current_time,
         current_time + timedelta(minutes=15),
+        LECTURER_ID,
     )
     assert repository.inserted_token is None
 
@@ -424,6 +597,7 @@ async def test_create_dynamic_qr_session_invalidates_replaced_batch_cache() -> N
         attendance_session_id,
         valid_for_seconds=900,
         refresh_interval_seconds=15,
+        lecturer_id=LECTURER_ID,
     )
 
     assert cache.delete_calls == [old_qr_session_id]
@@ -456,6 +630,7 @@ async def test_create_dynamic_qr_session_caches_active_dynamic_metadata() -> Non
         attendance_session_id,
         valid_for_seconds=900,
         refresh_interval_seconds=15,
+        lecturer_id=LECTURER_ID,
     )
 
     assert len(cache.set_calls) == 1
@@ -887,12 +1062,13 @@ async def test_verify_qr_session_accepts_correct_qr_value() -> None:
             token_expires_at=current_time + timedelta(minutes=5),
         )
     )
-    service = QrSessionService(repository=repository, clock=lambda: current_time)
+    service = QrSessionService(repository=repository, clock=lambda: current_time, verification_repository=FakeStudentVerificationRepository())
 
     result = await service.verify_qr_session(
         FakePool(),
         qr_session_id,
         "raw-test-token",
+        STUDENT_USER_ID,
     )
 
     assert result.qr_session_id == qr_session_id
@@ -914,9 +1090,10 @@ async def test_verify_qr_session_rejects_wrong_qr_value() -> None:
             )
         ),
         clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(),
     )
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, "wrong-token")
+    result = await service.verify_qr_session(FakePool(), qr_session_id, "wrong-token", STUDENT_USER_ID)
 
     assert result.status == "invalid"
 
@@ -935,9 +1112,10 @@ async def test_verify_qr_session_returns_expired_for_expired_token() -> None:
             )
         ),
         clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(),
     )
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token")
+    result = await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
 
     assert result.status == "expired"
 
@@ -957,9 +1135,10 @@ async def test_verify_qr_session_returns_closed_for_revoked_token() -> None:
             )
         ),
         clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(),
     )
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token")
+    result = await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
 
     assert result.status == "closed"
 
@@ -980,9 +1159,10 @@ async def test_verify_qr_session_returns_closed_for_closed_qr_batch() -> None:
             )
         ),
         clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(),
     )
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token")
+    result = await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
 
     assert result.status == "closed"
 
@@ -1029,25 +1209,26 @@ async def test_verify_qr_session_returns_closed_for_closed_cancelled_or_ended_at
             )
         ),
         clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(),
     )
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token")
+    result = await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
 
     assert result.status == "closed"
 
 
 @pytest.mark.asyncio
-async def test_verify_qr_session_returns_invalid_for_missing_qr_session() -> None:
+async def test_verify_qr_session_raises_not_found_for_missing_qr_session() -> None:
     current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
     qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
     service = QrSessionService(
         repository=FakeVerificationRepository(None),
         clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(),
     )
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token")
-
-    assert result.status == "invalid"
+    with pytest.raises(QrSessionNotFoundError):
+        await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
 
 
 @pytest.mark.asyncio
@@ -1065,9 +1246,10 @@ async def test_verify_qr_session_hashes_submitted_qr_value_before_comparison() -
             )
         ),
         clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(),
     )
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token")
+    result = await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
 
     assert result.status == "accepted"
 
@@ -1087,9 +1269,9 @@ async def test_verify_qr_session_does_not_pass_raw_qr_value_to_repository_or_log
             token_expires_at=current_time + timedelta(minutes=5),
         )
     )
-    service = QrSessionService(repository=repository, clock=lambda: current_time)
+    service = QrSessionService(repository=repository, clock=lambda: current_time, verification_repository=FakeStudentVerificationRepository())
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, raw_qr_value)
+    result = await service.verify_qr_session(FakePool(), qr_session_id, raw_qr_value, STUDENT_USER_ID)
 
     assert result.status == "accepted"
     assert repository.requested_qr_session_id == qr_session_id
@@ -1109,11 +1291,12 @@ async def test_verify_dynamic_qr_session_accepts_current_hmac_value() -> None:
     service = QrSessionService(
         repository=repository,
         clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(),
         dynamic_qr_hmac_secret="test-secret",
     )
     qr_value = generate_dynamic_qr_value(qr_session_id, 17, "test-secret")
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, qr_value)
+    result = await service.verify_qr_session(FakePool(), qr_session_id, qr_value, STUDENT_USER_ID)
 
     assert result.status == "accepted"
     assert result.verified_at == current_time
@@ -1132,10 +1315,11 @@ async def test_verify_dynamic_qr_session_rejects_wrong_value() -> None:
     service = QrSessionService(
         repository=repository,
         clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(),
         dynamic_qr_hmac_secret="test-secret",
     )
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, "wrong-value")
+    result = await service.verify_qr_session(FakePool(), qr_session_id, "wrong-value", STUDENT_USER_ID)
 
     assert result.status == "invalid"
 
@@ -1156,10 +1340,11 @@ async def test_verify_dynamic_qr_session_returns_expired_for_expired_batch() -> 
     service = QrSessionService(
         repository=repository,
         clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(),
         dynamic_qr_hmac_secret="test-secret",
     )
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, "any-value")
+    result = await service.verify_qr_session(FakePool(), qr_session_id, "any-value", STUDENT_USER_ID)
 
     assert result.status == "expired"
 
@@ -1181,10 +1366,11 @@ async def test_verify_dynamic_qr_session_returns_closed_for_closed_batch() -> No
     service = QrSessionService(
         repository=repository,
         clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(),
         dynamic_qr_hmac_secret="test-secret",
     )
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, "any-value")
+    result = await service.verify_qr_session(FakePool(), qr_session_id, "any-value", STUDENT_USER_ID)
 
     assert result.status == "closed"
 
@@ -1205,15 +1391,219 @@ async def test_verify_dynamic_qr_session_does_not_create_tokens_or_cache_qr_valu
         repository=repository,
         qr_batch_cache=cache,
         clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(),
         dynamic_qr_hmac_secret="test-secret",
     )
     qr_value = generate_dynamic_qr_value(qr_session_id, 17, "test-secret")
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, qr_value)
+    result = await service.verify_qr_session(FakePool(), qr_session_id, qr_value, STUDENT_USER_ID)
 
     assert result.status == "accepted"
     assert repository.inserted_token is None
     assert all(qr_value != str(call) for call in cache.set_calls)
+
+
+@pytest.mark.asyncio
+async def test_create_static_qr_session_rejects_lecturer_who_does_not_own_session() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    attendance_session_id = UUID("40000000-0000-0000-0000-000000000001")
+    repository = FakeRepository(
+        AttendanceSessionRecord(
+            id=attendance_session_id,
+            status="active",
+            scheduled_end_at=current_time + timedelta(minutes=20),
+            closed_at=None,
+            cancelled_at=None,
+        )
+    )
+    repository.owns_session = False
+    service = QrSessionService(repository=repository, clock=lambda: current_time)
+
+    with pytest.raises(LecturerSessionAccessError):
+        await service.create_static_qr_session(FakePool(), attendance_session_id, 300, LECTURER_ID)
+
+
+@pytest.mark.asyncio
+async def test_create_static_qr_session_rejects_session_without_qr_enabled() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    attendance_session_id = UUID("40000000-0000-0000-0000-000000000001")
+    repository = FakeRepository(
+        AttendanceSessionRecord(
+            id=attendance_session_id,
+            status="active",
+            scheduled_end_at=current_time + timedelta(minutes=20),
+            closed_at=None,
+            cancelled_at=None,
+            requires_qr=False,
+        )
+    )
+    service = QrSessionService(repository=repository, clock=lambda: current_time)
+
+    with pytest.raises(QrNotRequiredError):
+        await service.create_static_qr_session(FakePool(), attendance_session_id, 300, LECTURER_ID)
+
+
+@pytest.mark.asyncio
+async def test_assert_lecturer_owns_qr_session_rejects_non_owner() -> None:
+    repository = FakeRepository(None)
+    repository.owns_qr_session = False
+    service = QrSessionService(repository=repository)
+
+    with pytest.raises(LecturerSessionAccessError):
+        await service.assert_lecturer_owns_qr_session(
+            FakePool(),
+            UUID("50000000-0000-0000-0000-000000000001"),
+            LECTURER_ID,
+        )
+
+
+@pytest.mark.asyncio
+async def test_assert_lecturer_owns_qr_session_allows_owner() -> None:
+    repository = FakeRepository(None)
+    service = QrSessionService(repository=repository)
+
+    await service.assert_lecturer_owns_qr_session(
+        FakePool(),
+        UUID("50000000-0000-0000-0000-000000000001"),
+        LECTURER_ID,
+    )
+
+
+@pytest.mark.asyncio
+async def test_verify_qr_session_rejects_inactive_student_profile() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeVerificationRepository(
+        build_qr_verification_record(
+            qr_session_id=qr_session_id,
+            token_hash=sha256("raw-test-token".encode("utf-8")).hexdigest(),
+            token_valid_from=current_time - timedelta(minutes=1),
+            token_expires_at=current_time + timedelta(minutes=5),
+        )
+    )
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(
+            student=StudentProfileRecord(id=STUDENT_PROFILE_ID, profile_status="archived"),
+        ),
+    )
+
+    with pytest.raises(ActiveStudentProfileNotFoundError):
+        await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
+
+
+@pytest.mark.asyncio
+async def test_verify_qr_session_rejects_ineligible_student() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeVerificationRepository(
+        build_qr_verification_record(
+            qr_session_id=qr_session_id,
+            token_hash=sha256("raw-test-token".encode("utf-8")).hexdigest(),
+            token_valid_from=current_time - timedelta(minutes=1),
+            token_expires_at=current_time + timedelta(minutes=5),
+        )
+    )
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(eligible=False),
+    )
+
+    with pytest.raises(StudentNotEligibleError):
+        await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
+
+
+@pytest.mark.asyncio
+async def test_verify_qr_session_rejects_when_verification_not_started() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeVerificationRepository(
+        build_qr_verification_record(
+            qr_session_id=qr_session_id,
+            token_hash=sha256("raw-test-token".encode("utf-8")).hexdigest(),
+            token_valid_from=current_time - timedelta(minutes=1),
+            token_expires_at=current_time + timedelta(minutes=5),
+        )
+    )
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(attempt=None),
+    )
+
+    with pytest.raises(VerificationNotStartedError):
+        await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
+
+
+@pytest.mark.asyncio
+async def test_verify_qr_session_returns_closed_when_attempt_already_terminal() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeVerificationRepository(
+        build_qr_verification_record(
+            qr_session_id=qr_session_id,
+            token_hash=sha256("raw-test-token".encode("utf-8")).hexdigest(),
+            token_valid_from=current_time - timedelta(minutes=1),
+            token_expires_at=current_time + timedelta(minutes=5),
+        )
+    )
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(
+            attempt=VerificationAttemptRecord(
+                id=UUID("70000000-0000-0000-0000-000000000001"),
+                status="failed",
+                failure_reason="OUTSIDE_GEOFENCE",
+            ),
+        ),
+    )
+
+    result = await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
+
+    assert result.status == "closed"
+
+
+@pytest.mark.asyncio
+async def test_verify_qr_session_persists_a_qr_validation_attempt() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    qr_token_id = UUID("60000000-0000-0000-0000-000000000001")
+    attempt_id = UUID("70000000-0000-0000-0000-000000000001")
+    repository = FakeVerificationRepository(
+        build_qr_verification_record(
+            qr_session_id=qr_session_id,
+            token_hash=sha256("raw-test-token".encode("utf-8")).hexdigest(),
+            token_valid_from=current_time - timedelta(minutes=1),
+            token_expires_at=current_time + timedelta(minutes=5),
+        )
+    )
+    repository.qr_token_id_for_batch = qr_token_id
+    repository.next_attempt_number = 3
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        uuid_factory=lambda: UUID("80000000-0000-0000-0000-000000000001"),
+        verification_repository=FakeStudentVerificationRepository(
+            attempt=VerificationAttemptRecord(id=attempt_id, status=IN_PROGRESS_STATUS, failure_reason=None),
+        ),
+    )
+
+    await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
+
+    assert repository.inserted_qr_validation_attempts == [
+        (
+            UUID("80000000-0000-0000-0000-000000000001"),
+            attempt_id,
+            qr_token_id,
+            3,
+            "accepted",
+            None,
+            current_time,
+        )
+    ]
 
 
 def build_qr_verification_record(
