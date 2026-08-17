@@ -80,9 +80,15 @@ export async function createSession(params: {
   });
 }
 
-// Called after a silent token refresh (lib/auth/dal.ts) — Keycloak rotates the
-// refresh token on every use, so the cookie must be updated even though identity
-// and expiry stay the same.
+// Called after a silent token refresh (lib/auth/dal.ts) — Keycloak issues a new
+// refresh token string on every use, so the cookie should be updated to carry
+// it forward. This realm's default config doesn't revoke the previous token on
+// rotation, so a call site that can't write cookies right now (e.g. a Server
+// Component render — see dal.ts's refreshOrSignOut) can safely skip this and
+// let the still-cookied token be reused next time instead of breaking the
+// session; only production realms with revokeRefreshToken enabled would need
+// every rotation persisted without exception.
+
 export async function updateSessionRefreshToken(current: SessionPayload, refreshToken: string): Promise<void> {
   await setSessionCookie({ ...current, refreshToken });
 }

@@ -53,16 +53,30 @@ export const getValidAccessToken = cache(async (): Promise<string> => {
 });
 
 async function refreshOrSignOut(session: SessionPayload): Promise<TokenResponse> {
+  let tokens: TokenResponse;
   try {
     const discovery = await getOidcDiscovery();
-    const tokens = await refreshTokens({ discovery, refreshToken: session.refreshToken });
-    await updateSessionRefreshToken(session, tokens.refreshToken);
-    return tokens;
+    tokens = await refreshTokens({ discovery, refreshToken: session.refreshToken });
   } catch {
     // Refresh token expired/revoked at Keycloak — the user must sign in again.
     await deleteSession();
     redirect("/login");
   }
+
+  try {
+    // Next.js only allows cookie writes from a Server Action or Route
+    // Handler. getValidAccessToken() is also called from plain Server
+    // Component pages (every services/*.ts read), where this throws.
+    // That's fine to swallow here: Keycloak's default (non-revoking) refresh
+    // token config lets the still-cookied token be reused again next time,
+    // so a request that couldn't persist the rotated token doesn't break
+    // the session — it just re-rotates from the same starting point.
+    await updateSessionRefreshToken(session, tokens.refreshToken);
+  } catch {
+    // Not writable in this render context — safe to ignore, see above.
+  }
+
+  return tokens;
 }
 
 // Used only by sign-out (app/actions/auth.ts), which needs a fresh ID token for
