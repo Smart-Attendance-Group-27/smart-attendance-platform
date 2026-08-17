@@ -7,11 +7,16 @@ from fastapi.responses import EventSourceResponse
 from fastapi.sse import ServerSentEvent
 
 from modules.attendance_sessions.qr_session.exception import (
+    ActiveStudentProfileNotFoundError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
     DynamicQrConfigurationError,
     DynamicQrSessionUnavailableError,
+    LecturerSessionAccessError,
+    QrNotRequiredError,
     QrSessionNotFoundError,
+    StudentNotEligibleError,
+    VerificationNotStartedError,
 )
 from modules.attendance_sessions.qr_session.cache import QrBatchMetadataCache
 from modules.attendance_sessions.qr_session.schemas import (
@@ -26,12 +31,17 @@ from modules.attendance_sessions.qr_session.service import (
     CurrentDynamicQrSession,
     SSE_RECONNECT_RETRY_MS,
 )
+from modules.identity.auth.dependencies import CurrentLecturer, CurrentStudent
 
 router = APIRouter(tags=["qr-sessions"])
 create_qr_session_router = APIRouter(
     prefix="/attendance-sessions/{session_id}/qr-sessions",
 )
 verify_qr_session_router = APIRouter(prefix="/qr-sessions/{qr_session_id}")
+
+_SESSION_NOT_FOUND_DETAIL = "The attendance session was not found, or does not belong to this lecturer."
+_QR_SESSION_NOT_FOUND_DETAIL = "The QR session was not found, or does not belong to this lecturer."
+_QR_NOT_REQUIRED_DETAIL = "QR verification is not enabled for this attendance session."
 
 
 def get_qr_session_service(request: Request) -> QrSessionService:
@@ -47,13 +57,24 @@ def get_qr_session_service(request: Request) -> QrSessionService:
 async def get_initial_dynamic_qr_session(
     qr_session_id: UUID,
     http_request: Request,
+    current_lecturer: CurrentLecturer,
     qr_session_service: QrSessionService = Depends(get_qr_session_service),
 ) -> CurrentDynamicQrSession:
     try:
+        await qr_session_service.assert_lecturer_owns_qr_session(
+            http_request.app.state.db_pool,
+            qr_session_id,
+            current_lecturer.user_id,
+        )
         return await qr_session_service.get_current_dynamic_qr_session(
             http_request.app.state.db_pool,
             qr_session_id,
         )
+    except LecturerSessionAccessError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_QR_SESSION_NOT_FOUND_DETAIL,
+        ) from error
     except QrSessionNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -79,6 +100,7 @@ async def get_initial_dynamic_qr_session(
 async def create_qr_session(
     session_id: UUID,
     http_request: Request,
+    current_lecturer: CurrentLecturer,
     payload: Annotated[CreateQrSessionRequest | None, Body()] = None,
     qr_session_service: QrSessionService = Depends(get_qr_session_service),
 ) -> CreateQrSessionResponse:
@@ -92,17 +114,24 @@ async def create_qr_session(
                 session_id,
                 request_payload.valid_for_seconds,
                 request_payload.refresh_interval_seconds,
+                current_lecturer.user_id,
             )
         else:
             created_qr_session = await qr_session_service.create_static_qr_session(
                 http_request.app.state.db_pool,
                 session_id,
                 request_payload.valid_for_seconds,
+                current_lecturer.user_id,
             )
-    except AttendanceSessionNotFoundError as error:
+    except (AttendanceSessionNotFoundError, LecturerSessionAccessError) as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Attendance session was not found.",
+            detail=_SESSION_NOT_FOUND_DETAIL,
+        ) from error
+    except QrNotRequiredError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_QR_NOT_REQUIRED_DETAIL,
         ) from error
     except AttendanceSessionNotActiveError as error:
         raise HTTPException(
@@ -131,6 +160,7 @@ async def verify_qr_session(
     qr_session_id: UUID,
     http_request: Request,
     payload: VerifyQrSessionRequest,
+    current_student: CurrentStudent,
     qr_session_service: QrSessionService = Depends(get_qr_session_service),
 ) -> VerifyQrSessionResponse:
     try:
@@ -138,7 +168,28 @@ async def verify_qr_session(
             http_request.app.state.db_pool,
             qr_session_id,
             payload.qr_value,
+            current_student.user_id,
         )
+    except QrSessionNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="QR session was not found.",
+        ) from error
+    except ActiveStudentProfileNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="An active student profile was not found for this account.",
+        ) from error
+    except StudentNotEligibleError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The student is not eligible for this attendance session.",
+        ) from error
+    except VerificationNotStartedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Verification has not started for this session yet.",
+        ) from error
     except DynamicQrConfigurationError as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

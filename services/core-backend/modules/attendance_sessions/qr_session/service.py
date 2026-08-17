@@ -9,11 +9,16 @@ from uuid import UUID, uuid4
 import asyncpg
 
 from modules.attendance_sessions.qr_session.exception import (
+    ActiveStudentProfileNotFoundError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
     DynamicQrConfigurationError,
     DynamicQrSessionUnavailableError,
+    LecturerSessionAccessError,
+    QrNotRequiredError,
     QrSessionNotFoundError,
+    StudentNotEligibleError,
+    VerificationNotStartedError,
 )
 from modules.attendance_sessions.qr_session.cache import QrBatchMetadataCache
 from modules.attendance_sessions.qr_session.crypto import (
@@ -29,6 +34,10 @@ from modules.attendance_sessions.qr_session.repository import (
     QrSessionRepository,
     QrVerificationRecord,
     STATIC_QR_MODE,
+)
+from modules.attendance_verification.geofence.repository import (
+    IN_PROGRESS_STATUS,
+    GeofenceRepository,
 )
 
 
@@ -74,6 +83,7 @@ class QrSessionService:
         uuid_factory: Callable[[], UUID] | None = None,
         qr_value_generator: Callable[[], str] | None = None,
         dynamic_qr_hmac_secret: object | None = None,
+        verification_repository: GeofenceRepository | None = None,
     ) -> None:
         self._repository = repository or QrSessionRepository()
         self._qr_batch_cache = qr_batch_cache
@@ -81,12 +91,17 @@ class QrSessionService:
         self._uuid_factory = uuid_factory or uuid4
         self._qr_value_generator = qr_value_generator or self._generate_qr_value
         self._dynamic_qr_hmac_secret = self._normalize_secret(dynamic_qr_hmac_secret)
+        # Verification attempts are geofence's table conceptually — reused
+        # here rather than duplicated, since QR augments the same attempt
+        # geofence starts instead of owning a separate one.
+        self._verification_repository = verification_repository or GeofenceRepository()
 
     async def create_static_qr_session(
         self,
         pool: asyncpg.Pool,
         attendance_session_id: UUID,
         valid_for_seconds: int,
+        lecturer_id: UUID,
     ) -> CreatedQrSession:
         current_time = self._ensure_utc(self._clock())
         requested_expires_at = current_time + timedelta(seconds=valid_for_seconds)
@@ -96,6 +111,11 @@ class QrSessionService:
                 attendance_session = await self._repository.lock_attendance_session(
                     connection,
                     attendance_session_id,
+                )
+                await self._authorize_lecturer_for_session(
+                    connection,
+                    attendance_session_id,
+                    lecturer_id,
                 )
                 self._validate_attendance_session(attendance_session, current_time)
 
@@ -123,6 +143,7 @@ class QrSessionService:
                     None,
                     current_time,
                     actual_expires_at,
+                    lecturer_id,
                 )
                 await self._repository.insert_qr_token(
                     connection,
@@ -152,6 +173,7 @@ class QrSessionService:
         attendance_session_id: UUID,
         valid_for_seconds: int,
         refresh_interval_seconds: int,
+        lecturer_id: UUID,
     ) -> CreatedQrSession:
         current_time = self._ensure_utc(self._clock())
         requested_expires_at = current_time + timedelta(seconds=valid_for_seconds)
@@ -161,6 +183,11 @@ class QrSessionService:
                 attendance_session = await self._repository.lock_attendance_session(
                     connection,
                     attendance_session_id,
+                )
+                await self._authorize_lecturer_for_session(
+                    connection,
+                    attendance_session_id,
+                    lecturer_id,
                 )
                 self._validate_attendance_session(attendance_session, current_time)
 
@@ -184,6 +211,7 @@ class QrSessionService:
                     refresh_interval_seconds,
                     current_time,
                     actual_expires_at,
+                    lecturer_id,
                 )
 
         await self._delete_cached_qr_batches(deactivated_qr_session_ids)
@@ -216,6 +244,21 @@ class QrSessionService:
             expires_at=actual_expires_at,
         )
 
+    async def assert_lecturer_owns_qr_session(
+        self,
+        pool: asyncpg.Pool,
+        qr_session_id: UUID,
+        lecturer_id: UUID,
+    ) -> None:
+        async with pool.acquire() as connection:
+            owns_qr_session = await self._repository.qr_batch_owned_by_lecturer(
+                connection,
+                qr_session_id,
+                lecturer_id,
+            )
+        if not owns_qr_session:
+            raise LecturerSessionAccessError()
+
     async def get_qr_batch_metadata(
         self,
         pool: asyncpg.Pool,
@@ -246,6 +289,7 @@ class QrSessionService:
         pool: asyncpg.Pool,
         qr_session_id: UUID,
         qr_value: str,
+        student_user_id: UUID,
     ) -> VerifiedQrSession:
         current_time = self._ensure_utc(self._clock())
         submitted_token_hash = self._hash_qr_value(qr_value)
@@ -256,24 +300,82 @@ class QrSessionService:
                 qr_session_id,
             )
 
-        if verification_record is not None and verification_record.qr_mode == DYNAMIC_QR_MODE:
+            if verification_record is None or verification_record.attendance_session_id is None:
+                raise QrSessionNotFoundError()
+
+            student = await self._verification_repository.lock_student_profile_for_user(
+                connection,
+                student_user_id,
+            )
+            if student is None or student.profile_status != ACTIVE_STATUS:
+                raise ActiveStudentProfileNotFoundError(
+                    "No active student profile exists for this account.",
+                )
+
+            is_eligible = await self._verification_repository.lock_student_eligibility(
+                connection,
+                verification_record.attendance_session_id,
+                student.id,
+            )
+            if not is_eligible:
+                raise StudentNotEligibleError(
+                    "The student is not eligible for this attendance session.",
+                )
+
+            # Not locked: this connection is released before the write step
+            # below (see get_qr_batch_metadata's own separate acquire, which
+            # classification may call into) rather than held across it, so a
+            # lock taken here wouldn't cover the eventual write anyway. The
+            # qr_validation_attempts unique index on (verification_attempt_id,
+            # attempt_number) is what actually prevents a duplicate number
+            # under a race, matching geofence's equivalent tolerance.
+            attempt = await self._verification_repository.find_verification_attempt(
+                connection,
+                verification_record.attendance_session_id,
+                student.id,
+            )
+            if attempt is None:
+                raise VerificationNotStartedError(
+                    "Verification has not started for this session yet.",
+                )
+
+        if verification_record.qr_mode == DYNAMIC_QR_MODE:
             verification_status = await self._classify_dynamic_qr_verification(
                 pool,
                 qr_session_id,
                 qr_value,
                 current_time,
             )
-            return VerifiedQrSession(
-                qr_session_id=qr_session_id,
-                status=verification_status,
-                verified_at=current_time,
+        else:
+            verification_status = self._classify_qr_verification(
+                verification_record,
+                submitted_token_hash,
+                current_time,
             )
 
-        verification_status = self._classify_qr_verification(
-            verification_record,
-            submitted_token_hash,
-            current_time,
-        )
+        if attempt.status != IN_PROGRESS_STATUS:
+            verification_status = "closed"
+
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                qr_token_id = await self._repository.find_qr_token_id_for_batch(
+                    connection,
+                    qr_session_id,
+                )
+                attempt_number = await self._repository.next_qr_attempt_number(
+                    connection,
+                    attempt.id,
+                )
+                await self._repository.insert_qr_validation_attempt(
+                    connection,
+                    self._uuid_factory(),
+                    attempt.id,
+                    qr_token_id,
+                    attempt_number,
+                    verification_status,
+                    None if verification_status == "accepted" else verification_status,
+                    current_time,
+                )
 
         return VerifiedQrSession(
             qr_session_id=qr_session_id,
@@ -419,6 +521,20 @@ class QrSessionService:
 
         return await is_disconnected()
 
+    async def _authorize_lecturer_for_session(
+        self,
+        connection: asyncpg.Connection,
+        attendance_session_id: UUID,
+        lecturer_id: UUID,
+    ) -> None:
+        owns_session = await self._repository.session_owned_by_lecturer(
+            connection,
+            attendance_session_id,
+            lecturer_id,
+        )
+        if not owns_session:
+            raise LecturerSessionAccessError()
+
     @staticmethod
     def _validate_attendance_session(
         attendance_session: AttendanceSessionRecord | None,
@@ -440,6 +556,11 @@ class QrSessionService:
 
         if scheduled_end_at <= current_time:
             raise AttendanceSessionNotActiveError("Attendance session has already ended.")
+
+        if attendance_session.requires_qr is not True:
+            raise QrNotRequiredError(
+                "QR verification is not enabled for this attendance session.",
+            )
 
     @staticmethod
     def _classify_qr_verification(
