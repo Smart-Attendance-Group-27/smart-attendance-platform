@@ -3,9 +3,10 @@ import { exchangeCodeForTokens, getOidcDiscovery, verifyAccessToken, verifyIdTok
 import { readAndClearOidcFlowCookie } from "@/lib/auth/oidcFlowState";
 import { createSession } from "@/lib/auth/session";
 import { dashboardPathForRole, isWebRole } from "@/lib/auth/roles";
+import { webUrl } from "@/lib/auth/webBaseUrl";
 
 function loginError(request: NextRequest, code: string): NextResponse {
-  return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(code)}`, request.url));
+  return NextResponse.redirect(webUrl(`/login?error=${encodeURIComponent(code)}`, request.url));
 }
 
 export async function GET(request: NextRequest) {
@@ -58,5 +59,5 @@ export async function GET(request: NextRequest) {
 
   await createSession({ userId: identity.sub, name: identity.name, role: webRole, tokens });
 
-  return NextResponse.redirect(new URL(dashboardPathForRole(webRole), request.url));
+  return NextResponse.redirect(webUrl(dashboardPathForRole(webRole), request.url));
 }

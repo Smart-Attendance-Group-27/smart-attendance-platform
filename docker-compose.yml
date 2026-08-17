@@ -12,6 +12,12 @@ services:
       NODE_ENV: development
       NEXT_TELEMETRY_DISABLED: "1"
       CORE_BACKEND_URL: ${WEB_CORE_BACKEND_URL:-http://core-api:8000}
+      SESSION_SECRET: ${WEB_SESSION_SECRET:?Set WEB_SESSION_SECRET in the root .env file}
+      KEYCLOAK_ISSUER: ${WEB_KEYCLOAK_ISSUER:-http://localhost:8080/realms/uniattend}
+      KEYCLOAK_INTERNAL_ISSUER: ${WEB_KEYCLOAK_INTERNAL_ISSUER:-http://keycloak:8080/realms/uniattend}
+      KEYCLOAK_CLIENT_ID: ${WEB_KEYCLOAK_CLIENT_ID:-uniattend-web}
+      KEYCLOAK_CLIENT_SECRET: ${WEB_KEYCLOAK_CLIENT_SECRET:?Set WEB_KEYCLOAK_CLIENT_SECRET in the root .env file}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
     ports:
       - "${WEB_PORT:-3000}:3000"
     depends_on:
