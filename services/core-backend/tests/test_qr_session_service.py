@@ -43,8 +43,17 @@ class FakeTransaction:
 
 
 class FakeConnection:
+    def __init__(self) -> None:
+        self.executed_queries: list[str] = []
+        self.executed_args: list[tuple] = []
+
     def transaction(self) -> FakeTransaction:
         return FakeTransaction()
+
+    async def execute(self, query: str, *args) -> None:
+        """Absorbs the write_audit_log() call made inside the same transaction."""
+        self.executed_queries.append(query)
+        self.executed_args.append(args)
 
 
 class FakeAcquire:
@@ -339,6 +348,33 @@ class FakeQrBatchCache:
 
     async def delete_qr_batch_cache(self, qr_session_id: UUID) -> None:
         self.delete_calls.append(qr_session_id)
+
+
+@pytest.mark.asyncio
+async def test_create_static_qr_session_writes_an_audit_log_entry() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    attendance_session_id = UUID("40000000-0000-0000-0000-000000000001")
+    repository = FakeRepository(
+        AttendanceSessionRecord(
+            id=attendance_session_id,
+            status="active",
+            scheduled_end_at=current_time + timedelta(minutes=20),
+            closed_at=None,
+            cancelled_at=None,
+        )
+    )
+    pool = FakePool()
+    service = QrSessionService(repository=repository, clock=lambda: current_time)
+
+    await service.create_static_qr_session(pool, attendance_session_id, 300, LECTURER_ID)
+
+    audit_query = pool.connection.executed_queries[0]
+    audit_args = pool.connection.executed_args[0]
+    assert "audit.audit_logs" in audit_query
+    assert audit_args[0] == LECTURER_ID
+    assert audit_args[1] == "lecturer"
+    assert audit_args[2] == "qr_session.create"
+    assert audit_args[3] == "qr_session"
 
 
 @pytest.mark.asyncio

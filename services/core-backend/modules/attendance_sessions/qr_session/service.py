@@ -39,11 +39,14 @@ from modules.attendance_verification.geofence.repository import (
     IN_PROGRESS_STATUS,
     GeofenceRepository,
 )
+from modules.audit.repository import write_audit_log
 
 
 QR_TOKEN_SEQUENCE_NUMBER = 1
 QR_TOKEN_RANDOM_BYTES = 32
 SSE_RECONNECT_RETRY_MS = 3000
+ACTOR_TYPE_LECTURER = "lecturer"
+AUDIT_ENTITY_TYPE = "qr_session"
 
 
 @dataclass(frozen=True)
@@ -154,6 +157,20 @@ class QrSessionService:
                     actual_expires_at,
                 )
 
+                await write_audit_log(
+                    connection,
+                    actor_user_id=lecturer_id,
+                    actor_type=ACTOR_TYPE_LECTURER,
+                    action="qr_session.create",
+                    entity_type=AUDIT_ENTITY_TYPE,
+                    entity_id=qr_session_id,
+                    new_values={
+                        "attendanceSessionId": str(attendance_session_id),
+                        "mode": STATIC_QR_MODE,
+                        "expiresAt": actual_expires_at.isoformat(),
+                    },
+                )
+
         await self._delete_cached_qr_batches(deactivated_qr_session_ids)
 
         return CreatedQrSession(
@@ -212,6 +229,21 @@ class QrSessionService:
                     current_time,
                     actual_expires_at,
                     lecturer_id,
+                )
+
+                await write_audit_log(
+                    connection,
+                    actor_user_id=lecturer_id,
+                    actor_type=ACTOR_TYPE_LECTURER,
+                    action="qr_session.create",
+                    entity_type=AUDIT_ENTITY_TYPE,
+                    entity_id=qr_session_id,
+                    new_values={
+                        "attendanceSessionId": str(attendance_session_id),
+                        "mode": DYNAMIC_QR_MODE,
+                        "refreshIntervalSeconds": refresh_interval_seconds,
+                        "expiresAt": actual_expires_at.isoformat(),
+                    },
                 )
 
         await self._delete_cached_qr_batches(deactivated_qr_session_ids)
