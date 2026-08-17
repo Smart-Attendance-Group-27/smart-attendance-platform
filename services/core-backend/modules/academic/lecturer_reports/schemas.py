@@ -4,8 +4,10 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from modules.academic.lecturer_reports.repository import (
+    AtRiskStudentRecord,
     CourseSessionReportRecord,
     LecturerOverviewRecord,
+    WeeklyTrendRecord,
 )
 
 
@@ -66,4 +68,43 @@ class CourseSessionReportResponse(BaseModel):
             late_count=record.late_count,
             absent_count=record.absent_count,
             pending_review_count=record.pending_review_count,
+        )
+
+
+class WeeklyTrendPointResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    label: str
+    attendance_rate: float = Field(alias="attendanceRate")
+
+    @staticmethod
+    def from_record(record: WeeklyTrendRecord) -> "WeeklyTrendPointResponse":
+        label = f"{record.week_start.strftime('%b')} {record.week_start.day}" if record.week_start else ""
+        return WeeklyTrendPointResponse(
+            label=label,
+            attendance_rate=float(record.attendance_rate_percent),
+        )
+
+
+class AtRiskStudentResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    student_id: UUID = Field(alias="studentId")
+    registration_number: str = Field(alias="registrationNumber")
+    full_name: str = Field(alias="fullName")
+    course_code: str = Field(alias="courseCode")
+    attendance_rate_percent: float = Field(alias="attendanceRatePercent")
+    late_count: int = Field(alias="lateCount")
+    last_attended_at: datetime | None = Field(alias="lastAttendedAt")
+
+    @staticmethod
+    def from_record(record: AtRiskStudentRecord) -> "AtRiskStudentResponse":
+        return AtRiskStudentResponse(
+            student_id=record.student_id,
+            registration_number=record.registration_number or "",
+            full_name=record.full_name,
+            course_code=record.course_code,
+            attendance_rate_percent=float(record.attendance_rate_percent),
+            late_count=record.late_count,
+            last_attended_at=record.last_attended_at,
         )

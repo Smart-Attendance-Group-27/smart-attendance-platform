@@ -6,9 +6,11 @@ from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundE
 from modules.academic.lecturer_profile.repository import LecturerProfileRepository
 from modules.academic.lecturer_reports.exception import CourseOfferingNotFoundError
 from modules.academic.lecturer_reports.repository import (
+    AtRiskStudentRecord,
     CourseSessionReportRecord,
     LecturerOverviewRecord,
     LecturerReportRepository,
+    WeeklyTrendRecord,
 )
 
 ACTIVE_PROFILE_STATUS = "active"
@@ -54,6 +56,24 @@ class LecturerReportService:
                 connection,
                 course_offering_id,
             )
+
+    async def get_attendance_trend_for_user(
+        self,
+        pool: asyncpg.Pool,
+        user_id: UUID,
+    ) -> list[WeeklyTrendRecord]:
+        async with pool.acquire() as connection:
+            lecturer_id = await self._resolve_active_lecturer_id(connection, user_id)
+            return await self._repository.list_attendance_trend_for_lecturer(connection, lecturer_id)
+
+    async def get_at_risk_students_for_user(
+        self,
+        pool: asyncpg.Pool,
+        user_id: UUID,
+    ) -> list[AtRiskStudentRecord]:
+        async with pool.acquire() as connection:
+            lecturer_id = await self._resolve_active_lecturer_id(connection, user_id)
+            return await self._repository.list_at_risk_students_for_lecturer(connection, lecturer_id)
 
     async def _resolve_active_lecturer_id(
         self,

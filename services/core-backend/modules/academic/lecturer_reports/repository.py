@@ -29,6 +29,26 @@ class CourseSessionReportRecord:
     pending_review_count: int
 
 
+@dataclass(frozen=True)
+class WeeklyTrendRecord:
+    week_start: datetime
+    attendance_rate_percent: Decimal
+
+
+@dataclass(frozen=True)
+class AtRiskStudentRecord:
+    student_id: UUID
+    registration_number: str | None
+    full_name: str
+    course_code: str
+    attendance_rate_percent: Decimal
+    late_count: int
+    last_attended_at: datetime | None
+
+
+AT_RISK_THRESHOLD_PERCENT = 70
+
+
 class LecturerReportRepository:
     async def lecturer_owns_course_offering(
         self,
@@ -186,6 +206,110 @@ class LecturerReportRepository:
                 late_count=row["late_count"],
                 absent_count=row["absent_count"],
                 pending_review_count=row["pending_review_count"],
+            )
+            for row in rows
+        ]
+
+    async def list_attendance_trend_for_lecturer(
+        self,
+        connection: asyncpg.Connection,
+        lecturer_id: UUID,
+        *,
+        weeks: int = 8,
+    ) -> list[WeeklyTrendRecord]:
+        rows = await connection.fetch(
+            """
+            WITH weekly AS (
+                SELECT
+                    DATE_TRUNC('week', session.scheduled_start_at) AS week_start,
+                    COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late')) AS present_count,
+                    COUNT(*) AS total_count
+                FROM attendance_verification.attendance_records AS record
+                JOIN attendance_session.sessions AS session
+                    ON session.id = record.session_id
+                JOIN academic.course_offerings AS offering
+                    ON offering.id = session.course_offering_id
+                JOIN academic.course_lecturers AS assignment
+                    ON assignment.course_offering_id = offering.id
+                WHERE assignment.lecturer_id = $1
+                GROUP BY week_start
+                ORDER BY week_start DESC
+                LIMIT $2
+            )
+            SELECT
+                week_start,
+                ROUND(100.0 * present_count / NULLIF(total_count, 0), 1) AS attendance_rate_percent
+            FROM weekly
+            ORDER BY week_start ASC
+            """,
+            lecturer_id,
+            weeks,
+        )
+        return [
+            WeeklyTrendRecord(
+                week_start=row["week_start"],
+                attendance_rate_percent=row["attendance_rate_percent"] or Decimal(0),
+            )
+            for row in rows
+        ]
+
+    async def list_at_risk_students_for_lecturer(
+        self,
+        connection: asyncpg.Connection,
+        lecturer_id: UUID,
+        *,
+        threshold_percent: int = AT_RISK_THRESHOLD_PERCENT,
+    ) -> list[AtRiskStudentRecord]:
+        rows = await connection.fetch(
+            """
+            SELECT
+                student.id AS student_id,
+                student.registration_number,
+                TRIM(
+                    CONCAT_WS(' ', student.first_name, NULLIF(student.middle_name, ''), student.last_name)
+                ) AS full_name,
+                course.course_code,
+                ROUND(
+                    100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late'))
+                    / COUNT(*),
+                    1
+                ) AS attendance_rate_percent,
+                COUNT(*) FILTER (WHERE record.attendance_status = 'late') AS late_count,
+                MAX(session.scheduled_start_at) FILTER (
+                    WHERE record.attendance_status IN ('present', 'late')
+                ) AS last_attended_at
+            FROM attendance_verification.attendance_records AS record
+            JOIN attendance_session.sessions AS session
+                ON session.id = record.session_id
+            JOIN academic.course_offerings AS offering
+                ON offering.id = session.course_offering_id
+            JOIN academic.course_lecturers AS assignment
+                ON assignment.course_offering_id = offering.id
+            JOIN academic.courses AS course
+                ON course.id = offering.course_id
+            JOIN academic.student_profiles AS student
+                ON student.id = record.student_id
+            WHERE assignment.lecturer_id = $1
+            GROUP BY student.id, student.registration_number, full_name, course.course_code
+            HAVING
+                COUNT(*) > 0
+                AND (
+                    100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late')) / COUNT(*)
+                ) < $2
+            ORDER BY attendance_rate_percent ASC
+            """,
+            lecturer_id,
+            threshold_percent,
+        )
+        return [
+            AtRiskStudentRecord(
+                student_id=row["student_id"],
+                registration_number=row["registration_number"],
+                full_name=row["full_name"] or "",
+                course_code=row["course_code"],
+                attendance_rate_percent=row["attendance_rate_percent"],
+                late_count=row["late_count"],
+                last_attended_at=row["last_attended_at"],
             )
             for row in rows
         ]
