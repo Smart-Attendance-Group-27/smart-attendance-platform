@@ -28,15 +28,6 @@ export function AttendancePolicyForm({ policy }: { policy: AttendancePolicy }) {
           <input id="confidence" defaultValue={`${policy.faceConfidenceThresholdPercent}%`} className={fieldInputClassName()} />
         </FormField>
         <FormField
-          label="Additional face-check policy"
-          htmlFor="additional"
-          help="Additional checks are separate from the initial attendance check-in."
-        >
-          <select id="additional" defaultValue={policy.additionalFaceCheckPolicyLabel} className={fieldInputClassName()}>
-            <option>{policy.additionalFaceCheckPolicyLabel}</option>
-          </select>
-        </FormField>
-        <FormField
           label="Dynamic QR verification"
           htmlFor="qr"
           help="Lecturers may run zero or multiple QR windows during a lecture."

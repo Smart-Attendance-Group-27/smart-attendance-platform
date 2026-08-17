@@ -36,7 +36,6 @@ export const MOCK_ADMIN_DASHBOARD: AdminDashboardData = {
     checkInWindowMinutes: 10,
     lateThresholdMinutes: 5,
     faceConfidenceThresholdPercent: 75,
-    additionalFaceCheckPolicyLabel: "Lecturer may launch when needed",
     dynamicQrPolicyLabel: "Optional and lecturer-controlled",
     qrWindowMinutes: 15,
   },

@@ -38,7 +38,6 @@ export type AttendancePolicy = {
   checkInWindowMinutes: number;
   lateThresholdMinutes: number;
   faceConfidenceThresholdPercent: number;
-  additionalFaceCheckPolicyLabel: string;
   dynamicQrPolicyLabel: string;
   qrWindowMinutes: number;
 };
