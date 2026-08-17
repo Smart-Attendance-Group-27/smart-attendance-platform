@@ -16,8 +16,11 @@ from modules.attendance_sessions.lecturer_sessions.repository import (
     LecturerSessionRepository,
     SessionStudentRecord,
 )
+from modules.audit.repository import write_audit_log
 
 ACTIVE_PROFILE_STATUS = "active"
+ACTOR_TYPE_LECTURER = "lecturer"
+AUDIT_ENTITY_TYPE = "attendance_session"
 
 
 class LecturerSessionService:
@@ -79,8 +82,19 @@ class LecturerSessionService:
 
             await self._repository.activate(connection, session_id)
             updated = await self._repository.find_for_lecturer(connection, session_id, lecturer_id)
+            assert updated is not None
 
-        assert updated is not None
+            await write_audit_log(
+                connection,
+                actor_user_id=user_id,
+                actor_type=ACTOR_TYPE_LECTURER,
+                action="session.activate",
+                entity_type=AUDIT_ENTITY_TYPE,
+                entity_id=session_id,
+                old_values={"activatedAt": None},
+                new_values={"activatedAt": updated.activated_at.isoformat()},
+            )
+
         return updated
 
     async def close_for_user(
@@ -108,8 +122,19 @@ class LecturerSessionService:
 
             await self._repository.close(connection, session_id)
             updated = await self._repository.find_for_lecturer(connection, session_id, lecturer_id)
+            assert updated is not None
 
-        assert updated is not None
+            await write_audit_log(
+                connection,
+                actor_user_id=user_id,
+                actor_type=ACTOR_TYPE_LECTURER,
+                action="session.close",
+                entity_type=AUDIT_ENTITY_TYPE,
+                entity_id=session_id,
+                old_values={"closedAt": None},
+                new_values={"closedAt": updated.closed_at.isoformat()},
+            )
+
         return updated
 
     async def list_students_for_user(
