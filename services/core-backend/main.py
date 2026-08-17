@@ -7,12 +7,20 @@ from fastapi import FastAPI
 from cache.redis import close_redis_client, create_redis_client
 from core.config import get_settings
 from db.pool import close_database_pool, create_database_pool
+from modules.academic.lecturer_courses.route import router as lecturer_courses_router
+from modules.academic.lecturer_reports.route import router as lecturer_reports_router
 from modules.academic.student_profile.route import router as student_profile_router
 from modules.attendance_sessions.active_sessions.route import (
     router as active_session_router,
 )
+from modules.attendance_sessions.lecturer_sessions.route import (
+    router as lecturer_sessions_router,
+)
 from modules.attendance_sessions.qr_session.route import router as qr_session_router
 from modules.attendance_verification.geofence.route import router as geofence_router
+from modules.attendance_verification.manual_review.route import (
+    router as manual_review_router,
+)
 from modules.identity.auth.route import router as auth_router
 from modules.routes.health import router as health_router
 
@@ -59,6 +67,10 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
     app.include_router(active_session_router, prefix="/api/v1")
     app.include_router(qr_session_router, prefix="/api/v1")
     app.include_router(geofence_router, prefix="/api/v1")
+    app.include_router(lecturer_courses_router, prefix="/api/v1")
+    app.include_router(lecturer_sessions_router, prefix="/api/v1")
+    app.include_router(manual_review_router, prefix="/api/v1")
+    app.include_router(lecturer_reports_router, prefix="/api/v1")
     return app
 
 
