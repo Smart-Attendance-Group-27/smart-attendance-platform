@@ -19,6 +19,7 @@ from repositories.verification_config_repository import (
 from services.face_comparison_service import FaceComparisonService
 from services.face_engine import FaceAnalysisResult, FaceAnalysisStatus
 from services.readiness_verification_service import (
+    ReadinessProfileStatus,
     ReadinessVerificationPersistenceError,
     ReadinessVerificationService,
     ReadinessVerificationStatus,
@@ -109,6 +110,87 @@ def create_service(
         verification_config_repository=config_repository,
         clock=lambda: fixed_time,
     )
+
+
+@pytest.mark.parametrize(
+    ("stored_status", "requires_readiness_check"),
+    [
+        ("not_checked", True),
+        ("failed", True),
+        ("expired", True),
+        ("passed", False),
+    ],
+)
+def test_gets_generated_profile_readiness_status(
+    stored_status: str,
+    requires_readiness_check: bool,
+) -> None:
+    student_id = uuid4()
+    checked_at = datetime(2026, 8, 18, 10, 30, tzinfo=timezone.utc)
+    session, profile_repository, config_repository = create_dependencies()
+    profile = MagicMock(spec=FaceProfile)
+    profile.embedding_generation_status = "generated"
+    profile.readiness_status = stored_status
+    profile.readiness_checked_at = checked_at
+    profile_repository.get_by_student_id.return_value = profile
+    service = create_service(
+        session=session,
+        face_profile_repository=profile_repository,
+        config_repository=config_repository,
+        engine=FakeFaceEngine(successful_analysis()),
+    )
+
+    result = asyncio.run(service.get_status(student_id=student_id))
+
+    assert result.status is ReadinessProfileStatus(stored_status)
+    assert result.requires_readiness_check is requires_readiness_check
+    assert result.checked_at == checked_at
+    profile_repository.get_by_student_id.assert_awaited_once_with(student_id)
+    profile_repository.get_stored_embedding_for_comparison.assert_not_awaited()
+    config_repository.get_active.assert_not_awaited()
+    session.commit.assert_not_awaited()
+
+
+def test_status_reports_profile_not_enrolled_when_profile_is_missing() -> None:
+    student_id = uuid4()
+    session, profile_repository, config_repository = create_dependencies()
+    profile_repository.get_by_student_id.return_value = None
+    service = create_service(
+        session=session,
+        face_profile_repository=profile_repository,
+        config_repository=config_repository,
+        engine=FakeFaceEngine(successful_analysis()),
+    )
+
+    result = asyncio.run(service.get_status(student_id=student_id))
+
+    assert result.status is ReadinessProfileStatus.PROFILE_NOT_ENROLLED
+    assert result.requires_readiness_check is False
+    assert result.checked_at is None
+    config_repository.get_active.assert_not_awaited()
+    session.commit.assert_not_awaited()
+
+
+def test_status_reports_profile_not_enrolled_when_embedding_is_pending() -> None:
+    student_id = uuid4()
+    session, profile_repository, config_repository = create_dependencies()
+    profile = MagicMock(spec=FaceProfile)
+    profile.embedding_generation_status = "pending"
+    profile_repository.get_by_student_id.return_value = profile
+    service = create_service(
+        session=session,
+        face_profile_repository=profile_repository,
+        config_repository=config_repository,
+        engine=FakeFaceEngine(successful_analysis()),
+    )
+
+    result = asyncio.run(service.get_status(student_id=student_id))
+
+    assert result.status is ReadinessProfileStatus.PROFILE_NOT_ENROLLED
+    assert result.requires_readiness_check is False
+    assert result.checked_at is None
+    config_repository.get_active.assert_not_awaited()
+    session.commit.assert_not_awaited()
 
 
 def test_matching_face_passes_without_returning_embeddings() -> None:

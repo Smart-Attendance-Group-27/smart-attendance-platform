@@ -5,7 +5,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from api.dependencies.auth import get_current_student_id
 from api.dependencies.readiness import get_readiness_verification_service
-from api.schemas.readiness import ReadinessVerificationResponse
+from api.schemas.readiness import (
+    ReadinessStatusResponse,
+    ReadinessVerificationResponse,
+)
 from services.readiness_verification_service import (
     ReadinessVerificationService,
     ReadinessVerificationStatus,
@@ -18,6 +21,27 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024
 ALLOWED_IMAGE_TYPES = frozenset({"image/jpeg", "image/png"})
 
 router = APIRouter(prefix="/api/v1/face-verification",tags=["face-verification"],)
+
+
+@router.get(
+    "/readiness/status",
+    response_model=ReadinessStatusResponse,
+)
+async def get_readiness_status(
+    student_id: Annotated[UUID, Depends(get_current_student_id)],
+    service: Annotated[
+        ReadinessVerificationService,
+        Depends(get_readiness_verification_service),
+    ],
+) -> ReadinessStatusResponse:
+    result = await service.get_status(student_id=student_id)
+
+    return ReadinessStatusResponse(
+        status=result.status,
+        requires_readiness_check=result.requires_readiness_check,
+        checked_at=result.checked_at,
+    )
+
 
 @router.post("/readiness",response_model=ReadinessVerificationResponse,)
 

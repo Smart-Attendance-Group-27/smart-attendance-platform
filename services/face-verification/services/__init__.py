@@ -16,6 +16,8 @@ from .reference_enrollment_service import (
     ReferenceEnrollmentStatus,
 )
 from .readiness_verification_service import (
+    ReadinessProfileStatus,
+    ReadinessStatusResult,
     ReadinessVerificationPersistenceError,
     ReadinessVerificationResult,
     ReadinessVerificationService,
@@ -34,6 +36,8 @@ __all__ = [
     "ReferenceEnrollmentResult",
     "ReferenceEnrollmentService",
     "ReferenceEnrollmentStatus",
+    "ReadinessProfileStatus",
+    "ReadinessStatusResult",
     "ReadinessVerificationPersistenceError",
     "ReadinessVerificationResult",
     "ReadinessVerificationService",

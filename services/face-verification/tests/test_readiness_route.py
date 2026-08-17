@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
@@ -9,6 +10,8 @@ from api.dependencies.auth import get_current_student_id
 from api.dependencies.readiness import get_readiness_verification_service
 from api.routes.readiness import MAX_IMAGE_BYTES, router
 from services.readiness_verification_service import (
+    ReadinessProfileStatus,
+    ReadinessStatusResult,
     ReadinessVerificationResult,
     ReadinessVerificationService,
     ReadinessVerificationStatus,
@@ -35,10 +38,88 @@ def create_service(*,student_id: UUID,result_status: ReadinessVerificationStatus
     return service
 
 
+def create_status_service(
+    *,
+    result: ReadinessStatusResult,
+) -> AsyncMock:
+    service = AsyncMock(spec=ReadinessVerificationService)
+    service.get_status.return_value = result
+    return service
+
+
 def post_image(client: TestClient,*,content: bytes = b"encoded-jpeg-image",content_type: str = "image/jpeg",):
     return client.post("/api/v1/face-verification/readiness",
         files={"image": ("capture.jpg",content,content_type,)},
     )
+
+
+def get_status(client: TestClient):
+    return client.get("/api/v1/face-verification/readiness/status")
+
+
+def test_gets_authenticated_students_unchecked_readiness_status() -> None:
+    student_id = uuid4()
+    service = create_status_service(
+        result=ReadinessStatusResult(
+            status=ReadinessProfileStatus.NOT_CHECKED,
+            requires_readiness_check=True,
+        )
+    )
+    app = create_test_app(student_id=student_id, service=service)
+
+    with TestClient(app) as client:
+        response = get_status(client)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "not_checked",
+        "requiresReadinessCheck": True,
+        "checkedAt": None,
+    }
+    service.get_status.assert_awaited_once_with(student_id=student_id)
+
+
+def test_gets_completed_readiness_status() -> None:
+    student_id = uuid4()
+    checked_at = datetime(2026, 8, 18, 10, 30, tzinfo=timezone.utc)
+    service = create_status_service(
+        result=ReadinessStatusResult(
+            status=ReadinessProfileStatus.PASSED,
+            requires_readiness_check=False,
+            checked_at=checked_at,
+        )
+    )
+    app = create_test_app(student_id=student_id, service=service)
+
+    with TestClient(app) as client:
+        response = get_status(client)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "passed",
+        "requiresReadinessCheck": False,
+        "checkedAt": "2026-08-18T10:30:00Z",
+    }
+
+
+def test_get_status_requires_authentication() -> None:
+    service = create_status_service(
+        result=ReadinessStatusResult(
+            status=ReadinessProfileStatus.NOT_CHECKED,
+            requires_readiness_check=True,
+        )
+    )
+    app = create_test_app(service=service)
+
+    with TestClient(app) as client:
+        response = get_status(client)
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "detail": "A bearer access token is required."
+    }
+    assert response.headers["www-authenticate"] == "Bearer"
+    service.get_status.assert_not_awaited()
 
 
 def test_valid_jpeg_returns_passed_readiness_result() -> None:

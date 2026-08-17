@@ -32,6 +32,14 @@ class ReadinessVerificationStatus(StrEnum):
     MODEL_MISMATCH = "model_mismatch"
 
 
+class ReadinessProfileStatus(StrEnum):
+    NOT_CHECKED = "not_checked"
+    PASSED = "passed"
+    FAILED = "failed"
+    EXPIRED = "expired"
+    PROFILE_NOT_ENROLLED = "profile_not_enrolled"
+
+
 @dataclass(frozen=True, slots=True)
 class ReadinessVerificationResult:
 
@@ -44,6 +52,13 @@ class ReadinessVerificationResult:
     detection_confidence: float | None = None
     model_name: str | None = None
     failure_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ReadinessStatusResult:
+    status: ReadinessProfileStatus
+    requires_readiness_check: bool
+    checked_at: datetime | None = None
 
 
 class ReadinessVerificationPersistenceError(RuntimeError):
@@ -74,6 +89,32 @@ class ReadinessVerificationService:
         self._face_profile_repository = (face_profile_repository or FaceProfileRepository(session))
         self._verification_config_repository = (verification_config_repository or VerificationConfigRepository(session))
         self._clock = clock
+
+    async def get_status(self, *, student_id: UUID) -> ReadinessStatusResult:
+        """Return dashboard readiness state without loading an embedding."""
+
+        profile = await self._face_profile_repository.get_by_student_id(
+            student_id
+        )
+
+        if (
+            profile is None
+            or profile.embedding_generation_status != "generated"
+        ):
+            return ReadinessStatusResult(
+                status=ReadinessProfileStatus.PROFILE_NOT_ENROLLED,
+                requires_readiness_check=False,
+            )
+
+        profile_status = ReadinessProfileStatus(profile.readiness_status)
+
+        return ReadinessStatusResult(
+            status=profile_status,
+            requires_readiness_check=(
+                profile_status is not ReadinessProfileStatus.PASSED
+            ),
+            checked_at=profile.readiness_checked_at,
+        )
 
     async def verify(self,*,student_id: UUID,captured_image: bytes,) -> ReadinessVerificationResult:
         try:
@@ -158,6 +199,8 @@ class ReadinessVerificationService:
 
 
 __all__ = [
+    "ReadinessProfileStatus",
+    "ReadinessStatusResult",
     "ReadinessVerificationPersistenceError",
     "ReadinessVerificationResult",
     "ReadinessVerificationService",
