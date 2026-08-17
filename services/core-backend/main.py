@@ -12,6 +12,9 @@ from modules.academic.admin_academic_data.route import (
 )
 from modules.academic.admin_classrooms.route import router as admin_classrooms_router
 from modules.academic.admin_dashboard.route import router as admin_dashboard_router
+from modules.academic.admin_institution_reports.route import (
+    router as admin_institution_reports_router,
+)
 from modules.academic.admin_reference_faces.route import (
     router as admin_reference_faces_router,
 )
@@ -87,6 +90,7 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
     app.include_router(admin_reference_faces_router, prefix="/api/v1")
     app.include_router(admin_audit_log_router, prefix="/api/v1")
     app.include_router(admin_dashboard_router, prefix="/api/v1")
+    app.include_router(admin_institution_reports_router, prefix="/api/v1")
     return app
 
 
