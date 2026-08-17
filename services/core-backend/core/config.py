@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     # KEYCLOAK_JWKS_URL is resolved from the backend, so it may use a different
     # host than the issuer (for example localhost instead of a LAN address).
     keycloak_expected_issuer: str | None = None
+    # Optional comma-separated extra accepted issuers. Keycloak stamps the
+    # `iss` claim with whatever host/IP the client actually reached it
+    # through — a browser-based web login (server-side, same machine) reaches
+    # it via localhost, while a phone testing over Wi-Fi reaches it via the
+    # laptop's LAN IP, so the two logins mint tokens with different issuers.
+    # Rather than requiring this to be flipped every time you switch between
+    # them, list every issuer this backend should accept.
+    keycloak_additional_issuers: str | None = None
     keycloak_jwks_url: str | None = None
     keycloak_audience: str = "uniattend-api"
     keycloak_signing_algorithm: str = "RS256"
@@ -148,6 +156,24 @@ class Settings(BaseSettings):
             )
 
         return self
+
+    @property
+    def keycloak_accepted_issuers(self) -> tuple[str, ...]:
+        """All issuer strings a token's `iss` claim may match.
+
+        Always includes KEYCLOAK_EXPECTED_ISSUER (when set) plus any values
+        from KEYCLOAK_ADDITIONAL_ISSUERS, deduplicated, order preserved.
+        """
+        issuers = []
+        if self.keycloak_expected_issuer:
+            issuers.append(self.keycloak_expected_issuer)
+        if self.keycloak_additional_issuers:
+            issuers.extend(
+                stripped.rstrip("/")
+                for raw in self.keycloak_additional_issuers.split(",")
+                if (stripped := raw.strip())
+            )
+        return tuple(dict.fromkeys(issuers))
 
     @property
     def is_keycloak_configured(self) -> bool:
