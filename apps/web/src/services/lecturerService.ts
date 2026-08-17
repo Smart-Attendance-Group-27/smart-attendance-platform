@@ -237,9 +237,6 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
       studentId: student.studentId,
       studentIndex: student.registrationNumber,
       initialFaceCheck: mapVerificationOutcome(student.faceStatus, session.requiresFaceVerification),
-      // core-backend has no separate "additional/dynamic face check" step
-      // distinct from the primary face check yet.
-      additionalCheck: "not_launched",
       qrVerification: mapQrOutcome(student.qrStatus, session.requiresQr),
       finalStatus: mapFinalStatus(student.attendanceStatus, student.reviewStatus),
       time: formatClockTime(student.checkedInAt),

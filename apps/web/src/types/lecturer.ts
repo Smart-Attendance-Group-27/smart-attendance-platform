@@ -91,13 +91,14 @@ export type LecturerCoursesData = {
   sourceStatus: SourceSyncItem[];
 };
 
-export type VerificationOutcome = "present" | "failed" | "late" | "not_launched" | "not_required" | "not_submitted" | "not_participated" | "participated";
+export type VerificationOutcome = "present" | "failed" | "late" | "not_required" | "not_submitted" | "not_participated" | "participated";
 
 export type SessionStudentRow = {
   studentId: string;
   studentIndex: string;
+  // Students verify their face once, at the start of the lecture — there is
+  // no lecturer-triggered second/"additional" face check.
   initialFaceCheck: VerificationOutcome;
-  additionalCheck: VerificationOutcome;
   qrVerification: VerificationOutcome;
   finalStatus: "present" | "late" | "absent" | "pending_review";
   time: string;

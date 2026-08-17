@@ -20,7 +20,6 @@ export function verificationOutcomeDisplay(
     | "present"
     | "failed"
     | "late"
-    | "not_launched"
     | "not_required"
     | "not_submitted"
     | "not_participated"
@@ -35,8 +34,6 @@ export function verificationOutcomeDisplay(
       return { label: "Late", tone: "warning" };
     case "participated":
       return { label: "Participated", tone: "purple" };
-    case "not_launched":
-      return null;
     case "not_required":
       return null;
     case "not_submitted":
@@ -51,15 +48,12 @@ export function verificationOutcomeLabel(
     | "present"
     | "failed"
     | "late"
-    | "not_launched"
     | "not_required"
     | "not_submitted"
     | "not_participated"
     | "participated",
 ): string {
   switch (outcome) {
-    case "not_launched":
-      return "Not launched";
     case "not_required":
       return "Not required";
     case "not_submitted":

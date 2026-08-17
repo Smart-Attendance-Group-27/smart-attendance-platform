@@ -39,7 +39,6 @@ describe("verificationOutcomeDisplay", () => {
   });
 
   it("returns null for outcomes that render as plain text instead of a badge", () => {
-    expect(verificationOutcomeDisplay("not_launched")).toBeNull();
     expect(verificationOutcomeDisplay("not_required")).toBeNull();
     expect(verificationOutcomeDisplay("not_submitted")).toBeNull();
     expect(verificationOutcomeDisplay("not_participated")).toBeNull();
@@ -48,7 +47,6 @@ describe("verificationOutcomeDisplay", () => {
 
 describe("verificationOutcomeLabel", () => {
   it("humanises snake_case outcomes not covered by a badge", () => {
-    expect(verificationOutcomeLabel("not_launched")).toBe("Not launched");
     expect(verificationOutcomeLabel("not_required")).toBe("Not required");
     expect(verificationOutcomeLabel("not_submitted")).toBe("Not submitted");
     expect(verificationOutcomeLabel("not_participated")).toBe("Not participated");

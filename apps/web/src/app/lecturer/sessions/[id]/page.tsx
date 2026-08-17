@@ -63,7 +63,6 @@ export default async function SessionMonitorPage(props: PageProps<"/lecturer/ses
         </div>
 
         <div className="flex flex-wrap gap-1.5 border-b border-[var(--line)] bg-[#fafbfc] p-2.5">
-          <Button disabled={!isActive}>Start additional face check</Button>
           <Button disabled={!isActive} className="gap-2">
             Launch QR verification <StatusBadge tone="purple">Optional</StatusBadge>
           </Button>
@@ -100,8 +99,7 @@ export default async function SessionMonitorPage(props: PageProps<"/lecturer/ses
                 header: "Student",
                 render: (row) => <CellPrimary primary={`Student ${row.studentIndex}`} secondary={row.studentIndex} />,
               },
-              { key: "initial", header: "Initial face check", render: (row) => <VerificationCell outcome={row.initialFaceCheck} /> },
-              { key: "additional", header: "Additional check", render: (row) => <VerificationCell outcome={row.additionalCheck} /> },
+              { key: "initial", header: "Face verification", render: (row) => <VerificationCell outcome={row.initialFaceCheck} /> },
               { key: "qr", header: "QR verification", render: (row) => <VerificationCell outcome={row.qrVerification} /> },
               {
                 key: "final",
