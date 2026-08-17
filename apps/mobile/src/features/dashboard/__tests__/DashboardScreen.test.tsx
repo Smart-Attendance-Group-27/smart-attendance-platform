@@ -74,7 +74,7 @@ describe('DashboardScreen', () => {
     expect(await findByLabelText('Retry dashboard')).toBeTruthy();
   });
 
-  test('navigates to location check when Start pressed for active session', async () => {
+  test('navigates to session details when Start is pressed', async () => {
     const fakeService: DashboardService = {
       async getUpcomingLectures() {
         return [];
@@ -100,7 +100,7 @@ describe('DashboardScreen', () => {
     fireEvent.press(startButton);
 
     expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/(student)/attendance/[sessionId]/location-check',
+      pathname: '/(student)/attendance/[sessionId]',
       params: { sessionId: 'attendance-session-1' },
     });
   });
@@ -151,7 +151,7 @@ describe('DashboardScreen', () => {
     fireEvent.press(startButtons[1]);
 
     expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/(student)/attendance/[sessionId]/location-check',
+      pathname: '/(student)/attendance/[sessionId]',
       params: {
         sessionId: '40000000-0000-0000-0000-000000000002',
       },

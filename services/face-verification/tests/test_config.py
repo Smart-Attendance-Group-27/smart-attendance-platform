@@ -9,6 +9,7 @@ def test_database_settings_accept_explicit_values() -> None:
         db_user="face_service",
         db_password="test-password",
         db_ssl_mode="disable",
+        face_embedding_encryption_key="MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
         _env_file=None,
     )
 

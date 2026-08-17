@@ -19,6 +19,7 @@ def create_settings(**overrides: object) -> Settings:
         "db_user": "face_service",
         "db_password": "test-password",
         "db_ssl_mode": "disable",
+        "face_embedding_encryption_key": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
         "db_pool_min_size": 1,
         "db_pool_max_size": 5,
         "db_command_timeout_seconds": 10,

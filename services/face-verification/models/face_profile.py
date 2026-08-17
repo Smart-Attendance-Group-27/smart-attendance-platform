@@ -4,14 +4,15 @@ from uuid import UUID
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
-    Double,
     ForeignKey,
     Index,
+    Integer,
+    LargeBinary,
     String,
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID as PostgreSQLUUID
+from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base
@@ -31,10 +32,16 @@ class FaceProfile(Base):
         ),
         CheckConstraint(
             "embedding_generation_status <> 'generated' "
-            "OR (embedding IS NOT NULL "
-            "AND array_length(embedding, 1) > 0 "
+            "OR (embedding_encrypted IS NOT NULL "
+            "AND octet_length(embedding_encrypted) > 0 "
+            "AND embedding_model_name IS NOT NULL "
+            "AND length(trim(embedding_model_name)) > 0 "
+            "AND embedding_model_version IS NOT NULL "
+            "AND length(trim(embedding_model_version)) > 0 "
+            "AND embedding_dimension IS NOT NULL "
+            "AND embedding_dimension > 0 "
             "AND generated_at IS NOT NULL)",
-            name="chk_generated_profile_has_embedding",
+            name="chk_generated_profile_has_encrypted_embedding",
         ),
         CheckConstraint(
             "readiness_status IN "
@@ -47,6 +54,11 @@ class FaceProfile(Base):
             "AND readiness_config_id IS NOT NULL)",
             name="chk_passed_readiness_has_details",
         ),
+        CheckConstraint(
+            "embedding_dimension IS NULL OR embedding_dimension > 0",
+            name="chk_face_profiles_embedding_dimension",
+        ),
+        
         Index(
             "idx_face_profiles_generation_status",
             "embedding_generation_status",
@@ -68,8 +80,24 @@ class FaceProfile(Base):
         ),
         nullable=False,
     )
-    embedding: Mapped[list[float] | None] = mapped_column(
-        ARRAY(Double),
+
+    embedding_encrypted: Mapped[bytes | None] = mapped_column(
+            LargeBinary,       
+            nullable=True,
+    )
+
+    embedding_model_name: Mapped[str| None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    embedding_model_version: Mapped[str| None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    embedding_dimension: Mapped[int | None] = mapped_column(
+        Integer,
         nullable=True,
     )
     embedding_generation_status: Mapped[str] = mapped_column(

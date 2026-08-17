@@ -127,7 +127,7 @@ export function DashboardScreen({
     if (!sessionId) return;
 
     router.push({
-      pathname: '/(student)/attendance/[sessionId]/location-check',
+      pathname: '/(student)/attendance/[sessionId]',
       params: { sessionId },
     });
   };
