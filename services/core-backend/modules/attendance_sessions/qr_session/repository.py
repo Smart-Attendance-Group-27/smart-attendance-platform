@@ -21,6 +21,7 @@ class AttendanceSessionRecord:
     scheduled_end_at: datetime
     closed_at: datetime | None
     cancelled_at: datetime | None
+    requires_qr: bool | None = True
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,7 @@ class QrSessionRepository:
     ) -> AttendanceSessionRecord | None:
         row = await connection.fetchrow(
             """
-            SELECT id, status, scheduled_end_at, closed_at, cancelled_at
+            SELECT id, status, scheduled_end_at, closed_at, cancelled_at, requires_qr
             FROM attendance_session.sessions
             WHERE id = $1
             FOR UPDATE
@@ -66,7 +67,63 @@ class QrSessionRepository:
             scheduled_end_at=row["scheduled_end_at"],
             closed_at=row["closed_at"],
             cancelled_at=row["cancelled_at"],
+            requires_qr=row["requires_qr"],
         )
+
+    async def session_owned_by_lecturer(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+        lecturer_user_id: UUID,
+    ) -> bool:
+        # course_lecturers.lecturer_id references academic.lecturer_profiles.id,
+        # not identity.users.id — join through the profile on user_id rather
+        # than comparing the caller's identity.users id directly.
+        row = await connection.fetchrow(
+            """
+            SELECT 1
+            FROM attendance_session.sessions AS session
+            JOIN academic.course_offerings AS offering
+                ON offering.id = session.course_offering_id
+            JOIN academic.course_lecturers AS assignment
+                ON assignment.course_offering_id = offering.id
+            JOIN academic.lecturer_profiles AS profile
+                ON profile.id = assignment.lecturer_id
+            WHERE session.id = $1
+              AND profile.user_id = $2
+              AND profile.profile_status = 'active'
+            """,
+            session_id,
+            lecturer_user_id,
+        )
+        return row is not None
+
+    async def qr_batch_owned_by_lecturer(
+        self,
+        connection: asyncpg.Connection,
+        qr_session_id: UUID,
+        lecturer_user_id: UUID,
+    ) -> bool:
+        row = await connection.fetchrow(
+            """
+            SELECT 1
+            FROM attendance_session.qr_token_batches AS batch
+            JOIN attendance_session.sessions AS session
+                ON session.id = batch.session_id
+            JOIN academic.course_offerings AS offering
+                ON offering.id = session.course_offering_id
+            JOIN academic.course_lecturers AS assignment
+                ON assignment.course_offering_id = offering.id
+            JOIN academic.lecturer_profiles AS profile
+                ON profile.id = assignment.lecturer_id
+            WHERE batch.id = $1
+              AND profile.user_id = $2
+              AND profile.profile_status = 'active'
+            """,
+            qr_session_id,
+            lecturer_user_id,
+        )
+        return row is not None
 
     async def close_existing_active_qr_sessions(
         self,
@@ -112,6 +169,7 @@ class QrSessionRepository:
         refresh_interval_seconds: int | None,
         activated_at: datetime,
         expires_at: datetime,
+        issued_by: UUID,
     ) -> None:
         await connection.execute(
             """
@@ -127,7 +185,7 @@ class QrSessionRepository:
                 deactivated_at,
                 created_at
             )
-            VALUES ($1, $2, $3, $4, NULL, $5, $6, $7, NULL, $6)
+            VALUES ($1, $2, $3, $4, $8, $5, $6, $7, NULL, $6)
             """,
             qr_session_id,
             attendance_session_id,
@@ -136,6 +194,7 @@ class QrSessionRepository:
             ACTIVE_STATUS,
             activated_at,
             expires_at,
+            issued_by,
         )
 
     async def insert_qr_token(
@@ -167,6 +226,88 @@ class QrSessionRepository:
             valid_from,
             expires_at,
             STATIC_QR_TOKEN_SEQUENCE_NUMBER,
+        )
+
+    async def lock_student_eligibility(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+        student_id: UUID,
+    ) -> bool:
+        row = await connection.fetchrow(
+            """
+            SELECT id
+            FROM attendance_session.session_students
+            WHERE session_id = $1 AND student_id = $2
+            FOR SHARE
+            """,
+            session_id,
+            student_id,
+        )
+        return row is not None
+
+    async def find_qr_token_id_for_batch(
+        self,
+        connection: asyncpg.Connection,
+        qr_batch_id: UUID,
+    ) -> UUID | None:
+        # Static mode has exactly one qr_tokens row per batch; dynamic mode has
+        # none (its values are generated on the fly, never persisted).
+        return await connection.fetchval(
+            """
+            SELECT id
+            FROM attendance_session.qr_tokens
+            WHERE qr_batch_id = $1
+            """,
+            qr_batch_id,
+        )
+
+    async def next_qr_attempt_number(
+        self,
+        connection: asyncpg.Connection,
+        verification_attempt_id: UUID,
+    ) -> int:
+        value = await connection.fetchval(
+            """
+            SELECT COALESCE(MAX(attempt_number), 0) + 1
+            FROM attendance_verification.qr_validation_attempts
+            WHERE verification_attempt_id = $1
+            """,
+            verification_attempt_id,
+        )
+        return int(value)
+
+    async def insert_qr_validation_attempt(
+        self,
+        connection: asyncpg.Connection,
+        qr_validation_attempt_id: UUID,
+        verification_attempt_id: UUID,
+        qr_token_id: UUID | None,
+        attempt_number: int,
+        validation_status: str,
+        failure_reason: str | None,
+        validated_at: datetime,
+    ) -> None:
+        await connection.execute(
+            """
+            INSERT INTO attendance_verification.qr_validation_attempts (
+                id,
+                verification_attempt_id,
+                qr_token_id,
+                attempt_number,
+                validation_status,
+                failure_reason,
+                validated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            """,
+            qr_validation_attempt_id,
+            verification_attempt_id,
+            qr_token_id,
+            attempt_number,
+            validation_status,
+            failure_reason,
+            validated_at,
         )
 
     async def fetch_qr_batch_metadata(

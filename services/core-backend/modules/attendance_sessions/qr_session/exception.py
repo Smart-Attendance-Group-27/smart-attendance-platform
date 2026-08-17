@@ -32,3 +32,28 @@ class DynamicQrConfigurationError(QrSessionError):
     def __init__(self, message: str) -> None:
         super().__init__(message)
         self.message = message
+
+
+class LecturerSessionAccessError(QrSessionError):
+    """Raised when the attendance session does not belong to this lecturer."""
+
+
+class QrNotRequiredError(QrSessionError):
+    """Raised when QR is not enabled for the attendance session."""
+
+
+class ActiveStudentProfileNotFoundError(QrSessionError):
+    """Raised when the caller has no active student profile."""
+
+
+class StudentNotEligibleError(QrSessionError):
+    """Raised when the student is not in the session eligibility snapshot."""
+
+
+class VerificationNotStartedError(QrSessionError):
+    """Raised when QR is submitted before any verification attempt exists.
+
+    QR is an additional check on top of geofence/face verification, not a
+    replacement for it — a student must already have an in-progress
+    verification attempt for this session.
+    """

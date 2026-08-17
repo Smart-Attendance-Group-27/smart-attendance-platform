@@ -28,9 +28,11 @@ TEST_JWKS_URL = "http://keycloak.test:8080/realms/uniattend/protocol/openid-conn
 STUDENT_USER_ID = UUID("20000000-0000-0000-0000-000000000011")
 STUDENT_PROFILE_ID = UUID("23000000-0000-0000-0000-000000000001")
 LECTURER_USER_ID = UUID("20000000-0000-0000-0000-000000000002")
+ADMINISTRATOR_USER_ID = UUID("20000000-0000-0000-0000-000000000003")
 
 LINKED_STUDENT_SUBJECT = "keycloak-sub-linked-student"
 LINKED_LECTURER_SUBJECT = "keycloak-sub-linked-lecturer"
+LINKED_ADMINISTRATOR_SUBJECT = "keycloak-sub-linked-administrator"
 INACTIVE_STUDENT_SUBJECT = "keycloak-sub-inactive-student"
 UNLINKED_SUBJECT = "keycloak-sub-not-linked"
 
@@ -181,6 +183,11 @@ def default_connection() -> FakeConnection:
                 user_id=LECTURER_USER_ID,
                 email="n.perera@staff.uniattend.test",
                 keycloak_user_id=LINKED_LECTURER_SUBJECT,
+            ),
+            LINKED_ADMINISTRATOR_SUBJECT: build_user_row(
+                user_id=ADMINISTRATOR_USER_ID,
+                email="s.rathnayake@staff.uniattend.test",
+                keycloak_user_id=LINKED_ADMINISTRATOR_SUBJECT,
             ),
             INACTIVE_STUDENT_SUBJECT: build_user_row(
                 user_id=UUID("20000000-0000-0000-0000-000000000012"),

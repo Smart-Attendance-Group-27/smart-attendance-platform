@@ -108,6 +108,44 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "uniattend-web",
+      "name": "UniAttend Web Dashboard",
+      "description": "Confidential client for the Lecturer/Administrator Next.js dashboard (apps/web). Authorization Code with PKCE; the client secret is used only server-side (Route Handlers), never sent to the browser. Direct Access Grants and the implicit flow stay disabled.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "secret": "uniattend-web-dev-secret-change-me",
+      "redirectUris": [
+        "http://localhost:3000/api/auth/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:3000"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000/login"
+      },
+      "protocolMappers": [
+        {
+          "name": "uniattend-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "uniattend-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     }
   ]
 }
