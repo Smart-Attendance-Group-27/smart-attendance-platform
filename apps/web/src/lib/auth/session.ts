@@ -2,9 +2,10 @@ import "server-only";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { WebRole } from "./roles";
+import { TokenResponse } from "./oidc";
 
 const SESSION_COOKIE_NAME = "uniattend_web_session";
-const SESSION_DURATION_MS = 12 * 60 * 60 * 1000;
+const MAX_SESSION_DURATION_MS = 12 * 60 * 60 * 1000;
 
 function encodedSecretKey(): Uint8Array {
   const secretKey = process.env.SESSION_SECRET;
@@ -15,9 +16,17 @@ function encodedSecretKey(): Uint8Array {
 }
 
 export type SessionPayload = {
-  userId: string;
+  userId: string; // Keycloak 'sub'
   name: string;
   role: WebRole;
+  // Only the refresh token is persisted — NOT access/ID tokens. A real Keycloak
+  // access+refresh+ID token set together is ~3.4KB raw, and once wrapped in this
+  // cookie's own outer JWT (base64 over already-base64 JWTs, ~1.33x) exceeds the
+  // ~4096-byte cookie limit and gets silently dropped by the browser (confirmed
+  // against a real local Keycloak while building this). getValidAccessToken()
+  // (dal.ts) derives a fresh access token from this refresh token on demand;
+  // sign-out (app/actions/auth.ts) does the same for a fresh ID token.
+  refreshToken: string;
   expiresAt: string;
 };
 
@@ -40,18 +49,42 @@ export async function decryptSession(token: string | undefined): Promise<Session
   }
 }
 
-export async function createSession(userId: string, name: string, role: WebRole): Promise<void> {
-  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
-  const session = await encryptSession({ userId, name, role, expiresAt: expiresAt.toISOString() });
+async function setSessionCookie(payload: SessionPayload): Promise<void> {
+  const session = await encryptSession(payload);
   const cookieStore = await cookies();
 
   cookieStore.set(SESSION_COOKIE_NAME, session, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    expires: expiresAt,
+    expires: new Date(payload.expiresAt),
     sameSite: "lax",
     path: "/",
   });
+}
+
+export async function createSession(params: {
+  userId: string;
+  name: string;
+  role: WebRole;
+  tokens: TokenResponse;
+}): Promise<void> {
+  const boundedRefreshMs = Math.min(params.tokens.refreshExpiresInSeconds * 1000, MAX_SESSION_DURATION_MS);
+  const expiresAt = new Date(Date.now() + boundedRefreshMs);
+
+  await setSessionCookie({
+    userId: params.userId,
+    name: params.name,
+    role: params.role,
+    refreshToken: params.tokens.refreshToken,
+    expiresAt: expiresAt.toISOString(),
+  });
+}
+
+// Called after a silent token refresh (lib/auth/dal.ts) — Keycloak rotates the
+// refresh token on every use, so the cookie must be updated even though identity
+// and expiry stay the same.
+export async function updateSessionRefreshToken(current: SessionPayload, refreshToken: string): Promise<void> {
+  await setSessionCookie({ ...current, refreshToken });
 }
 
 export async function readSessionCookie(): Promise<string | undefined> {
