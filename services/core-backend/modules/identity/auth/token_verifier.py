@@ -1,3 +1,4 @@
+from collections.abc import Container
 from typing import Any
 
 import jwt
@@ -22,15 +23,19 @@ class KeycloakTokenVerifier:
     """Verifies a Keycloak access token end to end.
 
     Checks the signature against Keycloak's published keys, the signing
-    algorithm, the expiry, the exact issuer, and the API audience. None of these
+    algorithm, the expiry, the issuer, and the API audience. None of these
     checks is optional: a token that fails any of them is rejected.
+
+    expected_issuer may be a single issuer string or a container of several
+    accepted issuers (PyJWT accepts either natively) — useful in local dev
+    where the same Keycloak realm is reachable through more than one host.
     """
 
     def __init__(
         self,
         jwks_client: JwksClient,
         *,
-        expected_issuer: str,
+        expected_issuer: str | Container[str],
         audience: str,
         algorithm: str = "RS256",
         leeway_seconds: float = 0,

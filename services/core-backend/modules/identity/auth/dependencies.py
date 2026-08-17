@@ -52,7 +52,7 @@ def build_authentication_service(settings: Settings) -> AuthenticationService:
     )
     token_verifier = KeycloakTokenVerifier(
         jwks_client,
-        expected_issuer=settings.keycloak_expected_issuer,
+        expected_issuer=settings.keycloak_accepted_issuers,
         audience=settings.keycloak_audience,
         algorithm=settings.keycloak_signing_algorithm,
         leeway_seconds=settings.keycloak_leeway_seconds,

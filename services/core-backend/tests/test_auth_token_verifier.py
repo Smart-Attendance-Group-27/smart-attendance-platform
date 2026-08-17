@@ -18,7 +18,7 @@ from modules.identity.auth.token_verifier import KeycloakTokenVerifier
 def build_verifier(
     jwks_document: dict[str, Any],
     *,
-    expected_issuer: str = TEST_ISSUER,
+    expected_issuer: str | tuple[str, ...] = TEST_ISSUER,
     audience: str = TEST_AUDIENCE,
 ) -> KeycloakTokenVerifier:
     async def fetch_jwks() -> dict[str, Any]:
@@ -131,6 +131,35 @@ async def test_rejects_a_token_whose_issuer_differs_only_by_host(
 
     with pytest.raises(InvalidAccessTokenError):
         await verifier.verify(token)
+
+
+async def test_accepts_a_token_matching_any_of_several_issuers(
+    jwks_document,
+    make_access_token,
+) -> None:
+    lan_issuer = "http://192.168.1.5:8080/realms/uniattend"
+    verifier = build_verifier(jwks_document, expected_issuer=(TEST_ISSUER, lan_issuer))
+    token = make_access_token(issuer=lan_issuer)
+
+    claims = await verifier.verify(token)
+
+    assert claims.subject == "keycloak-sub-linked-student"
+
+
+async def test_rejects_a_token_from_an_issuer_outside_the_accepted_set(
+    jwks_document,
+    make_access_token,
+) -> None:
+    verifier = build_verifier(
+        jwks_document,
+        expected_issuer=(TEST_ISSUER, "http://192.168.1.5:8080/realms/uniattend"),
+    )
+    token = make_access_token(issuer="http://evil.test:8080/realms/uniattend")
+
+    with pytest.raises(InvalidAccessTokenError) as error:
+        await verifier.verify(token)
+
+    assert "issuer" in str(error.value)
 
 
 async def test_rejects_a_token_for_another_audience(
