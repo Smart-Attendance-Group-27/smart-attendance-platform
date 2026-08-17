@@ -11,8 +11,9 @@ import {
 
 import { CourseSummaryCard, DashboardTopBar, UpcomingAttendanceList, courseSummaries } from '../../../components/dashboard';
 import { ActiveSessionCard } from '../../../components/dashboard/ActiveSessionCard';
-import { ScreenContainer } from '../../../components/ui';
+import { AppButton, ScreenContainer } from '../../../components/ui';
 import { lightColors, spacing, typography } from '../../../theme';
+import type { FaceVerificationApiService } from '../../face-verification/services/faceVerificationApiService';
 import type { ActiveAttendanceSessionService } from '../services/activeAttendanceSessionService';
 import type { DashboardService } from '../services/dashboardService';
 import { MockDashboardService } from '../services/mockDashboardService';
@@ -24,6 +25,11 @@ import { MockProfileService } from '../../profile/services/mockProfileService';
 type DashboardScreenProps = {
   activeSessionService?: ActiveAttendanceSessionService;
   dashboardService?: DashboardService;
+  faceVerificationApiService?: Pick<
+    FaceVerificationApiService,
+    'getReadinessStatus'
+  >;
+  onReadinessCheckPress?: () => void;
   profileService?: ProfileService;
   onSignOutPress?: () => void;
 };
@@ -31,6 +37,8 @@ type DashboardScreenProps = {
 export function DashboardScreen({
   activeSessionService,
   dashboardService,
+  faceVerificationApiService,
+  onReadinessCheckPress,
   onSignOutPress,
   profileService,
 }: DashboardScreenProps) {
@@ -42,6 +50,7 @@ export function DashboardScreen({
   const [error, setError] = useState<string | null>(null);
   const [lectures, setLectures] = useState<Lecture[]>([]);
   const [activeSessions, setActiveSessions] = useState<AttendanceSession[]>([]);
+  const [requiresReadinessCheck, setRequiresReadinessCheck] = useState(false);
   const [userName, setUserName] = useState<string>('');
 
   const today = useMemo(() => new Date(), []);
@@ -76,14 +85,15 @@ export function DashboardScreen({
         // ignore profile errors - non-blocking
       }
 
-      const upcoming = await service.getUpcomingLectures();
-      const active = await loadActiveSessions(
+      const content = await loadDashboardContent(
         service,
         activeSessionService,
+        faceVerificationApiService,
       );
 
-      setLectures(upcoming);
-      setActiveSessions(active);
+      setLectures(content.lectures);
+      setActiveSessions(content.activeSessions);
+      setRequiresReadinessCheck(content.requiresReadinessCheck);
     } catch (err: any) {
       setError(err?.message ?? 'Unknown error');
     } finally {
@@ -100,15 +110,16 @@ export function DashboardScreen({
       setError(null);
 
       try {
-        const upcoming = await service.getUpcomingLectures();
-        const active = await loadActiveSessions(
+        const content = await loadDashboardContent(
           service,
           activeSessionService,
+          faceVerificationApiService,
         );
 
         if (!mounted) return;
-        setLectures(upcoming);
-        setActiveSessions(active);
+        setLectures(content.lectures);
+        setActiveSessions(content.activeSessions);
+        setRequiresReadinessCheck(content.requiresReadinessCheck);
       } catch (err: any) {
         if (!mounted) return;
         setError(err?.message ?? 'Unknown error');
@@ -121,7 +132,7 @@ export function DashboardScreen({
     return () => {
       mounted = false;
     };
-  }, [activeSessionService, service]);
+  }, [activeSessionService, faceVerificationApiService, service]);
 
   const handleStart = (sessionId?: string) => {
     if (!sessionId) return;
@@ -173,6 +184,16 @@ export function DashboardScreen({
           </View>
         ) : (
           <>
+            {requiresReadinessCheck ? (
+              <View style={styles.readinessAction}>
+                <AppButton
+                  onPress={onReadinessCheckPress}
+                  title="Check Face Verification Readiness"
+                  variant="secondary"
+                />
+              </View>
+            ) : null}
+
             {activeSessions.map((activeSession) => (
               <ActiveSessionCard
                 key={activeSession.id}
@@ -220,6 +241,38 @@ export function DashboardScreen({
 
 export default DashboardScreen;
 
+async function loadDashboardContent(
+  dashboardService: DashboardService,
+  activeSessionService?: ActiveAttendanceSessionService,
+  faceVerificationApiService?: Pick<
+    FaceVerificationApiService,
+    'getReadinessStatus'
+  >,
+) {
+  const [lectures, activeSessions, requiresReadinessCheck] =
+    await Promise.all([
+      dashboardService.getUpcomingLectures(),
+      loadActiveSessions(dashboardService, activeSessionService),
+      loadReadinessRequirement(faceVerificationApiService),
+    ]);
+
+  return { lectures, activeSessions, requiresReadinessCheck };
+}
+
+async function loadReadinessRequirement(
+  service?: Pick<FaceVerificationApiService, 'getReadinessStatus'>,
+): Promise<boolean> {
+  if (!service) {
+    return false;
+  }
+
+  const result = await service.getReadinessStatus();
+  return (
+    result.status === 'loaded' &&
+    result.readiness.requiresReadinessCheck
+  );
+}
+
 async function loadActiveSessions(
   dashboardService: DashboardService,
   activeSessionService?: ActiveAttendanceSessionService,
@@ -266,6 +319,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   greeting: {
+    marginBottom: spacing.lg,
+  },
+  readinessAction: {
     marginBottom: spacing.lg,
   },
   greetingTitle: {
