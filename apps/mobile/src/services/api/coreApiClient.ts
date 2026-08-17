@@ -29,6 +29,10 @@ export type CoreApiClientOptions = {
   readonly timeoutMs?: number;
 };
 
+type RequestBody =
+  | { readonly kind: 'json'; readonly value: unknown }
+  | { readonly kind: 'form-data'; readonly value: FormData };
+
 export function resolveCoreApiBaseUrl(): string {
   const configuredBaseUrl = process.env.EXPO_PUBLIC_CORE_API_URL?.trim();
   return stripTrailingSlash(configuredBaseUrl || defaultCoreApiBaseUrl);
@@ -63,13 +67,26 @@ export class CoreApiClient {
   }
 
   async post<TData>(path: string, body: unknown): Promise<CoreApiResult<TData>> {
-    return this.request<TData>(path, 'POST', body);
+    return this.request<TData>(path, 'POST', {
+      kind: 'json',
+      value: body,
+    });
+  }
+
+  async postFormData<TData>(
+    path: string,
+    body: FormData,
+  ): Promise<CoreApiResult<TData>> {
+    return this.request<TData>(path, 'POST', {
+      kind: 'form-data',
+      value: body,
+    });
   }
 
   private async request<TData>(
     path: string,
     method: 'GET' | 'POST',
-    body?: unknown,
+    body?: RequestBody,
   ): Promise<CoreApiResult<TData>> {
     const accessToken = await this.readAccessToken();
 
@@ -89,9 +106,18 @@ export class CoreApiClient {
         headers: {
           Accept: 'application/json',
           Authorization: `Bearer ${accessToken}`,
-          ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+          ...(body?.kind === 'json'
+            ? { 'Content-Type': 'application/json' }
+            : {}),
         },
-        ...(method === 'POST' ? { body: JSON.stringify(body) } : {}),
+        ...(body
+          ? {
+              body:
+                body.kind === 'json'
+                  ? JSON.stringify(body.value)
+                  : body.value,
+            }
+          : {}),
         signal: abortController.signal,
       });
 
