@@ -11,7 +11,6 @@ import {
   AdministratorAccount,
   AdminDashboardData,
   AuditLogEntry,
-  InstitutionReportsData,
   LecturerAccount,
   ReferenceFaceRecord,
   StudentAccount,
@@ -104,34 +103,6 @@ export const MOCK_REFERENCE_FACES: ReferenceFaceRecord[] = [
   { studentId: "user-stu-4", studentName: "Fiona Chang", registrationNumber: "230799F", embeddingGenerationStatus: "failed", readinessStatus: "failed", generatedAtLabel: null, readinessCheckedAtLabel: "9 Jul 2026" },
   { studentId: "user-stu-5", studentName: "Aisha Rahman", registrationNumber: "230876A", embeddingGenerationStatus: "generated", readinessStatus: "expired", generatedAtLabel: "2 Jan 2026", readinessCheckedAtLabel: "2 Jan 2026" },
 ];
-
-export const MOCK_INSTITUTION_REPORTS: InstitutionReportsData = {
-  summary: {
-    overallAttendancePercent: 87.4,
-    totalSessionsCompleted: 612,
-    totalStudents: 3984,
-    totalLecturers: 126,
-    studentsAtRiskCount: 143,
-  },
-  attendanceTrend: [
-    { label: "W1", attendanceRate: 84 },
-    { label: "W2", attendanceRate: 86 },
-    { label: "W3", attendanceRate: 88 },
-    { label: "W4", attendanceRate: 85 },
-    { label: "W5", attendanceRate: 90 },
-    { label: "W6", attendanceRate: 89 },
-    { label: "W7", attendanceRate: 91 },
-  ],
-  attendanceByFaculty: [
-    { facultyName: "Engineering", attendanceRatePercent: 89 },
-    { facultyName: "Architecture", attendanceRatePercent: 85 },
-    { facultyName: "Business", attendanceRatePercent: 82 },
-  ],
-  atRiskCourses: [
-    { courseCode: "CS6101", courseName: "Cybersecurity Fundamentals", attendanceRatePercent: 68 },
-    { courseCode: "CS5230", courseName: "Data Mining", attendanceRatePercent: 71 },
-  ],
-};
 
 export const MOCK_AUDIT_LOG: AuditLogEntry[] = [
   { id: "audit-1", occurredAtLabel: "16 Aug 2026, 10:12", actorName: "Prof. Dulani Meedeniya", actorRole: "lecturer", action: "Approved attendance override", entityType: "attendance_record", entityLabel: "Oshadha Wijayarathne · CS3203", outcome: "success" },

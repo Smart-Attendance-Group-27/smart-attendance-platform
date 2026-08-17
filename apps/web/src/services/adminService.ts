@@ -5,11 +5,12 @@ import {
   getAuditLogs as fetchAuditLogs,
   getBuildings as fetchBuildings,
   getClassrooms,
+  getInstitutionReports as fetchInstitutionReports,
   getReferenceFaces as fetchReferenceFaces,
   getUserDirectory as fetchUserDirectory,
 } from "@/lib/api/admin";
 import { formatDateLabel, formatDateTimeLabel, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
-import { MOCK_ADMIN_DASHBOARD, MOCK_INSTITUTION_REPORTS } from "@/mocks/admin";
+import { MOCK_ADMIN_DASHBOARD } from "@/mocks/admin";
 import {
   AcademicData,
   AdminDashboardData,
@@ -23,15 +24,13 @@ import {
 } from "@/types/admin";
 
 // Stage 6: dashboard/classrooms/users/academic-data/reference-faces/audit-log
-// now call the real core-backend API (see lib/api/admin.ts). Two pieces stay
-// mocked, both for reasons documented in the Stage 5 report rather than lack
-// of effort:
-//   - `policy` (AttendancePolicy) has no backing database table yet — the
-//     Stage 5 migration proposal for `academic.attendance_policies` is still
-//     awaiting approval, so there is nothing real to fetch.
-//   - Institution-wide reports/analytics (getInstitutionReports) were
-//     explicitly scoped out of Stage 5 ("Real Administrator APIs") as a
-//     separate, not-yet-built integration area.
+// now call the real core-backend API (see lib/api/admin.ts). Stage 9 added
+// real institution-wide reports (getInstitutionReports), computed server-side
+// from attendance_records — see modules/academic/admin_institution_reports.
+// One piece stays mocked: `policy` (AttendancePolicy) has no backing database
+// table yet — the Stage 5 migration proposal for
+// `academic.attendance_policies` is still awaiting approval, so there is
+// nothing real to fetch.
 
 function mapClassroomStatus(status: string): Classroom["status"] {
   return status === "active" ? "active" : "needs_review";
@@ -188,8 +187,30 @@ export async function getReferenceFaces(): Promise<ReferenceFaceRecord[]> {
 }
 
 export async function getInstitutionReports(): Promise<InstitutionReportsData> {
-  // Not backed by a real endpoint yet — see the module comment above.
-  return MOCK_INSTITUTION_REPORTS;
+  const reports = await fetchInstitutionReports();
+
+  return {
+    summary: {
+      overallAttendancePercent: roundToOneDecimal(reports.summary.overallAttendancePercent),
+      totalSessionsCompleted: reports.summary.totalSessionsCompleted,
+      totalStudents: reports.summary.totalStudents,
+      totalLecturers: reports.summary.totalLecturers,
+      studentsAtRiskCount: reports.summary.studentsAtRiskCount,
+    },
+    attendanceTrend: reports.attendanceTrend.map((point) => ({
+      label: point.label,
+      attendanceRate: point.attendanceRate,
+    })),
+    attendanceByFaculty: reports.attendanceByFaculty.map((item) => ({
+      facultyName: item.facultyName,
+      attendanceRatePercent: roundToOneDecimal(item.attendanceRatePercent),
+    })),
+    atRiskCourses: reports.atRiskCourses.map((item) => ({
+      courseCode: item.courseCode,
+      courseName: item.courseName,
+      attendanceRatePercent: roundToOneDecimal(item.attendanceRatePercent),
+    })),
+  };
 }
 
 export async function getAuditLog(): Promise<AuditLogEntry[]> {

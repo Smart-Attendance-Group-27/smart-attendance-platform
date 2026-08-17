@@ -206,3 +206,38 @@ export function getReferenceFaces(): Promise<ApiReferenceFace[]> {
 export function getAuditLogs(limit = 200): Promise<ApiAuditLogEntry[]> {
   return coreBackendFetch("/api/v1/administrators/me/audit-logs", { searchParams: { limit } });
 }
+
+export type ApiInstitutionSummary = {
+  overallAttendancePercent: number;
+  totalSessionsCompleted: number;
+  totalStudents: number;
+  totalLecturers: number;
+  studentsAtRiskCount: number;
+};
+
+export type ApiWeeklyTrendPoint = {
+  label: string;
+  attendanceRate: number;
+};
+
+export type ApiFacultyAttendance = {
+  facultyName: string;
+  attendanceRatePercent: number;
+};
+
+export type ApiAtRiskCourse = {
+  courseCode: string;
+  courseName: string;
+  attendanceRatePercent: number;
+};
+
+export type ApiInstitutionReports = {
+  summary: ApiInstitutionSummary;
+  attendanceTrend: ApiWeeklyTrendPoint[];
+  attendanceByFaculty: ApiFacultyAttendance[];
+  atRiskCourses: ApiAtRiskCourse[];
+};
+
+export function getInstitutionReports(): Promise<ApiInstitutionReports> {
+  return coreBackendFetch("/api/v1/administrators/me/institution-reports");
+}
