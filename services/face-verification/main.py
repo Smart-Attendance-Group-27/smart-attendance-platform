@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from api.routes.health import router as health_router
+from api.routes.readiness import router as readiness_router
 from core.config import get_settings
 from db.engine import create_database_engine, dispose_database_engine
 from db.session import create_session_factory
@@ -35,6 +36,7 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
     )
 
     app.include_router(health_router)
+    app.include_router(readiness_router)
 
     return app
 

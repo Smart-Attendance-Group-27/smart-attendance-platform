@@ -161,9 +161,7 @@ class ReadinessVerificationService:
             await self._session.commit()
 
             return ReadinessVerificationResult(
-                status=(
-                    ReadinessVerificationStatus.PASSED if passed else ReadinessVerificationStatus.FAILED
-                ),
+                status=(ReadinessVerificationStatus.PASSED if passed else ReadinessVerificationStatus.FAILED),
                 student_id=student_id,
                 profile_id=reference.profile_id,
                 verification_config_id=config.id,
