@@ -13,7 +13,7 @@ export default async function AdminUsersPage() {
         title="Users"
         description="Manage student, lecturer, and administrator accounts. Credentials remain in Keycloak — this page manages application profile and access status only."
         actions={
-          <Button variant="primary" title="Available once user administration API is integrated" disabled>
+          <Button variant="primary" title="Account provisioning (creating new Keycloak-linked accounts) is not built yet" disabled>
             Provision account
           </Button>
         }

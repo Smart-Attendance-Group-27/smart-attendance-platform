@@ -7,16 +7,50 @@ import { FilterBar, SearchInput } from "@/components/ui/FilterBar";
 import { DataTable, CellPrimary } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
+import { ConfirmationDialog } from "@/components/ui/Dialog";
 import { accountStatusDisplay } from "@/lib/status";
-import { AdministratorAccount, LecturerAccount, StudentAccount, UserDirectoryData } from "@/types/admin";
+import { AccountStatus, AdministratorAccount, LecturerAccount, StudentAccount, UserDirectoryData } from "@/types/admin";
+import { setAccountStatus } from "@/app/actions/users";
 
 type TabKey = "students" | "lecturers" | "administrators";
+type PendingTarget = { userId: string; name: string; nextStatus: "active" | "suspended" };
 
-const DISABLED_TITLE = "Available once user administration API is integrated";
+function AccountStatusAction({
+  userId,
+  name,
+  accountStatus,
+  onRequestChange,
+}: {
+  userId: string;
+  name: string;
+  accountStatus: AccountStatus;
+  onRequestChange: (target: PendingTarget) => void;
+}) {
+  if (accountStatus === "locked") {
+    return (
+      <Button title="This account is locked from failed sign-in attempts, not by an administrator." disabled>
+        Locked
+      </Button>
+    );
+  }
+
+  const nextStatus = accountStatus === "active" ? "suspended" : "active";
+  return (
+    <Button
+      variant={nextStatus === "suspended" ? "danger" : "default"}
+      onClick={() => onRequestChange({ userId, name, nextStatus })}
+    >
+      {nextStatus === "suspended" ? "Deactivate" : "Activate"}
+    </Button>
+  );
+}
 
 export function UsersWorkspace({ directory }: { directory: UserDirectoryData }) {
   const [tab, setTab] = useState<TabKey>("students");
   const [query, setQuery] = useState("");
+  const [pendingTarget, setPendingTarget] = useState<PendingTarget | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const normalized = query.trim().toLowerCase();
 
@@ -35,6 +69,22 @@ export function UsersWorkspace({ directory }: { directory: UserDirectoryData }) 
   const administrators = directory.administrators.filter(
     (row) => !normalized || row.fullName.toLowerCase().includes(normalized),
   );
+
+  async function confirmPendingChange() {
+    if (!pendingTarget) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const result = await setAccountStatus(pendingTarget.userId, pendingTarget.nextStatus);
+      if (!result.ok) {
+        setSubmitError(result.message);
+        return;
+      }
+      setPendingTarget(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <Card flush>
@@ -79,10 +129,13 @@ export function UsersWorkspace({ directory }: { directory: UserDirectoryData }) 
               key: "action",
               header: "Action",
               align: "right",
-              render: () => (
-                <Button title={DISABLED_TITLE} disabled>
-                  {"Deactivate"}
-                </Button>
+              render: (row) => (
+                <AccountStatusAction
+                  userId={row.userId}
+                  name={row.fullName}
+                  accountStatus={row.accountStatus}
+                  onRequestChange={setPendingTarget}
+                />
               ),
             },
           ]}
@@ -114,10 +167,13 @@ export function UsersWorkspace({ directory }: { directory: UserDirectoryData }) 
               key: "action",
               header: "Action",
               align: "right",
-              render: () => (
-                <Button title={DISABLED_TITLE} disabled>
-                  Deactivate
-                </Button>
+              render: (row) => (
+                <AccountStatusAction
+                  userId={row.userId}
+                  name={row.fullName}
+                  accountStatus={row.accountStatus}
+                  onRequestChange={setPendingTarget}
+                />
               ),
             },
           ]}
@@ -149,10 +205,13 @@ export function UsersWorkspace({ directory }: { directory: UserDirectoryData }) 
               key: "action",
               header: "Action",
               align: "right",
-              render: () => (
-                <Button title={DISABLED_TITLE} disabled>
-                  Deactivate
-                </Button>
+              render: (row) => (
+                <AccountStatusAction
+                  userId={row.userId}
+                  name={row.fullName}
+                  accountStatus={row.accountStatus}
+                  onRequestChange={setPendingTarget}
+                />
               ),
             },
           ]}
@@ -160,6 +219,26 @@ export function UsersWorkspace({ directory }: { directory: UserDirectoryData }) 
           getRowKey={(row) => row.userId}
         />
       ) : null}
+
+      <ConfirmationDialog
+        open={pendingTarget !== null}
+        title={pendingTarget?.nextStatus === "suspended" ? "Deactivate account" : "Activate account"}
+        description={
+          pendingTarget
+            ? `${pendingTarget.nextStatus === "suspended" ? "Deactivate" : "Activate"} ${pendingTarget.name}'s account? ${
+                pendingTarget.nextStatus === "suspended" ? "They will not be able to sign in until reactivated." : ""
+              }${submitError ? ` ${submitError}` : ""}`
+            : ""
+        }
+        confirmLabel={isSubmitting ? "Saving..." : pendingTarget?.nextStatus === "suspended" ? "Deactivate" : "Activate"}
+        danger={pendingTarget?.nextStatus === "suspended"}
+        busy={isSubmitting}
+        onConfirm={confirmPendingChange}
+        onCancel={() => {
+          setPendingTarget(null);
+          setSubmitError(null);
+        }}
+      />
     </Card>
   );
 }
