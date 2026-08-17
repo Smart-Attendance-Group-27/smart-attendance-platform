@@ -47,6 +47,14 @@ QR_TOKEN_RANDOM_BYTES = 32
 SSE_RECONNECT_RETRY_MS = 3000
 ACTOR_TYPE_LECTURER = "lecturer"
 AUDIT_ENTITY_TYPE = "qr_session"
+# Dynamic QR batch metadata (including the attendance session's own
+# status/closed_at) is cached with a TTL that would otherwise run all the way
+# to the batch's own expiry — up to MAX_QR_VALIDITY_SECONDS (24h). Closing a
+# session doesn't invalidate that cache entry, so without a cap, a student
+# could keep getting "accepted" QR verifications against a session the
+# lecturer already closed, for as long as the stale entry survives. Capping
+# the cache TTL bounds that window without adding cross-module invalidation.
+MAX_QR_BATCH_CACHE_TTL_SECONDS = 60
 
 
 @dataclass(frozen=True)
@@ -798,4 +806,5 @@ class QrSessionService:
         current_time: datetime,
     ) -> int:
         expires_at = QrSessionService._ensure_utc(metadata.expires_at)
-        return int((expires_at - current_time).total_seconds())
+        natural_ttl = int((expires_at - current_time).total_seconds())
+        return min(natural_ttl, MAX_QR_BATCH_CACHE_TTL_SECONDS)

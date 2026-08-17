@@ -566,7 +566,7 @@ async def test_get_qr_batch_metadata_cache_miss_falls_back_to_database() -> None
 async def test_get_qr_batch_metadata_cache_miss_populates_redis_with_ttl() -> None:
     current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
     metadata = build_qr_batch_metadata(
-        expires_at=current_time + timedelta(seconds=90),
+        expires_at=current_time + timedelta(seconds=45),
     )
     repository = FakeRepository(None)
     repository.metadata = metadata
@@ -580,7 +580,27 @@ async def test_get_qr_batch_metadata_cache_miss_populates_redis_with_ttl() -> No
     result = await service.get_qr_batch_metadata(FakePool(), metadata.id)
 
     assert result == metadata
-    assert cache.set_calls == [(metadata.id, metadata, 90)]
+    assert cache.set_calls == [(metadata.id, metadata, 45)]
+
+
+@pytest.mark.asyncio
+async def test_get_qr_batch_metadata_caps_ttl_so_a_closed_session_cannot_stay_cached_long() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    metadata = build_qr_batch_metadata(
+        expires_at=current_time + timedelta(hours=24),
+    )
+    repository = FakeRepository(None)
+    repository.metadata = metadata
+    cache = FakeQrBatchCache()
+    service = QrSessionService(
+        repository=repository,
+        qr_batch_cache=cache,
+        clock=lambda: current_time,
+    )
+
+    await service.get_qr_batch_metadata(FakePool(), metadata.id)
+
+    assert cache.set_calls == [(metadata.id, metadata, 60)]
 
 
 @pytest.mark.asyncio
@@ -678,7 +698,9 @@ async def test_create_dynamic_qr_session_caches_active_dynamic_metadata() -> Non
     assert metadata.status == "active"
     assert metadata.refresh_interval_seconds == 15
     assert metadata.expires_at == current_time + timedelta(minutes=15)
-    assert ttl_seconds == 900
+    # Capped well below the batch's own 900s validity — see
+    # MAX_QR_BATCH_CACHE_TTL_SECONDS in service.py.
+    assert ttl_seconds == 60
 
 
 @pytest.mark.asyncio
