@@ -3,11 +3,14 @@ import { useMemo } from 'react';
 import { Text } from 'react-native';
 
 import { ScreenContainer } from '../../../../components/ui';
+import { useAuth } from '../../../../features/auth/context/AuthContext';
 import { QrScannerScreen } from '../../../../features/qr/screens/QrScannerScreen';
 import { CoreApiQrVerificationService } from '../../../../features/qr/services/coreApiQrVerificationService';
+import { CoreApiClient } from '../../../../services/api/coreApiClient';
 
 export default function QrScannerRoute() {
   const router = useRouter();
+  const { session } = useAuth();
   const {
     qrSessionId: qrSessionIdParam,
     sessionId: sessionIdParam,
@@ -15,10 +18,15 @@ export default function QrScannerRoute() {
     qrSessionId?: string | string[];
     sessionId?: string | string[];
   }>();
-  const qrVerificationService = useMemo(
-    () => new CoreApiQrVerificationService(),
-    [],
-  );
+  const accessToken =
+    session.status === 'authenticated' ? session.accessToken : undefined;
+  const qrVerificationService = useMemo(() => {
+    const coreApiClient = new CoreApiClient({
+      getAccessToken: () => accessToken,
+    });
+
+    return new CoreApiQrVerificationService(coreApiClient);
+  }, [accessToken]);
   const sessionIdValue = Array.isArray(sessionIdParam)
     ? sessionIdParam[0]
     : sessionIdParam;
@@ -27,6 +35,10 @@ export default function QrScannerRoute() {
     ? qrSessionIdParam[0]
     : qrSessionIdParam;
   const qrSessionId = qrSessionIdValue?.trim();
+
+  if (session.status !== 'authenticated') {
+    return null;
+  }
 
   if (!sessionId) {
     return (
