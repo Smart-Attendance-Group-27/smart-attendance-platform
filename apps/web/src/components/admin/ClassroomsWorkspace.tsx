@@ -8,48 +8,50 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { FormField, fieldInputClassName } from "@/components/ui/FormField";
 import { classroomStatusDisplay } from "@/lib/status";
-import { Classroom } from "@/types/admin";
+import { BuildingOption, Classroom } from "@/types/admin";
+import { saveClassroom } from "@/app/actions/classrooms";
 
 type FormState = {
   classroomCode: string;
-  room: string;
-  building: string;
+  buildingId: string;
   floorNumber: string;
   capacity: string;
   latitude: string;
   longitude: string;
   radius: string;
+  status: string;
 };
 
-const EMPTY_FORM: FormState = {
-  classroomCode: "",
-  room: "",
-  building: "",
-  floorNumber: "",
-  capacity: "",
-  latitude: "",
-  longitude: "",
-  radius: "",
-};
+function emptyForm(defaultBuildingId: string): FormState {
+  return {
+    classroomCode: "",
+    buildingId: defaultBuildingId,
+    floorNumber: "",
+    capacity: "",
+    latitude: "",
+    longitude: "",
+    radius: "",
+    status: "active",
+  };
+}
 
 function classroomToForm(classroom: Classroom): FormState {
   return {
     classroomCode: classroom.classroomCode,
-    room: classroom.room,
-    building: classroom.building,
+    buildingId: classroom.buildingId,
     floorNumber: String(classroom.floorNumber),
     capacity: String(classroom.capacity),
     latitude: String(classroom.latitude),
     longitude: String(classroom.longitude),
     radius: String(classroom.defaultGeofenceRadiusMeters),
+    status: classroom.rawStatus,
   };
 }
 
 function validate(form: FormState): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!form.classroomCode.trim()) errors.classroomCode = "Classroom code is required.";
-  if (!form.room.trim()) errors.room = "Room name is required.";
-  if (!form.building.trim()) errors.building = "Building is required.";
+  if (!form.buildingId) errors.buildingId = "Building is required.";
 
   const lat = Number(form.latitude);
   if (form.latitude.trim() === "" || Number.isNaN(lat)) {
@@ -75,23 +77,37 @@ function validate(form: FormState): Record<string, string> {
   return errors;
 }
 
-export function ClassroomsWorkspace({ classrooms }: { classrooms: Classroom[] }) {
+export function ClassroomsWorkspace({
+  classrooms,
+  buildings,
+}: {
+  classrooms: Classroom[];
+  buildings: BuildingOption[];
+}) {
+  const defaultBuildingId = buildings[0]?.id ?? "";
   const [dialogMode, setDialogMode] = useState<"none" | "create" | "edit">("none");
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [editingClassroomId, setEditingClassroomId] = useState<string | null>(null);
+  const [form, setForm] = useState<FormState>(emptyForm(defaultBuildingId));
   const [touched, setTouched] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const errors = useMemo(() => validate(form), [form]);
   const hasErrors = Object.keys(errors).length > 0;
 
   function openCreate() {
-    setForm(EMPTY_FORM);
+    setForm(emptyForm(defaultBuildingId));
+    setEditingClassroomId(null);
     setTouched(false);
+    setSubmitError(null);
     setDialogMode("create");
   }
 
   function openEdit(classroom: Classroom) {
     setForm(classroomToForm(classroom));
+    setEditingClassroomId(classroom.classroomId);
     setTouched(false);
+    setSubmitError(null);
     setDialogMode("edit");
   }
 
@@ -99,11 +115,32 @@ export function ClassroomsWorkspace({ classrooms }: { classrooms: Classroom[] })
     setDialogMode("none");
   }
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setTouched(true);
-    // MOCK: no classroom-administration API exists yet — validation runs for real,
-    // but there is nothing to persist to, so the Save action stays disabled below.
+    if (hasErrors) return;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      const result = await saveClassroom(editingClassroomId, {
+        buildingId: form.buildingId,
+        classroomCode: form.classroomCode.trim(),
+        floorNumber: form.floorNumber.trim() === "" ? null : Number(form.floorNumber),
+        capacity: form.capacity.trim() === "" ? null : Number(form.capacity),
+        latitude: Number(form.latitude),
+        longitude: Number(form.longitude),
+        defaultGeofenceRadiusM: Number(form.radius),
+        status: form.status,
+      });
+      if (!result.ok) {
+        setSubmitError(result.message);
+        return;
+      }
+      setDialogMode("none");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function updateField<K extends keyof FormState>(key: K, value: string) {
@@ -115,7 +152,11 @@ export function ClassroomsWorkspace({ classrooms }: { classrooms: Classroom[] })
       <Card
         title="Classrooms and geofences"
         flush
-        actions={<Button variant="primary" onClick={openCreate}>Add classroom</Button>}
+        actions={
+          <Button variant="primary" onClick={openCreate} disabled={buildings.length === 0}>
+            Add classroom
+          </Button>
+        }
       >
         <DataTable<Classroom>
           emptyTitle="No classrooms configured yet"
@@ -165,23 +206,20 @@ export function ClassroomsWorkspace({ classrooms }: { classrooms: Classroom[] })
               />
               {touched && errors.classroomCode ? <p className="mt-1 text-[10px] text-[var(--danger)]">{errors.classroomCode}</p> : null}
             </FormField>
-            <FormField label="Room name" htmlFor="room">
-              <input
-                id="room"
+            <FormField label="Building" htmlFor="buildingId">
+              <select
+                id="buildingId"
                 className={fieldInputClassName()}
-                value={form.room}
-                onChange={(event) => updateField("room", event.target.value)}
-              />
-              {touched && errors.room ? <p className="mt-1 text-[10px] text-[var(--danger)]">{errors.room}</p> : null}
-            </FormField>
-            <FormField label="Building" htmlFor="building">
-              <input
-                id="building"
-                className={fieldInputClassName()}
-                value={form.building}
-                onChange={(event) => updateField("building", event.target.value)}
-              />
-              {touched && errors.building ? <p className="mt-1 text-[10px] text-[var(--danger)]">{errors.building}</p> : null}
+                value={form.buildingId}
+                onChange={(event) => updateField("buildingId", event.target.value)}
+              >
+                {buildings.map((building) => (
+                  <option key={building.id} value={building.id}>
+                    {building.buildingName}
+                  </option>
+                ))}
+              </select>
+              {touched && errors.buildingId ? <p className="mt-1 text-[10px] text-[var(--danger)]">{errors.buildingId}</p> : null}
             </FormField>
             <FormField label="Floor" htmlFor="floorNumber">
               <input
@@ -213,6 +251,17 @@ export function ClassroomsWorkspace({ classrooms }: { classrooms: Classroom[] })
               />
               {touched && errors.radius ? <p className="mt-1 text-[10px] text-[var(--danger)]">{errors.radius}</p> : null}
             </FormField>
+            <FormField label="Status" htmlFor="status">
+              <select
+                id="status"
+                className={fieldInputClassName()}
+                value={form.status}
+                onChange={(event) => updateField("status", event.target.value)}
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </FormField>
             <FormField label="Latitude" htmlFor="latitude" help="Between -90 and 90.">
               <input
                 id="latitude"
@@ -240,18 +289,14 @@ export function ClassroomsWorkspace({ classrooms }: { classrooms: Classroom[] })
           {touched && hasErrors ? (
             <p className="mt-3 text-xs text-[var(--danger)]">Fix the highlighted fields before saving.</p>
           ) : null}
+          {submitError ? <p className="mt-3 text-xs text-[var(--danger)]">{submitError}</p> : null}
 
           <div className="mt-4 flex justify-end gap-2">
-            <Button variant="default" onClick={closeDialog}>
+            <Button variant="default" onClick={closeDialog} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              title="Available once classroom management API is integrated"
-              disabled
-            >
-              Save classroom
+            <Button type="submit" variant="primary" disabled={isSubmitting}>
+              {isSubmitting ? "Saving..." : "Save classroom"}
             </Button>
           </div>
         </form>

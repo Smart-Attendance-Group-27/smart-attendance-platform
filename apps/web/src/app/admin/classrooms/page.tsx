@@ -1,9 +1,9 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ClassroomsWorkspace } from "@/components/admin/ClassroomsWorkspace";
-import { getAdminDashboard } from "@/services/adminService";
+import { getAdminDashboard, getBuildingOptions } from "@/services/adminService";
 
 export default async function AdminClassroomsPage() {
-  const { classrooms } = await getAdminDashboard();
+  const [{ classrooms }, buildings] = await Promise.all([getAdminDashboard(), getBuildingOptions()]);
 
   return (
     <div>
@@ -11,7 +11,7 @@ export default async function AdminClassroomsPage() {
         title="Classrooms"
         description="Configure classrooms and their geofence boundaries. Editing a classroom's geofence only affects future sessions — attendance evidence from past sessions uses a frozen snapshot and is never rewritten."
       />
-      <ClassroomsWorkspace classrooms={classrooms} />
+      <ClassroomsWorkspace classrooms={classrooms} buildings={buildings} />
     </div>
   );
 }
