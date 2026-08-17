@@ -7,6 +7,9 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
 )
 
+# Ensure all ORM tables are registered in shared metadata before sessions are used.
+import models
+
 
 AsyncSessionFactory = async_sessionmaker[AsyncSession]
 
