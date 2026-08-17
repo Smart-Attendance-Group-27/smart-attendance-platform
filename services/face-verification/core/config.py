@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     face_minimum_detection_confidence: float = Field(default=0.60, ge=0,le=1,)
     face_max_concurrent_inferences: int = Field(default=1, ge=1)
 
+    # The Core Backend owns Keycloak validation and student-profile lookup.
+    core_api_url: str = "http://localhost:8000"
+    core_api_timeout_seconds: float = Field(default=5, gt=0)
+
     model_config = SettingsConfigDict(
         env_file=ENV_FILE_PATH,
         env_file_encoding="utf-8",
@@ -50,6 +54,16 @@ class Settings(BaseSettings):
             return None
 
         return value
+
+    @field_validator("core_api_url")
+    @classmethod
+    def normalize_core_api_url(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+
+        if not normalized:
+            raise ValueError("CORE_API_URL cannot be blank")
+
+        return normalized
 
     @field_validator("db_ssl_mode")
     @classmethod

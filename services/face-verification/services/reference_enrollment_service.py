@@ -42,11 +42,15 @@ class ReferenceEnrollmentPersistenceError(RuntimeError):
 
 class ReferenceEnrollmentService:
     """Generate and store a reference embedding from an official photograph."""
-    _DEFAULT_MODEL_VERSION = "1"
 
-    def __init__(self, *,session: AsyncSession,face_engine: FaceEngine,repository: FaceProfileRepository | None = None,) -> None:
+    def __init__(self, *,session: AsyncSession,face_engine: FaceEngine,model_version: str,repository: FaceProfileRepository | None = None,) -> None:
+        normalized_model_version = model_version.strip()
+        if not normalized_model_version:
+            raise ValueError("Model version cannot be blank")
+
         self._session = session
         self._face_engine = face_engine
+        self._model_version = normalized_model_version
         self._repository = repository or FaceProfileRepository(session)
 
     async def enroll(self,*,student_id: UUID,official_photo: bytes, ) -> ReferenceEnrollmentResult:
@@ -97,7 +101,7 @@ class ReferenceEnrollmentService:
                     profile.id,
                     analysis.embedding,
                     model_name=analysis.model_name,
-                    model_version=self._DEFAULT_MODEL_VERSION,
+                    model_version=self._model_version,
                 )
             )
 
@@ -124,16 +128,9 @@ class ReferenceEnrollmentService:
 
     @staticmethod
     def _map_failure_status(status: FaceAnalysisStatus,) -> ReferenceEnrollmentStatus:
-        mapping = {
-            FaceAnalysisStatus.NO_FACE: ReferenceEnrollmentStatus.NO_FACE,
-            FaceAnalysisStatus.MULTIPLE_FACES: ReferenceEnrollmentStatus.MULTIPLE_FACES,
-            FaceAnalysisStatus.LOW_QUALITY: ReferenceEnrollmentStatus.LOW_QUALITY,
-            FaceAnalysisStatus.PROCESSING_FAILED: ReferenceEnrollmentStatus.PROCESSING_FAILED,
-        }
-
         try:
-            return mapping[status]
-        except KeyError as error:
+            return ReferenceEnrollmentStatus(status.value)
+        except ValueError as error:
             # just a safety check
             raise ValueError("Successful analysis cannot be mapped as a failure") from error
 

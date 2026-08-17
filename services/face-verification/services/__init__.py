@@ -1,4 +1,9 @@
 from .embedding_similarity import cosine_similarity
+from .face_comparison_service import (
+    FaceComparisonResult,
+    FaceComparisonService,
+    FaceComparisonStatus,
+)
 from .face_engine import (
     FaceAnalysisResult,
     FaceAnalysisStatus,
@@ -19,6 +24,9 @@ from .readiness_verification_service import (
 
 __all__ = [
     "cosine_similarity",
+    "FaceComparisonResult",
+    "FaceComparisonService",
+    "FaceComparisonStatus",
     "FaceAnalysisResult",
     "FaceAnalysisStatus",
     "FaceEngine",

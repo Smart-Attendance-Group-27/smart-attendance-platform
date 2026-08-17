@@ -5,23 +5,45 @@ import math
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol
 
+from core.config import Settings
 from services.face_engine import (FaceAnalysisResult,FaceAnalysisStatus,FaceEngine,)
 
 
 __all__ = [
     "InsightFaceAnalyzer",
     "InsightFaceEngine",
+    "create_configured_insightface_engine",
     "create_insightface_engine",
 ]
 
+
+def create_configured_insightface_engine(
+    settings: Settings,
+) -> InsightFaceEngine:
+    """Create the shared model using the service's single configuration."""
+
+    return create_insightface_engine(
+        model_name=settings.face_model_name,
+        providers=(settings.face_execution_provider,),
+        context_id=settings.face_context_id,
+        detection_size=(
+            settings.face_detection_size,
+            settings.face_detection_size,
+        ),
+        minimum_detection_confidence=(
+            settings.face_minimum_detection_confidence
+        ),
+        max_concurrent_inferences=settings.face_max_concurrent_inferences,
+    )
+
 def create_insightface_engine(
     *,
-    model_name: str = "buffalo_l",
-    providers: Sequence[str] = ("CPUExecutionProvider",),
-    context_id: int = -1,
-    detection_size: tuple[int, int] = (640, 640),
-    minimum_detection_confidence: float = 0.60,
-    max_concurrent_inferences: int = 1,
+    model_name: str,
+    providers: Sequence[str],
+    context_id: int,
+    detection_size: tuple[int, int],
+    minimum_detection_confidence: float,
+    max_concurrent_inferences: int,
 ) -> InsightFaceEngine:
 
     try:
@@ -69,7 +91,7 @@ class InsightFaceEngine(FaceEngine):
     """Adapt InsightFace output to the application's FaceEngine contract."""
 
     def __init__(self,*,analyzer: InsightFaceAnalyzer,image_decoder: ImageDecoder,model_name: str,
-        minimum_detection_confidence: float = 0.60,max_concurrent_inferences: int = 1,) -> None:
+        minimum_detection_confidence: float,max_concurrent_inferences: int,) -> None:
         if not model_name.strip():
             raise ValueError("Model name cannot be blank")
 
@@ -187,5 +209,3 @@ class InsightFaceEngine(FaceEngine):
             return None
 
         return tuple(value / magnitude for value in embedding)
-
-

@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from adapters.insightface_engine import create_insightface_engine
+from adapters.insightface_engine import create_configured_insightface_engine
 from core.config import get_settings
 from db.engine import create_database_engine, dispose_database_engine
 from db.session import create_session_factory
@@ -70,7 +70,7 @@ def find_duplicate_registration_numbers(photos: Sequence[Path],) -> set[str]:
     }
 
 # Validate a photo batch and optionally store reference embeddings.
-async def import_reference_photos(*, photos_directory: Path,commit: bool,model_name: str,minimum_detection_confidence: float,) -> ImportSummary:
+async def import_reference_photos(*, photos_directory: Path,commit: bool,) -> ImportSummary:
 
     photos = discover_reference_photos(photos_directory)
     summary = ImportSummary(discovered=len(photos))
@@ -89,7 +89,7 @@ async def import_reference_photos(*, photos_directory: Path,commit: bool,model_n
     # the large face model or writing any face-profile data.
     face_engine = None
     if commit:
-        face_engine = create_insightface_engine(model_name=model_name,minimum_detection_confidence=minimum_detection_confidence,)
+        face_engine = create_configured_insightface_engine(settings)
 
     try:
         for photo_path in photos:
@@ -124,7 +124,11 @@ async def import_reference_photos(*, photos_directory: Path,commit: bool,model_n
 
                 try:
                     photo_bytes = photo_path.read_bytes()
-                    enrollment_service = ReferenceEnrollmentService(session=session,face_engine=face_engine,)
+                    enrollment_service = ReferenceEnrollmentService(
+                        session=session,
+                        face_engine=face_engine,
+                        model_version=settings.face_model_version,
+                    )
                     result = await enrollment_service.enroll(student_id=student.id,official_photo=photo_bytes,)
 
                 except Exception as error:
@@ -168,8 +172,6 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("photos_directory",type=Path,help="Directory containing files such as 230XXX.png",)
 
     parser.add_argument("--commit",action="store_true",help="Generate and store embeddings; without this flag, dry-run only",)
-    parser.add_argument("--model-name",default="buffalo_l",help="InsightFace model pack used for enrollment (default: buffalo_l)",)
-    parser.add_argument("--minimum-detection-confidence",type=float,default=0.60,help="Initial face-detection confidence gate (default: 0.60)",)
     return parser
 
 
@@ -189,15 +191,10 @@ def main() -> int:
     parser = build_argument_parser()
     arguments = parser.parse_args()
 
-    if not 0 <= arguments.minimum_detection_confidence <= 1:
-        parser.error("--minimum-detection-confidence must be between 0 and 1")
-
     try:
         summary = asyncio.run(import_reference_photos(
                 photos_directory=arguments.photos_directory.resolve(),
                 commit=arguments.commit,
-                model_name=arguments.model_name,
-                minimum_detection_confidence=(arguments.minimum_detection_confidence),
             )
         )
     except (OSError, RuntimeError, ValueError) as error:

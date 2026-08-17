@@ -16,6 +16,7 @@ from repositories.face_profile_repository import (
 from repositories.verification_config_repository import (
     VerificationConfigRepository,
 )
+from services.face_comparison_service import FaceComparisonService
 from services.face_engine import FaceAnalysisResult, FaceAnalysisStatus
 from services.readiness_verification_service import (
     ReadinessVerificationPersistenceError,
@@ -100,10 +101,12 @@ def create_service(
     fixed_time = checked_at or datetime(2026, 8, 16, tzinfo=timezone.utc)
     return ReadinessVerificationService(
         session=session,
-        face_engine=engine,
+        face_comparison_service=FaceComparisonService(
+            face_engine=engine,
+            model_version=model_version,
+        ),
         face_profile_repository=face_profile_repository,
         verification_config_repository=config_repository,
-        model_version=model_version,
         clock=lambda: fixed_time,
     )
 

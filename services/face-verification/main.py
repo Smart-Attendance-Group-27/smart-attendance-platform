@@ -5,7 +5,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from adapters.insightface_engine import create_insightface_engine
+from adapters.core_api_student_profile_client import (
+    CoreApiStudentProfileClient,
+)
+from adapters.insightface_engine import create_configured_insightface_engine
 from api.routes.health import router as health_router
 from api.routes.readiness import router as readiness_router
 from core.config import get_settings
@@ -17,26 +20,30 @@ from db.session import create_session_factory
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     engine: AsyncEngine | None = None
+    core_api_client: CoreApiStudentProfileClient | None = None
 
     app.state.settings = settings
 
     try:
         engine = create_database_engine(settings)
         app.state.db_engine = engine
+
         app.state.db_session_factory = create_session_factory(engine)
 
+        core_api_client = CoreApiStudentProfileClient(base_url=settings.core_api_url,timeout_seconds=settings.core_api_timeout_seconds,)
+
+        app.state.core_api_student_profile_client = core_api_client
+
         app.state.face_engine = await asyncio.to_thread(
-            create_insightface_engine,
-            model_name=settings.face_model_name,
-            providers=(settings.face_execution_provider,),
-            context_id=settings.face_context_id,
-            detection_size=(settings.face_detection_size,settings.face_detection_size,),
-            minimum_detection_confidence=(settings.face_minimum_detection_confidence),
-            max_concurrent_inferences=(settings.face_max_concurrent_inferences ),
+            create_configured_insightface_engine,
+            settings,
         )
         yield
-        
+
     finally:
+        if core_api_client is not None:
+            await core_api_client.close()
+
         await dispose_database_engine(engine)
 
 

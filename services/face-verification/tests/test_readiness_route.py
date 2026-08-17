@@ -119,7 +119,8 @@ def test_rejects_unauthenticated_request() -> None:
         response = post_image(client)
 
     assert response.status_code == 401
-    assert response.json() == {"detail": "Authentication is required"}
+    assert response.json() == {"detail": "A bearer access token is required."}
+    assert response.headers["www-authenticate"] == "Bearer"
 
     service.verify.assert_not_awaited()
 

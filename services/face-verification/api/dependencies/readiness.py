@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from fastapi import HTTPException, Request, status
 
 from db.session import session_scope
+from services.face_comparison_service import FaceComparisonService
 from services.readiness_verification_service import ReadinessVerificationService
 
 
@@ -19,8 +20,10 @@ async def get_readiness_verification_service(request: Request,) -> AsyncIterator
     async with session_scope(session_factory) as session:
         yield ReadinessVerificationService(
             session=session,
-            face_engine=face_engine,
-            model_version=settings.face_model_version,
+            face_comparison_service=FaceComparisonService(
+                face_engine=face_engine,
+                model_version=settings.face_model_version,
+            ),
         )
 
 
