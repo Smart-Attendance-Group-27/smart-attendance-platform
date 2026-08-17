@@ -140,7 +140,7 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
                 <div>
                   <strong className="block text-sm">{selected.studentName}</strong>
                   <small className="mt-0.5 block text-[11px] text-[var(--muted)]">
-                    {selected.studentIndex} · {selected.studentProgramme}
+                    {selected.studentProgramme ? `${selected.studentIndex} · ${selected.studentProgramme}` : selected.studentIndex}
                   </small>
                 </div>
               </div>
