@@ -19,6 +19,8 @@ from modules.identity.auth.service import AuthenticationService
 from modules.identity.auth.token_verifier import KeycloakTokenVerifier
 
 STUDENT_ROLE = "student"
+LECTURER_ROLE = "lecturer"
+ADMINISTRATOR_ROLE = "administrator"
 
 # auto_error=False so a missing header produces our own 401 body rather than
 # FastAPI's default, keeping every auth failure on one response shape.
@@ -151,6 +153,12 @@ def require_realm_role(
 
 require_student_role = require_realm_role(STUDENT_ROLE)
 CurrentStudent = Annotated[AuthenticatedUser, Depends(require_student_role)]
+
+require_lecturer_role = require_realm_role(LECTURER_ROLE)
+CurrentLecturer = Annotated[AuthenticatedUser, Depends(require_lecturer_role)]
+
+require_administrator_role = require_realm_role(ADMINISTRATOR_ROLE)
+CurrentAdministrator = Annotated[AuthenticatedUser, Depends(require_administrator_role)]
 
 
 def _read_bearer_token(credentials: HTTPAuthorizationCredentials | None) -> str:
