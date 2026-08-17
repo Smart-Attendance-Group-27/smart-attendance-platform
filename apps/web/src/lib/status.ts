@@ -121,3 +121,58 @@ export function riskLevelDisplay(risk: "high" | "medium" | "low"): StatusDisplay
       return { label: "Low", tone: "success" };
   }
 }
+
+export function accountStatusDisplay(status: "active" | "suspended" | "locked"): StatusDisplay {
+  switch (status) {
+    case "active":
+      return { label: "Active", tone: "success" };
+    case "suspended":
+      return { label: "Suspended", tone: "warning" };
+    case "locked":
+      return { label: "Locked", tone: "danger" };
+  }
+}
+
+export function profileStatusDisplay(status: "active" | "inactive"): StatusDisplay {
+  return status === "active" ? { label: "Active", tone: "success" } : { label: "Inactive", tone: "neutral" };
+}
+
+export function academicRecordStatusDisplay(status: "active" | "inactive"): StatusDisplay {
+  return status === "active" ? { label: "Active", tone: "success" } : { label: "Inactive", tone: "neutral" };
+}
+
+export function embeddingGenerationStatusDisplay(
+  status: "pending" | "generated" | "failed" | "revoked",
+): StatusDisplay {
+  switch (status) {
+    case "pending":
+      return { label: "Pending", tone: "info" };
+    case "generated":
+      return { label: "Generated", tone: "success" };
+    case "failed":
+      return { label: "Failed", tone: "danger" };
+    case "revoked":
+      return { label: "Revoked", tone: "neutral" };
+  }
+}
+
+export function readinessStatusDisplay(status: "not_checked" | "passed" | "failed" | "expired"): StatusDisplay {
+  switch (status) {
+    case "not_checked":
+      return { label: "Not checked", tone: "neutral" };
+    case "passed":
+      return { label: "Passed", tone: "success" };
+    case "failed":
+      return { label: "Failed", tone: "danger" };
+    case "expired":
+      return { label: "Expired", tone: "warning" };
+  }
+}
+
+export function auditOutcomeDisplay(outcome: "success" | "failure"): StatusDisplay {
+  return outcome === "success" ? { label: "Success", tone: "success" } : { label: "Failure", tone: "danger" };
+}
+
+export function enrolmentStatusDisplay(status: "enrolled" | "dropped"): StatusDisplay {
+  return status === "enrolled" ? { label: "Enrolled", tone: "success" } : { label: "Dropped", tone: "neutral" };
+}

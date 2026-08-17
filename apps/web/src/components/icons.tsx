@@ -133,3 +133,34 @@ export function InboxIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function UsersIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="9" cy="8" r="3.2" />
+      <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+      <path d="M16 4.5c1.5.3 2.6 1.6 2.6 3.2s-1.1 2.9-2.6 3.2" />
+      <path d="M21 20c0-2.6-1.7-4.8-4-5.6" />
+    </svg>
+  );
+}
+
+export function BuildingIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="4" y="3" width="16" height="18" rx="1.5" />
+      <path d="M9 8h1M14 8h1M9 12h1M14 12h1M9 16h1M14 16h1" />
+      <path d="M10 21v-4h4v4" />
+    </svg>
+  );
+}
+
+export function AuditIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
+      <path d="M14 3v4h4" />
+      <path d="M8 12h7M8 15.5h7M8 9h3" />
+    </svg>
+  );
+}

@@ -13,9 +13,17 @@ describe("navItemsForRole", () => {
     ]);
   });
 
-  it("gives administrators only the Administration page", () => {
+  it("gives administrators the seven admin management pages", () => {
     const items = navItemsForRole("administrator");
-    expect(items.map((item) => item.href)).toEqual(["/admin/dashboard"]);
+    expect(items.map((item) => item.href)).toEqual([
+      "/admin/dashboard",
+      "/admin/users",
+      "/admin/academic",
+      "/admin/classrooms",
+      "/admin/policies",
+      "/admin/reports",
+      "/admin/audit",
+    ]);
   });
 
   it("never leaks a lecturer route into the administrator nav or vice versa", () => {
@@ -29,10 +37,15 @@ describe("pageTitleForPath", () => {
   it("matches the deepest nav item whose href prefixes the path", () => {
     expect(pageTitleForPath("lecturer", "/lecturer/sessions/sess-cs3203-today")).toBe("Sessions");
     expect(pageTitleForPath("lecturer", "/lecturer/review")).toBe("Verification review");
-    expect(pageTitleForPath("administrator", "/admin/dashboard")).toBe("Administration");
+    expect(pageTitleForPath("administrator", "/admin/dashboard")).toBe("Overview");
+    expect(pageTitleForPath("administrator", "/admin/audit")).toBe("Audit log");
   });
 
   it("falls back to Overview for an unmatched path", () => {
     expect(pageTitleForPath("lecturer", "/lecturer/profile")).toBe("Overview");
+  });
+
+  it("never confuses an administrator route for a lecturer route or vice versa", () => {
+    expect(pageTitleForPath("lecturer", "/admin/users")).toBe("Overview");
   });
 });

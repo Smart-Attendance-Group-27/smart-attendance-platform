@@ -1,12 +1,15 @@
 import { ComponentType } from "react";
 import {
   AdminIcon,
+  AuditIcon,
+  BuildingIcon,
   CoursesIcon,
   IconProps,
   OverviewIcon,
   ReportsIcon,
   ReviewIcon,
   SessionsIcon,
+  UsersIcon,
 } from "@/components/icons";
 import { WebRole } from "@/lib/auth/roles";
 
@@ -25,7 +28,13 @@ export const LECTURER_NAV_ITEMS: NavItem[] = [
 ];
 
 export const ADMIN_NAV_ITEMS: NavItem[] = [
-  { href: "/admin/dashboard", label: "Administration", icon: AdminIcon },
+  { href: "/admin/dashboard", label: "Overview", icon: OverviewIcon },
+  { href: "/admin/users", label: "Users", icon: UsersIcon },
+  { href: "/admin/academic", label: "Academic data", icon: CoursesIcon },
+  { href: "/admin/classrooms", label: "Classrooms", icon: BuildingIcon },
+  { href: "/admin/policies", label: "Policies", icon: AdminIcon },
+  { href: "/admin/reports", label: "Reports", icon: ReportsIcon },
+  { href: "/admin/audit", label: "Audit log", icon: AuditIcon },
 ];
 
 export function navItemsForRole(role: WebRole): NavItem[] {
