@@ -1,9 +1,11 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from adapters.insightface_engine import create_insightface_engine
 from api.routes.health import router as health_router
 from api.routes.readiness import router as readiness_router
 from core.config import get_settings
@@ -23,7 +25,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.db_engine = engine
         app.state.db_session_factory = create_session_factory(engine)
 
+        app.state.face_engine = await asyncio.to_thread(
+            create_insightface_engine,
+            model_name=settings.face_model_name,
+            providers=(settings.face_execution_provider,),
+            context_id=settings.face_context_id,
+            detection_size=(settings.face_detection_size,settings.face_detection_size,),
+            minimum_detection_confidence=(settings.face_minimum_detection_confidence),
+            max_concurrent_inferences=(settings.face_max_concurrent_inferences ),
+        )
         yield
+        
     finally:
         await dispose_database_engine(engine)
 

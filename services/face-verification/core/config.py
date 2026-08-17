@@ -1,10 +1,10 @@
+import base64
+import binascii
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import base64
-import binascii
 
 
 ENV_FILE_PATH = Path(__file__).resolve().parents[1] / ".env"
@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     db_command_timeout_seconds: float = Field(default=10, gt=0)
 
     face_embedding_encryption_key: SecretStr
+
+    face_model_name: str = "buffalo_l"
+    face_model_version: str = "1"
+    face_execution_provider: str = "CPUExecutionProvider"
+    face_context_id: int = -1
+    face_detection_size: int = Field(default=640, ge=1)
+    face_minimum_detection_confidence: float = Field(default=0.60, ge=0,le=1,)
+    face_max_concurrent_inferences: int = Field(default=1, ge=1)
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE_PATH,
@@ -88,6 +96,16 @@ class Settings(BaseSettings):
                 raise ValueError("FACE_EMBEDDING_ENCRYPTION_KEY must decode to exactly 32 bytes")
 
             return key
+
+    @field_validator("face_model_name","face_model_version","face_execution_provider",)
+    @classmethod
+    def validate_non_blank_face_setting(cls, value: str) -> str:
+        normalized = value.strip()
+
+        if not normalized:
+            raise ValueError("Face model settings cannot be blank")
+
+        return normalized
 
 @lru_cache
 def get_settings() -> Settings:

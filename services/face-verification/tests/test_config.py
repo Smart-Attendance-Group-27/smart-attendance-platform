@@ -19,3 +19,10 @@ def test_database_settings_accept_explicit_values() -> None:
     assert settings.db_user == "face_service"
     assert settings.db_password.get_secret_value() == "test-password"
     assert settings.db_ssl_mode == "disable"
+    assert settings.face_model_name == "buffalo_l"
+    assert settings.face_model_version == "1"
+    assert settings.face_execution_provider == "CPUExecutionProvider"
+    assert settings.face_context_id == -1
+    assert settings.face_detection_size == 640
+    assert settings.face_minimum_detection_confidence == 0.60
+    assert settings.face_max_concurrent_inferences == 1
