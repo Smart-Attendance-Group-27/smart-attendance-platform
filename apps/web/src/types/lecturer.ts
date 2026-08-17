@@ -2,7 +2,7 @@
 // where a matching table/column already exists, so a future services/lecturer.ts can map
 // API responses onto these types without renaming anything downstream.
 
-export type SessionStatus = "scheduled" | "in_progress" | "closed";
+export type SessionStatus = "scheduled" | "in_progress" | "closed" | "cancelled";
 
 export type TodayLecture = {
   sessionId: string;

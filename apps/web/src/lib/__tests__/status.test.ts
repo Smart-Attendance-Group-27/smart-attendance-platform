@@ -24,6 +24,10 @@ describe("sessionStatusDisplay", () => {
   it("maps closed to a neutral badge", () => {
     expect(sessionStatusDisplay("closed")).toEqual({ label: "Closed", tone: "neutral" });
   });
+
+  it("maps cancelled to a danger badge", () => {
+    expect(sessionStatusDisplay("cancelled")).toEqual({ label: "Cancelled", tone: "danger" });
+  });
 });
 
 describe("verificationOutcomeDisplay", () => {

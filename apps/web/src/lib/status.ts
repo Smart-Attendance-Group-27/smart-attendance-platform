@@ -2,7 +2,7 @@ import { StatusTone } from "@/components/ui/StatusBadge";
 
 type StatusDisplay = { label: string; tone: StatusTone };
 
-export function sessionStatusDisplay(status: "scheduled" | "in_progress" | "closed"): StatusDisplay {
+export function sessionStatusDisplay(status: "scheduled" | "in_progress" | "closed" | "cancelled"): StatusDisplay {
   switch (status) {
     case "in_progress":
       return { label: "In progress", tone: "success" };
@@ -10,6 +10,8 @@ export function sessionStatusDisplay(status: "scheduled" | "in_progress" | "clos
       return { label: "Upcoming", tone: "info" };
     case "closed":
       return { label: "Closed", tone: "neutral" };
+    case "cancelled":
+      return { label: "Cancelled", tone: "danger" };
   }
 }
 
