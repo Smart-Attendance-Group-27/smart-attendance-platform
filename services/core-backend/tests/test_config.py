@@ -46,6 +46,12 @@ def test_settings_normalizes_blank_dynamic_qr_hmac_secret() -> None:
     assert settings.dynamic_qr_hmac_secret is None
 
 
+def test_settings_normalizes_blank_face_verification_service_url() -> None:
+    settings = build_settings(face_verification_service_url=" ")
+
+    assert settings.face_verification_service_url is None
+
+
 def test_settings_rejects_invalid_ssl_mode() -> None:
     with pytest.raises(ValueError) as error:
         build_settings(db_ssl_mode="invalid")
@@ -60,6 +66,7 @@ def test_settings_defaults_to_a_small_development_pool() -> None:
     assert settings.db_pool_max_size == 5
     assert settings.db_command_timeout_seconds == 10
     assert settings.db_ssl_mode == "require"
+    assert settings.face_verification_service_url == "http://localhost:8001"
 
 
 def test_settings_defaults_to_the_initial_geofence_safeguards() -> None:

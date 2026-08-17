@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     # Required by dynamic QR generation and verification. Static QR sessions
     # do not use this secret.
     dynamic_qr_hmac_secret: SecretStr | None = None
+
+    # Internal service URL for the separately deployed face-verification API.
+    face_verification_service_url: str | None = "http://localhost:8001"
+
     # General geofence safeguards. Session-specific radius, accuracy buffer and
     # maximum accuracy values are loaded from the session geofence snapshot.
     geofence_max_reading_age_seconds: float = Field(default=30, gt=0)
@@ -83,6 +87,7 @@ class Settings(BaseSettings):
         "db_user",
         "redis_url",
         "dynamic_qr_hmac_secret",
+        "face_verification_service_url",
         mode="before",
     )
     @classmethod
