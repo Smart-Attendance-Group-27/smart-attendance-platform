@@ -193,6 +193,40 @@ class GeofenceRepository:
             failure_reason=row["failure_reason"],
         )
 
+    async def find_verification_attempt(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+        student_id: UUID,
+        *,
+        lock_for_update: bool = False,
+    ) -> VerificationAttemptRecord | None:
+        """Looks up an existing attempt without creating one.
+
+        Used by verification steps (e.g. QR) that augment an attempt started
+        by geofence rather than starting one of their own.
+        """
+        lock_clause = "FOR UPDATE" if lock_for_update else ""
+        row = await connection.fetchrow(
+            f"""
+            SELECT id, status, failure_reason
+            FROM attendance_verification.verification_attempts
+            WHERE session_id = $1 AND student_id = $2
+            {lock_clause}
+            """,
+            session_id,
+            student_id,
+        )
+
+        if row is None:
+            return None
+
+        return VerificationAttemptRecord(
+            id=row["id"],
+            status=row["status"],
+            failure_reason=row["failure_reason"],
+        )
+
     async def next_geofence_attempt_number(
         self,
         connection: asyncpg.Connection,

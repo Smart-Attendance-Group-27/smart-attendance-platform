@@ -1,8 +1,38 @@
 @import "tailwindcss";
 
+/*
+ * Institutional palette reproduced from the supplied UI design
+ * (UniAttend_UoM_Moodle_Aligned_Dashboard.html). The design has no dark-mode
+ * variant, so the dashboard intentionally stays a single fixed light theme.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --uom-blue: #064d85;
+  --uom-blue-dark: #03365f;
+  --uom-blue-soft: #e8f1f8;
+  --uom-gold: #d6a927;
+  --rail: #252d35;
+  --rail-hover: #36414b;
+  --page: #f3f5f7;
+  --surface: #ffffff;
+  --line: #d8dde3;
+  --line-soft: #e8ebee;
+  --text: #26323d;
+  --muted: #65717c;
+  --link: #075e9d;
+  --success: #2f7d32;
+  --success-bg: #e9f4e9;
+  --warning: #9b5d00;
+  --warning-bg: #fff3dc;
+  --danger: #a52c2c;
+  --danger-bg: #fbeaea;
+  --purple: #6551a8;
+  --purple-bg: #eeeafd;
+  --shadow: 0 1px 2px rgba(17, 31, 44, 0.08);
+  --topbar: 58px;
+  --rail-w: 54px;
+
+  --background: var(--page);
+  --foreground: var(--text);
 }
 
 @theme inline {
@@ -12,15 +42,13 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    "Segoe UI",
+    Roboto,
+    Arial,
+    Helvetica,
+    sans-serif;
 }
