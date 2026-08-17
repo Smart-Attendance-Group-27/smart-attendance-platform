@@ -1,0 +1,175 @@
+name: ${COMPOSE_PROJECT_NAME:-uniattend}
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: development
+    container_name: uniattend-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: "1"
+      CORE_BACKEND_URL: ${WEB_CORE_BACKEND_URL:-http://core-api:8000}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      core-api:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  core-api:
+    build:
+      context: ./services/core-backend
+    container_name: uniattend-core-api
+    restart: unless-stopped
+    environment:
+      APP_ENVIRONMENT: ${CORE_APP_ENVIRONMENT:-development}
+      DB_URI: ${CORE_DB_URI:-}
+      DB_HOST: ${CORE_DB_HOST:-}
+      DB_PORT: ${CORE_DB_PORT:-5432}
+      DB_NAME: ${CORE_DB_NAME:-postgres}
+      DB_USER: ${CORE_DB_USER:-}
+      DB_PASSWORD: ${CORE_DB_PASSWORD:-}
+      DB_SSL_MODE: ${CORE_DB_SSL_MODE:-require}
+      DB_POOL_MIN_SIZE: ${CORE_DB_POOL_MIN_SIZE:-1}
+      DB_POOL_MAX_SIZE: ${CORE_DB_POOL_MAX_SIZE:-5}
+      DB_COMMAND_TIMEOUT_SECONDS: ${CORE_DB_COMMAND_TIMEOUT_SECONDS:-10}
+      REDIS_URL: ${CORE_REDIS_URL:-redis://redis:6379/0}
+      KEYCLOAK_EXPECTED_ISSUER: ${KEYCLOAK_EXPECTED_ISSUER:-http://localhost:8080/realms/uniattend}
+      KEYCLOAK_JWKS_URL: ${CORE_KEYCLOAK_JWKS_URL:-http://keycloak:8080/realms/uniattend/protocol/openid-connect/certs}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-uniattend-api}
+      DYNAMIC_QR_HMAC_SECRET: ${DYNAMIC_QR_HMAC_SECRET:?Set DYNAMIC_QR_HMAC_SECRET in the root .env file}
+      FACE_VERIFICATION_SERVICE_URL: ${FACE_VERIFICATION_SERVICE_URL:-http://face-verification:8001}
+    ports:
+      - "${CORE_API_PORT:-8000}:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      face-verification:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  face-verification:
+    build:
+      context: ./services/face-verification
+    container_name: uniattend-face-verification
+    restart: unless-stopped
+    environment:
+      APP_ENVIRONMENT: ${FACE_APP_ENVIRONMENT:-development}
+      DB_URI: ${FACE_DB_URI:-${CORE_DB_URI}}
+      DB_HOST: ${FACE_DB_HOST:-${CORE_DB_HOST:-}}
+      DB_PORT: ${FACE_DB_PORT:-${CORE_DB_PORT:-5432}}
+      DB_NAME: ${FACE_DB_NAME:-${CORE_DB_NAME:-postgres}}
+      DB_USER: ${FACE_DB_USER:-${CORE_DB_USER:-}}
+      DB_PASSWORD: ${FACE_DB_PASSWORD:-${CORE_DB_PASSWORD:-}}
+      DB_SSL_MODE: ${FACE_DB_SSL_MODE:-${CORE_DB_SSL_MODE:-require}}
+      DB_POOL_MIN_SIZE: ${FACE_DB_POOL_MIN_SIZE:-1}
+      DB_POOL_MAX_SIZE: ${FACE_DB_POOL_MAX_SIZE:-5}
+      DB_COMMAND_TIMEOUT_SECONDS: ${FACE_DB_COMMAND_TIMEOUT_SECONDS:-10}
+    ports:
+      - "${FACE_VERIFICATION_PORT:-8001}:8001"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=5).read()\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: uniattend-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: uniattend-keycloak-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${KEYCLOAK_DB_NAME:-keycloak}
+      POSTGRES_USER: ${KEYCLOAK_DB_USER:-keycloak}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Set KEYCLOAK_DB_PASSWORD in the root .env file}
+    ports:
+      - "${KEYCLOAK_DB_PORT:-5433}:5432"
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.0
+    container_name: uniattend-keycloak
+    command: ["start-dev", "--import-realm"]
+    restart: unless-stopped
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?Set KEYCLOAK_ADMIN_PASSWORD in the root .env file}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/${KEYCLOAK_DB_NAME:-keycloak}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?Set KEYCLOAK_DB_PASSWORD in the root .env file}
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "${KEYCLOAK_HTTP_PORT:-8080}:8080"
+      - "${KEYCLOAK_HEALTH_PORT:-9000}:9000"
+    volumes:
+      - ./infra/local/keycloak/realm:/opt/keycloak/data/import:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -ec \"exec 3<>/dev/tcp/127.0.0.1/9000; printf 'GET /health/ready HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\nConnection: close\\r\\n\\r\\n' >&3; grep -q '200' <&3\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  keycloak_db_data:
+  redis_data:
