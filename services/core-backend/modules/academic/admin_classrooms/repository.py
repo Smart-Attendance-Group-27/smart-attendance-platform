@@ -110,12 +110,16 @@ class AdminClassroomRepository:
         self,
         connection: asyncpg.Connection,
         classroom_id: UUID,
+        *,
+        lock_for_update: bool = False,
     ) -> ClassroomRecord | None:
+        lock_clause = "FOR UPDATE OF classroom" if lock_for_update else ""
         row = await connection.fetchrow(
             f"""
             SELECT {_CLASSROOM_COLUMNS}
             {_CLASSROOM_JOINS}
             WHERE classroom.id = $1
+            {lock_clause}
             """,
             classroom_id,
         )

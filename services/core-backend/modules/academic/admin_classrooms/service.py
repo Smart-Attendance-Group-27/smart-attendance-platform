@@ -100,7 +100,11 @@ class AdminClassroomService:
         status: str,
     ) -> ClassroomRecord:
         async with pool.acquire() as connection, connection.transaction():
-            before = await self._repository.find_classroom(connection, classroom_id)
+            before = await self._repository.find_classroom(
+                connection,
+                classroom_id,
+                lock_for_update=True,
+            )
             if before is None:
                 raise ClassroomNotFoundError()
             if not await self._repository.building_exists(connection, building_id):
