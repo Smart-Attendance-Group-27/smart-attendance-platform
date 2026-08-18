@@ -52,6 +52,7 @@ async def list_my_active_attendance_sessions(
             course_name=session.course_name or "",
             session_title=session.session_title or "",
             session_type=session.session_type or "",
+            lecturer_names=session.lecturer_names,
             scheduled_start_at=session.scheduled_start_at,
             scheduled_end_at=session.scheduled_end_at,
             check_in_opens_at=session.check_in_opens_at,

@@ -20,6 +20,7 @@ from modules.academic.admin_reference_faces.route import (
 )
 from modules.academic.lecturer_courses.route import router as lecturer_courses_router
 from modules.academic.lecturer_reports.route import router as lecturer_reports_router
+from modules.academic.student_courses.route import router as student_courses_router
 from modules.academic.student_profile.route import router as student_profile_router
 from modules.attendance_sessions.active_sessions.route import (
     router as active_session_router,
@@ -35,6 +36,9 @@ from modules.attendance_verification.manual_review.route import (
 from modules.audit.admin_log.route import router as admin_audit_log_router
 from modules.identity.admin_users.route import router as admin_users_router
 from modules.identity.auth.route import router as auth_router
+from modules.notification.student_notifications.route import (
+    router as student_notifications_router,
+)
 from modules.routes.health import router as health_router
 
 logger = logging.getLogger(__name__)
@@ -77,6 +81,8 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
     app.include_router(health_router)
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(student_profile_router, prefix="/api/v1")
+    app.include_router(student_courses_router, prefix="/api/v1")
+    app.include_router(student_notifications_router, prefix="/api/v1")
     app.include_router(active_session_router, prefix="/api/v1")
     app.include_router(qr_session_router, prefix="/api/v1")
     app.include_router(geofence_router, prefix="/api/v1")

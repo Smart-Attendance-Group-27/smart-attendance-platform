@@ -12,6 +12,7 @@ class ActiveAttendanceSessionRecord:
     course_name: str | None
     session_title: str | None
     session_type: str | None
+    lecturer_names: str | None
     scheduled_start_at: datetime
     scheduled_end_at: datetime
     check_in_opens_at: datetime
@@ -38,6 +39,20 @@ class ActiveAttendanceSessionRepository:
                 course.course_name,
                 session.session_title,
                 session.session_type,
+                NULLIF(
+                    string_agg(
+                        DISTINCT trim(
+                            concat_ws(
+                                ' ',
+                                lecturer.first_name,
+                                lecturer.middle_name,
+                                lecturer.last_name
+                            )
+                        ),
+                        ', '
+                    ),
+                    ''
+                ) AS lecturer_names,
                 session.scheduled_start_at,
                 session.scheduled_end_at,
                 session.check_in_opens_at,
@@ -57,6 +72,10 @@ class ActiveAttendanceSessionRepository:
                 ON offering.id = session.course_offering_id
             JOIN academic.courses AS course
                 ON course.id = offering.course_id
+            LEFT JOIN academic.course_lecturers AS assignment
+                ON assignment.course_offering_id = offering.id
+            LEFT JOIN academic.lecturer_profiles AS lecturer
+                ON lecturer.id = assignment.lecturer_id
             LEFT JOIN academic.timetable_entries AS timetable
                 ON timetable.id = session.timetable_entry_id
             LEFT JOIN academic.classrooms AS timetable_classroom
@@ -76,6 +95,22 @@ class ActiveAttendanceSessionRepository:
               AND session.check_in_closes_at IS NOT NULL
               AND session.check_in_opens_at <= $2
               AND session.check_in_closes_at > $2
+            GROUP BY
+                session.id,
+                course.course_code,
+                course.course_name,
+                session.session_title,
+                session.session_type,
+                session.scheduled_start_at,
+                session.scheduled_end_at,
+                session.check_in_opens_at,
+                session.check_in_closes_at,
+                session.late_after_at,
+                exception_classroom.classroom_code,
+                timetable_classroom.classroom_code,
+                session.requires_face_verification,
+                session.requires_geofence,
+                session.requires_qr
             ORDER BY session.scheduled_start_at ASC, session.id ASC
             """,
             student_id,
@@ -89,6 +124,7 @@ class ActiveAttendanceSessionRepository:
                 course_name=row["course_name"],
                 session_title=row["session_title"],
                 session_type=row["session_type"],
+                lecturer_names=row["lecturer_names"],
                 scheduled_start_at=row["scheduled_start_at"],
                 scheduled_end_at=row["scheduled_end_at"],
                 check_in_opens_at=row["check_in_opens_at"],
