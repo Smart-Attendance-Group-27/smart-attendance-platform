@@ -146,6 +146,29 @@ describe('CoreApiClient', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  test('posts authenticated multipart data without setting its boundary', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(jsonResponse(200, { status: 'passed' }));
+    const client = buildClient();
+    const formData = new FormData();
+    formData.append('image', 'camera-image');
+
+    await client.postFormData('/api/v1/readiness', formData);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://10.0.2.2:8000/api/v1/readiness',
+      expect.objectContaining({
+        method: 'POST',
+        body: formData,
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }),
+    );
+  });
+
   test('reports a network failure when the body is not JSON', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,

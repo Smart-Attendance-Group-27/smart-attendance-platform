@@ -14,8 +14,10 @@ from repositories.verification_config_repository import (
     VerificationConfigRepository,
 )
 
-from .embedding_similarity import cosine_similarity
-from .face_engine import FaceAnalysisResult, FaceAnalysisStatus, FaceEngine
+from .face_comparison_service import (
+    FaceComparisonService,
+    FaceComparisonStatus,
+)
 
 
 class ReadinessVerificationStatus(StrEnum):
@@ -30,6 +32,14 @@ class ReadinessVerificationStatus(StrEnum):
     MODEL_MISMATCH = "model_mismatch"
 
 
+class ReadinessProfileStatus(StrEnum):
+    NOT_CHECKED = "not_checked"
+    PASSED = "passed"
+    FAILED = "failed"
+    EXPIRED = "expired"
+    PROFILE_NOT_ENROLLED = "profile_not_enrolled"
+
+
 @dataclass(frozen=True, slots=True)
 class ReadinessVerificationResult:
 
@@ -42,6 +52,13 @@ class ReadinessVerificationResult:
     detection_confidence: float | None = None
     model_name: str | None = None
     failure_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ReadinessStatusResult:
+    status: ReadinessProfileStatus
+    requires_readiness_check: bool
+    checked_at: datetime | None = None
 
 
 class ReadinessVerificationPersistenceError(RuntimeError):
@@ -62,24 +79,42 @@ class ReadinessVerificationService:
         self,
         *,
         session: AsyncSession,
-        face_engine: FaceEngine,
+        face_comparison_service: FaceComparisonService,
         face_profile_repository: FaceProfileRepository | None = None,
         verification_config_repository: VerificationConfigRepository | None = None,
-        model_version: str = "1",
         clock: Clock = _utc_now,
     ) -> None:
-        
-        normalized_model_version = model_version.strip()
-
-        if not normalized_model_version:
-            raise ValueError("Model version cannot be blank")
-
         self._session = session
-        self._face_engine = face_engine
+        self._face_comparison_service = face_comparison_service
         self._face_profile_repository = (face_profile_repository or FaceProfileRepository(session))
         self._verification_config_repository = (verification_config_repository or VerificationConfigRepository(session))
-        self._model_version = normalized_model_version
         self._clock = clock
+
+    async def get_status(self, *, student_id: UUID) -> ReadinessStatusResult:
+        """Return dashboard readiness state without loading an embedding."""
+
+        profile = await self._face_profile_repository.get_by_student_id(
+            student_id
+        )
+
+        if (
+            profile is None
+            or profile.embedding_generation_status != "generated"
+        ):
+            return ReadinessStatusResult(
+                status=ReadinessProfileStatus.PROFILE_NOT_ENROLLED,
+                requires_readiness_check=False,
+            )
+
+        profile_status = ReadinessProfileStatus(profile.readiness_status)
+
+        return ReadinessStatusResult(
+            status=profile_status,
+            requires_readiness_check=(
+                profile_status is not ReadinessProfileStatus.PASSED
+            ),
+            checked_at=profile.readiness_checked_at,
+        )
 
     async def verify(self,*,student_id: UUID,captured_image: bytes,) -> ReadinessVerificationResult:
         try:
@@ -104,53 +139,12 @@ class ReadinessVerificationService:
                 )
 
             threshold = float(config.similarity_threshold)
-
-            if not 0 <= threshold <= 1:
-                raise ValueError("Active similarity threshold must be between 0 and 1")
-
-            analysis = await self._face_engine.analyze(captured_image)
-
-            if analysis.status is not FaceAnalysisStatus.SUCCESS:
-                await self._record_readiness(
-                    reference=reference,
-                    verification_config_id=config.id,
-                    status="failed",
-                )
-                await self._session.commit()
-
-                return self._result_from_failed_analysis(
-                    student_id=student_id,
-                    reference=reference,
-                    verification_config_id=config.id,
-                    threshold=threshold,
-                    analysis=analysis,
-                )
-
-            if analysis.embedding is None or analysis.model_name is None:
-                raise ValueError("Successful face analysis is missing required data")
-
-            if self._has_model_mismatch(reference, analysis):
-                await self._record_readiness(
-                    reference=reference,
-                    verification_config_id=config.id,
-                    status="failed",
-                )
-                await self._session.commit()
-
-                return ReadinessVerificationResult(
-                    status=ReadinessVerificationStatus.MODEL_MISMATCH,
-                    student_id=student_id,
-                    profile_id=reference.profile_id,
-                    verification_config_id=config.id,
-                    similarity_threshold=threshold,
-                    detection_confidence=analysis.detection_confidence,
-                    model_name=analysis.model_name,
-                    failure_reason=("Captured and reference embeddings are incompatible"),
-                )
-
-            score = cosine_similarity(reference.embedding,analysis.embedding,)
-
-            passed = score >= threshold
+            comparison = await self._face_comparison_service.compare(
+                reference=reference,
+                captured_image=captured_image,
+                similarity_threshold=threshold,
+            )
+            passed = comparison.status is FaceComparisonStatus.MATCHED
 
             await self._record_readiness(
                 reference=reference,
@@ -161,17 +155,17 @@ class ReadinessVerificationService:
             await self._session.commit()
 
             return ReadinessVerificationResult(
-                status=(
-                    ReadinessVerificationStatus.PASSED if passed else ReadinessVerificationStatus.FAILED
+                status=self._readiness_status_for_comparison(
+                    comparison.status
                 ),
                 student_id=student_id,
                 profile_id=reference.profile_id,
                 verification_config_id=config.id,
-                similarity_score=score,
-                similarity_threshold=threshold,
-                detection_confidence=analysis.detection_confidence,
-                model_name=analysis.model_name,
-                failure_reason=(None if passed else "Face similarity was below the required threshold"),
+                similarity_score=comparison.similarity_score,
+                similarity_threshold=comparison.similarity_threshold,
+                detection_confidence=comparison.detection_confidence,
+                model_name=comparison.model_name,
+                failure_reason=comparison.failure_reason,
             )
         
         except Exception:
@@ -191,53 +185,22 @@ class ReadinessVerificationService:
         if updated_profile is None:
             raise ReadinessVerificationPersistenceError("Face profile disappeared while recording readiness")
 
-    def _has_model_mismatch(self, reference: StoredFaceEmbedding,analysis: FaceAnalysisResult,) -> bool:
-        if analysis.embedding is None or analysis.model_name is None:
-            return True
-
-        return (
-            reference.model_name != analysis.model_name
-            or reference.model_version != self._model_version
-            or reference.dimension != len(reference.embedding)
-            or reference.dimension != len(analysis.embedding)
-        )
-
     @staticmethod
-    def _result_from_failed_analysis(
-        *,
-        student_id: UUID,
-        reference: StoredFaceEmbedding,
-        verification_config_id: UUID,
-        threshold: float,
-        analysis: FaceAnalysisResult,
-    ) -> ReadinessVerificationResult:
-        
-        status_mapping = {
-            FaceAnalysisStatus.NO_FACE: ReadinessVerificationStatus.NO_FACE,
-            FaceAnalysisStatus.MULTIPLE_FACES: (ReadinessVerificationStatus.MULTIPLE_FACES),
-            FaceAnalysisStatus.LOW_QUALITY: (ReadinessVerificationStatus.LOW_QUALITY),
-            FaceAnalysisStatus.PROCESSING_FAILED: (ReadinessVerificationStatus.PROCESSING_FAILED),
-        }
+    def _readiness_status_for_comparison(
+        comparison_status: FaceComparisonStatus,
+    ) -> ReadinessVerificationStatus:
+        if comparison_status is FaceComparisonStatus.MATCHED:
+            return ReadinessVerificationStatus.PASSED
 
-        try:
-            result_status = status_mapping[analysis.status]
+        if comparison_status is FaceComparisonStatus.NOT_MATCHED:
+            return ReadinessVerificationStatus.FAILED
 
-        except KeyError as error:
-            raise ValueError("Successful analysis cannot be mapped as a failure") from error
-
-        return ReadinessVerificationResult(
-            status=result_status,
-            student_id=student_id,
-            profile_id=reference.profile_id,
-            verification_config_id=verification_config_id,
-            similarity_threshold=threshold,
-            detection_confidence=analysis.detection_confidence,
-            model_name=analysis.model_name,
-            failure_reason=analysis.failure_reason,
-        )
+        return ReadinessVerificationStatus(comparison_status.value)
 
 
 __all__ = [
+    "ReadinessProfileStatus",
+    "ReadinessStatusResult",
     "ReadinessVerificationPersistenceError",
     "ReadinessVerificationResult",
     "ReadinessVerificationService",

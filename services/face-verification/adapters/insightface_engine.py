@@ -5,24 +5,32 @@ import math
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol
 
+from core.config import Settings
 from services.face_engine import (FaceAnalysisResult,FaceAnalysisStatus,FaceEngine,)
 
 
 __all__ = [
     "InsightFaceAnalyzer",
     "InsightFaceEngine",
+    "create_configured_insightface_engine",
     "create_insightface_engine",
 ]
 
-def create_insightface_engine(
-    *,
-    model_name: str = "buffalo_l",
-    providers: Sequence[str] = ("CPUExecutionProvider",),
-    context_id: int = -1,
-    detection_size: tuple[int, int] = (640, 640),
-    minimum_detection_confidence: float = 0.60,
-    max_concurrent_inferences: int = 1,
-) -> InsightFaceEngine:
+# Create the shared model using the service's single configuration.
+def create_configured_insightface_engine(settings: Settings,) -> InsightFaceEngine:
+
+    return create_insightface_engine(
+        model_name=settings.face_model_name,
+        providers=(settings.face_execution_provider,),
+        context_id=settings.face_context_id,
+        detection_size=(settings.face_detection_size,settings.face_detection_size,),
+        minimum_detection_confidence=(
+            settings.face_minimum_detection_confidence
+        ),
+        max_concurrent_inferences=settings.face_max_concurrent_inferences,
+    )
+
+def create_insightface_engine(*,model_name: str,providers: Sequence[str],context_id: int,detection_size: tuple[int, int],minimum_detection_confidence: float,max_concurrent_inferences: int,) -> InsightFaceEngine:
 
     try:
         import cv2
@@ -55,7 +63,7 @@ def create_insightface_engine(
         max_concurrent_inferences=max_concurrent_inferences,
     )
 
-# InsightFace's FaceAnalysis object follows this small interface.
+# InsightFace's FaceAnalysis object follows this interface.
 class InsightFaceAnalyzer(Protocol):
     def get(self, image: Any) -> Sequence[Any]:
         """Detect faces and attach recognition embeddings to them."""
@@ -69,7 +77,8 @@ class InsightFaceEngine(FaceEngine):
     """Adapt InsightFace output to the application's FaceEngine contract."""
 
     def __init__(self,*,analyzer: InsightFaceAnalyzer,image_decoder: ImageDecoder,model_name: str,
-        minimum_detection_confidence: float = 0.60,max_concurrent_inferences: int = 1,) -> None:
+        minimum_detection_confidence: float,max_concurrent_inferences: int,) -> None:
+        
         if not model_name.strip():
             raise ValueError("Model name cannot be blank")
 
@@ -89,15 +98,12 @@ class InsightFaceEngine(FaceEngine):
         """Decode one image and return one normalized face embedding."""
 
         if not image:
-            return self._failure(
-                status=FaceAnalysisStatus.PROCESSING_FAILED,
-                face_count=0,
-                reason="Image is empty",
-            )
+            return self._failure(status=FaceAnalysisStatus.PROCESSING_FAILED,face_count=0,reason="Image is empty",)
 
         try:
             # Image decoding is synchronous, so it also runs outside FastAPI's event-loop thread.
             decoded_image = await asyncio.to_thread(self._image_decoder,image,)
+
         except Exception:
             return self._failure(status=FaceAnalysisStatus.PROCESSING_FAILED,face_count=0,reason="Image could not be decoded",)
 
@@ -187,5 +193,3 @@ class InsightFaceEngine(FaceEngine):
             return None
 
         return tuple(value / magnitude for value in embedding)
-
-

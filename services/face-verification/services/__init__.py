@@ -1,4 +1,9 @@
 from .embedding_similarity import cosine_similarity
+from .face_comparison_service import (
+    FaceComparisonResult,
+    FaceComparisonService,
+    FaceComparisonStatus,
+)
 from .face_engine import (
     FaceAnalysisResult,
     FaceAnalysisStatus,
@@ -11,6 +16,8 @@ from .reference_enrollment_service import (
     ReferenceEnrollmentStatus,
 )
 from .readiness_verification_service import (
+    ReadinessProfileStatus,
+    ReadinessStatusResult,
     ReadinessVerificationPersistenceError,
     ReadinessVerificationResult,
     ReadinessVerificationService,
@@ -19,6 +26,9 @@ from .readiness_verification_service import (
 
 __all__ = [
     "cosine_similarity",
+    "FaceComparisonResult",
+    "FaceComparisonService",
+    "FaceComparisonStatus",
     "FaceAnalysisResult",
     "FaceAnalysisStatus",
     "FaceEngine",
@@ -26,6 +36,8 @@ __all__ = [
     "ReferenceEnrollmentResult",
     "ReferenceEnrollmentService",
     "ReferenceEnrollmentStatus",
+    "ReadinessProfileStatus",
+    "ReadinessStatusResult",
     "ReadinessVerificationPersistenceError",
     "ReadinessVerificationResult",
     "ReadinessVerificationService",

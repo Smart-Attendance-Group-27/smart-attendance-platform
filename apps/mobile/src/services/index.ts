@@ -49,3 +49,13 @@ export type {
 } from '../features/dashboard/types/activeAttendanceSession';
 export type { ActiveAttendanceSessionService } from '../features/dashboard/services/activeAttendanceSessionService';
 export { CoreApiActiveAttendanceSessionService } from '../features/dashboard/services/coreApiActiveAttendanceSessionService';
+export type {
+  FaceReadiness,
+  FaceReadinessResult,
+  FaceReadinessStatus,
+} from '../features/face-verification/types/readinessStatus';
+export type { FaceVerificationApiServiceOptions } from '../features/face-verification/services/faceVerificationApiService';
+export {
+  FaceVerificationApiService,
+  resolveFaceVerificationApiBaseUrl,
+} from '../features/face-verification/services/faceVerificationApiService';

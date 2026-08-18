@@ -4,6 +4,7 @@ import { fireEvent, render } from '@testing-library/react-native';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import type { ActiveAttendanceSessionService } from '../services/activeAttendanceSessionService';
 import type { DashboardService } from '../services/dashboardService';
+import type { FaceVerificationApiService } from '../../face-verification/services/faceVerificationApiService';
 
 const mockPush = jest.fn();
 
@@ -195,6 +196,47 @@ describe('DashboardScreen', () => {
     expect(queryByText('Mock active session')).toBeNull();
   });
 
+  test('shows the readiness button when a check is required', async () => {
+    const faceVerificationApiService = createReadinessService(true);
+    const onReadinessCheckPress = jest.fn();
+
+    const { findByRole } = await render(
+      <DashboardScreen
+        dashboardService={createEmptyDashboardService()}
+        faceVerificationApiService={faceVerificationApiService}
+        onReadinessCheckPress={onReadinessCheckPress}
+      />,
+    );
+
+    const readinessButton = await findByRole('button', {
+        name: 'Check Face Verification Readiness',
+      });
+    fireEvent.press(readinessButton);
+
+    expect(onReadinessCheckPress).toHaveBeenCalledTimes(1);
+    expect(
+      faceVerificationApiService.getReadinessStatus,
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  test('hides the readiness button when a check is not required', async () => {
+    const faceVerificationApiService = createReadinessService(false);
+
+    const { findByText, queryByRole } = await render(
+      <DashboardScreen
+        dashboardService={createEmptyDashboardService()}
+        faceVerificationApiService={faceVerificationApiService}
+      />,
+    );
+
+    expect(await findByText('No upcoming attendance')).toBeTruthy();
+    expect(
+      queryByRole('button', {
+        name: 'Check Face Verification Readiness',
+      }),
+    ).toBeNull();
+  });
+
   test('opens the profile screen from the avatar action', async () => {
     const fakeService: DashboardService = {
       async getUpcomingLectures() {
@@ -212,6 +254,36 @@ describe('DashboardScreen', () => {
     expect(mockPush).toHaveBeenCalledWith('/(student)/(tabs)/profile');
   });
 });
+
+function createEmptyDashboardService(): DashboardService {
+  return {
+    async getUpcomingLectures() {
+      return [];
+    },
+    async getActiveAttendanceSession() {
+      return null;
+    },
+  };
+}
+
+function createReadinessService(
+  requiresReadinessCheck: boolean,
+): Pick<FaceVerificationApiService, 'getReadinessStatus'> {
+  const readinessStatus = requiresReadinessCheck
+    ? ('not_checked' as const)
+    : ('passed' as const);
+
+  return {
+    getReadinessStatus: jest.fn(async () => ({
+      status: 'loaded' as const,
+      readiness: {
+        status: readinessStatus,
+        requiresReadinessCheck,
+        checkedAt: null,
+      },
+    })),
+  };
+}
 
 function buildActiveSession(id: string, sessionTitle: string) {
   return {
