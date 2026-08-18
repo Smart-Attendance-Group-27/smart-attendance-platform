@@ -5,10 +5,11 @@ matching service for the UniAttend smart attendance platform.
 
 ## Status
 
-This service is currently in the design phase. The database schema and mobile
-service contract exist, but the standalone face-verification API, model
-pipeline, enrollment process, and production thresholds have not been
-implemented.
+The service currently includes the database integration, encrypted reference
+enrollment, InsightFace analysis adapter, similarity comparison, readiness
+verification service, and the readiness HTTP endpoint. Production threshold
+evaluation, liveness verification, attendance-session orchestration, and
+deployment hardening remain incomplete.
 
 Reference enrollment will be performed by authorized university
 administrators using existing official university student ID photographs.
@@ -25,7 +26,8 @@ The service will:
 - Perform the approved liveness check.
 - Generate an embedding with the same model and preprocessing used before
   verification.
-- Retrieve the authenticated student's active reference embedding.
+- Ask the Core Backend to authenticate the caller and resolve the active
+  student profile, then retrieve that student's reference embedding.
 - Compare the capture embedding with the reference embedding.
 - Return a typed verification result.
 - Record validation metadata without storing the raw verification capture.
@@ -34,14 +36,28 @@ The service will:
 
 The service will not:
 
-- Authenticate mobile users directly.
+- Issue credentials, manage Keycloak sessions, or validate Keycloak tokens
+  itself. The Core Backend owns those responsibilities.
 - Trust a student ID supplied by the mobile client.
 - Return reference embeddings to the mobile application.
 - Determine attendance status such as On-time or Late.
 - Store raw face captures unless a separately approved retention policy
   requires it.
 
-## Proposed Request Flow
+## Request Flows
+
+Readiness checks currently use the standalone service directly:
+
+```text
+Mobile application
+    -> Keycloak issues an access token
+    -> Face Verification Service forwards the token to the Core Backend
+    -> Core Backend validates the token and returns the active student profile
+    -> Face Verification Service processes the capture
+    -> Face Verification Service records the readiness result
+```
+
+Future attendance verification remains coordinated by the Core Backend:
 
 ```text
 Mobile application
@@ -52,8 +68,9 @@ Mobile application
     -> Core Backend maps the result to the mobile response
 ```
 
-The mobile application must communicate through the Core Backend. Any direct
-service endpoint should be private to trusted backend services.
+Attendance marking must communicate through the Core Backend. The readiness
+endpoint may be called by the mobile app because it does not create or modify
+attendance, but it still requires a valid student Keycloak access token.
 
 The platform has three distinct face-verification workflows:
 
@@ -111,14 +128,14 @@ returned to the mobile client.
 
 ### Readiness check
 
-The proposed student readiness endpoint is:
+The implemented student readiness endpoint is:
 
 ```http
-POST /api/v1/me/face-verification-readiness/checks
+POST /api/v1/face-verification/readiness
 Authorization: Bearer <access-token>
 Content-Type: multipart/form-data
 
-capture: <JPEG image or approved liveness input>
+image: <JPEG or PNG image>
 ```
 
 The readiness endpoint uses the authenticated student identity and does not
@@ -127,7 +144,7 @@ student's reference profile and the current capture can pass the approved
 verification pipeline:
 
 ```json
-{ "status": "ready" }
+{ "status": "passed", "message": "Face readiness verification passed" }
 ```
 
 Other expected statuses include:
@@ -137,11 +154,11 @@ Other expected statuses include:
 ```
 
 ```json
-{ "status": "face_not_detected" }
+{ "status": "no_face", "message": "No face was detected" }
 ```
 
 ```json
-{ "status": "multiple_faces" }
+{ "status": "multiple_faces", "message": "More than one face was detected" }
 ```
 
 ```json

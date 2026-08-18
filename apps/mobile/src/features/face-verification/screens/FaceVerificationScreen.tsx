@@ -28,6 +28,7 @@ import type { FaceVerificationResult } from '../types/faceVerification';
 type FaceVerificationScreenProps = {
   sessionId: string;
   faceVerificationService: FaceVerificationService;
+  mode?: 'attendance' | 'readiness';
   onBack: () => void;
   onFaceVerified: (sessionId: string) => void;
 };
@@ -321,12 +322,16 @@ function StatusCard({
 
 function VerificationAction({
   cameraReady,
+  continueAccessibilityLabel,
+  continueTitle,
   state,
   onContinue,
   onOpenCamera,
   onVerify,
 }: {
   cameraReady: boolean;
+  continueAccessibilityLabel: string;
+  continueTitle: string;
   state: FaceVerificationUiState;
   onContinue: () => void;
   onOpenCamera: () => void;
@@ -335,9 +340,9 @@ function VerificationAction({
   if (state.status === 'success') {
     return (
       <AppButton
-        accessibilityLabel="Continue to QR scanner"
+        accessibilityLabel={continueAccessibilityLabel}
         onPress={onContinue}
-        title="Continue"
+        title={continueTitle}
       />
     );
   }
@@ -407,6 +412,7 @@ function VerificationAction({
 export function FaceVerificationScreen({
   sessionId,
   faceVerificationService,
+  mode = 'attendance',
   onBack,
   onFaceVerified,
 }: FaceVerificationScreenProps) {
@@ -422,6 +428,7 @@ export function FaceVerificationScreen({
   const isOpeningCamera = useRef(false);
   const isProcessing = useRef(false);
   const hasContinued = useRef(false);
+  const isReadinessCheck = mode === 'readiness';
 
   useEffect(() => {
     isMounted.current = true;
@@ -535,7 +542,9 @@ export function FaceVerificationScreen({
     <ScreenContainer scrollable contentContainerStyle={styles.screenContent}>
       <ScreenHeader onBack={onBack} />
 
-      <AttendanceProgressSteps phase="face" />
+      {isReadinessCheck ? null : (
+        <AttendanceProgressSteps phase="face" />
+      )}
 
       <FaceCameraPreview
         cameraActive={cameraActive}
@@ -554,6 +563,12 @@ export function FaceVerificationScreen({
       <View style={styles.action}>
         <VerificationAction
           cameraReady={cameraReady}
+          continueAccessibilityLabel={
+            isReadinessCheck
+              ? 'Return to dashboard'
+              : 'Continue to QR scanner'
+          }
+          continueTitle={isReadinessCheck ? 'Done' : 'Continue'}
           onContinue={continueToResult}
           onOpenCamera={() => void openCamera()}
           onVerify={() => void verifyFace()}
@@ -563,7 +578,9 @@ export function FaceVerificationScreen({
 
       <View
         accessible
-        accessibilityLabel="Privacy notice. Your face is used only for attendance verification and should not be stored unnecessarily."
+        accessibilityLabel={`Privacy notice. Your face is used only for ${
+          isReadinessCheck ? 'readiness' : 'attendance'
+        } verification and should not be stored unnecessarily.`}
         style={styles.privacyNotice}
       >
         <SymbolView
@@ -572,8 +589,7 @@ export function FaceVerificationScreen({
           tintColor={lightColors.neutral}
         />
         <Text style={styles.privacyText}>
-          Your face is used only for attendance verification and should not be
-          stored unnecessarily.
+          Your face is used only for {isReadinessCheck ? 'readiness' : 'attendance'} verification and should not be stored unnecessarily.
         </Text>
       </View>
     </ScreenContainer>

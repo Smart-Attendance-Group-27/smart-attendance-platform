@@ -188,6 +188,33 @@ describe('FaceVerificationScreen', () => {
     ).toBeNull();
   });
 
+  test('reuses the camera flow for readiness without attendance progress', async () => {
+    const { service } = createService({ status: 'success' });
+    const props = createScreenProps(service);
+    const screen = await render(
+      <FaceVerificationScreen
+        {...props}
+        mode="readiness"
+      />,
+    );
+
+    expect(screen.queryByText('Location')).toBeNull();
+    expect(
+      screen.getByText(
+        'Your face is used only for readiness verification and should not be stored unnecessarily.',
+      ),
+    ).toBeTruthy();
+
+    await captureAndVerify(screen);
+    await fireEvent.press(
+      await screen.findByRole('button', { name: 'Return to dashboard' }),
+    );
+
+    expect(props.onFaceVerified).toHaveBeenCalledWith(
+      'attendance-session-active',
+    );
+  });
+
   test('requests camera permission from Begin Verification before showing the front camera', async () => {
     mockPermissionState = { granted: false };
     const { service, verifyFace } = createService({ status: 'success' });

@@ -56,6 +56,7 @@ def create_engine(analyzer: FakeAnalyzer,*,decoder=lambda _: "decoded-image",) -
         image_decoder=decoder,
         model_name="test-model",
         minimum_detection_confidence=0.60,
+        max_concurrent_inferences=1,
     )
 
 
@@ -156,6 +157,7 @@ def test_limits_shared_model_to_one_inference_at_a_time() -> None:
         analyzer=analyzer,
         image_decoder=lambda _: "decoded-image",
         model_name="test-model",
+        minimum_detection_confidence=0.60,
         max_concurrent_inferences=1,
     )
 
