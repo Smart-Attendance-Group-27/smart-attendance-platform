@@ -88,6 +88,9 @@ function toActiveAttendanceSession(
     typeof response.scheduledEndAt !== 'string' ||
     typeof response.checkInOpensAt !== 'string' ||
     typeof response.checkInClosesAt !== 'string' ||
+    (response.checkInStatus !== 'not_started' &&
+      response.checkInStatus !== 'open' &&
+      response.checkInStatus !== 'closed') ||
     (response.lateAfterAt !== null &&
       typeof response.lateAfterAt !== 'string') ||
     (response.venue !== null && typeof response.venue !== 'string') ||
@@ -118,7 +121,7 @@ function toAttendanceSession(
     checkInOpensAt: session.checkInOpensAt,
     checkInClosesAt: session.checkInClosesAt,
     lateThreshold: session.lateAfterAt ?? session.checkInClosesAt,
-    checkInStatus: 'open',
+    checkInStatus: session.checkInStatus,
   };
 }
 

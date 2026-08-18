@@ -160,6 +160,36 @@ describe('DashboardScreen', () => {
     expect(getActiveAttendanceSession).not.toHaveBeenCalled();
   });
 
+  test('shows a non-open session without a Start attendance action', async () => {
+    const activeSessionService: ActiveAttendanceSessionService = {
+      async listMyActiveSessions() {
+        return {
+          status: 'loaded',
+          sessions: [
+            buildActiveSession(
+              '40000000-0000-0000-0000-000000000003',
+              'Scheduled attendance session',
+              'not_started',
+            ),
+          ],
+        };
+      },
+    };
+
+    const { findByText, queryByRole } = await render(
+      <DashboardScreen
+        activeSessionService={activeSessionService}
+        dashboardService={createEmptyDashboardService()}
+      />,
+    );
+
+    expect(await findByText('Scheduled attendance session')).toBeTruthy();
+    expect(await findByText('Check-in has not opened')).toBeTruthy();
+    expect(
+      queryByRole('button', { name: 'Start attendance' }),
+    ).toBeNull();
+  });
+
   test('shows an error instead of mock active-session data after an API failure', async () => {
     const dashboardService: DashboardService = {
       async getUpcomingLectures() {
@@ -285,7 +315,11 @@ function createReadinessService(
   };
 }
 
-function buildActiveSession(id: string, sessionTitle: string) {
+function buildActiveSession(
+  id: string,
+  sessionTitle: string,
+  checkInStatus: 'not_started' | 'open' | 'closed' = 'open',
+) {
   return {
     id,
     courseCode: 'CS3203',
@@ -296,6 +330,7 @@ function buildActiveSession(id: string, sessionTitle: string) {
     scheduledEndAt: '2026-08-13T06:30:00Z',
     checkInOpensAt: '2026-08-13T05:28:00Z',
     checkInClosesAt: '2026-08-13T06:00:00Z',
+    checkInStatus,
     lateAfterAt: '2026-08-13T05:45:00Z',
     venue: 'LH-02',
     requiresFaceVerification: true,

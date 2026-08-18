@@ -34,7 +34,20 @@ export function ActiveSessionCard({ session, onStart }: ActiveSessionCardProps) 
   const title = (session as any)?.sessionTitle ?? session?.courseName ?? '';
   const timeRange = formatTimeRange((session as any)?.startTime ?? (session && (session as any).startTime), (session as any)?.endTime ?? (session && (session as any).endTime));
   const venue = (session as any)?.venue ?? '';
-  const closingText = computeClosingText((session as any)?.endTime ?? (session && (session as any).endTime));
+  const checkInStatus = session?.checkInStatus ?? 'closed';
+  const isOpen = checkInStatus === 'open';
+  const statusText =
+    checkInStatus === 'not_started'
+      ? 'Not started'
+      : isOpen
+        ? 'Active now'
+        : 'Closed';
+  const closingText =
+    checkInStatus === 'not_started'
+      ? 'Check-in has not opened'
+      : isOpen
+        ? computeClosingText((session as any)?.endTime ?? (session && (session as any).endTime))
+        : 'Check-in closed';
 
   return (
     <View style={styles.card}>
@@ -49,7 +62,7 @@ export function ActiveSessionCard({ session, onStart }: ActiveSessionCardProps) 
             size={14}
             tintColor={lightColors.primaryInteraction}
           />
-          <Text style={styles.activeChipText}>Active now</Text>
+          <Text style={styles.activeChipText}>{statusText}</Text>
         </View>
       </View>
 
@@ -77,9 +90,11 @@ export function ActiveSessionCard({ session, onStart }: ActiveSessionCardProps) 
         ) : null}
       </View>
 
-      <View style={styles.button}>
-        <AppButton title="Start attendance" onPress={onStart} />
-      </View>
+      {isOpen ? (
+        <View style={styles.button}>
+          <AppButton title="Start attendance" onPress={onStart} />
+        </View>
+      ) : null}
       <Text style={styles.closingText}>{closingText}</Text>
     </View>
   );

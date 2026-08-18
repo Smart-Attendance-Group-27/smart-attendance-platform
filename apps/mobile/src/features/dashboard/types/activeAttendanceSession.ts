@@ -11,6 +11,7 @@ export type ActiveAttendanceSession = {
   readonly scheduledEndAt: string;
   readonly checkInOpensAt: string;
   readonly checkInClosesAt: string;
+  readonly checkInStatus: 'not_started' | 'open' | 'closed';
   readonly lateAfterAt: string | null;
   readonly venue: string | null;
   readonly requiresFaceVerification: boolean;

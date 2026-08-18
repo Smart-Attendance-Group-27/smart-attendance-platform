@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,6 +18,9 @@ class ActiveAttendanceSessionResponse(BaseModel):
     scheduled_end_at: datetime = Field(alias="scheduledEndAt")
     check_in_opens_at: datetime = Field(alias="checkInOpensAt")
     check_in_closes_at: datetime = Field(alias="checkInClosesAt")
+    check_in_status: Literal["not_started", "open", "closed"] = Field(
+        alias="checkInStatus"
+    )
     late_after_at: datetime | None = Field(alias="lateAfterAt")
     venue: str | None = None
     requires_face_verification: bool = Field(alias="requiresFaceVerification")

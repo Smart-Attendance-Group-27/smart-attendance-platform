@@ -21,6 +21,7 @@ const backendSession = {
   scheduledEndAt: '2026-08-13T06:30:00Z',
   checkInOpensAt: '2026-08-13T05:28:00Z',
   checkInClosesAt: '2026-08-13T06:00:00Z',
+  checkInStatus: 'open',
   lateAfterAt: '2026-08-13T05:45:00Z',
   venue: 'LH-02',
   requiresFaceVerification: true,

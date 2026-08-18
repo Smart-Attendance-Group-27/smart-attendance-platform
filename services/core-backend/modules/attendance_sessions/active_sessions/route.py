@@ -57,6 +57,7 @@ async def list_my_active_attendance_sessions(
             scheduled_end_at=session.scheduled_end_at,
             check_in_opens_at=session.check_in_opens_at,
             check_in_closes_at=session.check_in_closes_at,
+            check_in_status=session.check_in_status,
             late_after_at=session.late_after_at,
             venue=session.venue,
             requires_face_verification=session.requires_face_verification,

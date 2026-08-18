@@ -69,6 +69,9 @@ function isResponse(value: unknown): value is ActiveAttendanceSession {
     isDateTime(response.scheduledEndAt) &&
     isDateTime(response.checkInOpensAt) &&
     isDateTime(response.checkInClosesAt) &&
+    (response.checkInStatus === 'not_started' ||
+      response.checkInStatus === 'open' ||
+      response.checkInStatus === 'closed') &&
     (response.lateAfterAt === null || isDateTime(response.lateAfterAt)) &&
     (response.venue === null || typeof response.venue === 'string') &&
     typeof response.requiresFaceVerification === 'boolean' &&

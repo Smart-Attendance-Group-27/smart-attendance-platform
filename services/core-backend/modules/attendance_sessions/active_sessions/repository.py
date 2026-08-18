@@ -17,6 +17,7 @@ class ActiveAttendanceSessionRecord:
     scheduled_end_at: datetime
     check_in_opens_at: datetime
     check_in_closes_at: datetime
+    check_in_status: str
     late_after_at: datetime | None
     venue: str | None
     requires_face_verification: bool
@@ -25,7 +26,7 @@ class ActiveAttendanceSessionRecord:
 
 
 class ActiveAttendanceSessionRepository:
-    async def list_open_geofence_sessions_for_student(
+    async def list_active_geofence_sessions_for_student(
         self,
         connection: asyncpg.Connection,
         student_id: UUID,
@@ -57,6 +58,11 @@ class ActiveAttendanceSessionRepository:
                 session.scheduled_end_at,
                 session.check_in_opens_at,
                 session.check_in_closes_at,
+                CASE
+                    WHEN session.check_in_opens_at > $2 THEN 'not_started'
+                    WHEN session.check_in_closes_at <= $2 THEN 'closed'
+                    ELSE 'open'
+                END AS check_in_status,
                 session.late_after_at,
                 COALESCE(
                     exception_classroom.classroom_code,
@@ -65,9 +71,9 @@ class ActiveAttendanceSessionRepository:
                 session.requires_face_verification,
                 session.requires_geofence,
                 session.requires_qr
-            FROM attendance_session.session_students AS eligible_student
+            FROM academic.course_enrolments AS enrolment
             JOIN attendance_session.sessions AS session
-                ON session.id = eligible_student.session_id
+                ON session.course_offering_id = enrolment.course_offering_id
             JOIN academic.course_offerings AS offering
                 ON offering.id = session.course_offering_id
             JOIN academic.courses AS course
@@ -84,7 +90,9 @@ class ActiveAttendanceSessionRepository:
                 ON timetable_exception.id = session.timetable_exception_id
             LEFT JOIN academic.classrooms AS exception_classroom
                 ON exception_classroom.id = timetable_exception.new_classroom_id
-            WHERE eligible_student.student_id = $1
+            WHERE enrolment.student_id = $1
+              AND enrolment.enrolment_status = 'enrolled'
+              AND offering.status = 'active'
               AND session.status = 'active'
               AND session.closed_at IS NULL
               AND session.cancelled_at IS NULL
@@ -93,8 +101,6 @@ class ActiveAttendanceSessionRepository:
               AND session.scheduled_end_at IS NOT NULL
               AND session.check_in_opens_at IS NOT NULL
               AND session.check_in_closes_at IS NOT NULL
-              AND session.check_in_opens_at <= $2
-              AND session.check_in_closes_at > $2
             GROUP BY
                 session.id,
                 course.course_code,
@@ -129,6 +135,7 @@ class ActiveAttendanceSessionRepository:
                 scheduled_end_at=row["scheduled_end_at"],
                 check_in_opens_at=row["check_in_opens_at"],
                 check_in_closes_at=row["check_in_closes_at"],
+                check_in_status=row["check_in_status"],
                 late_after_at=row["late_after_at"],
                 venue=row["venue"],
                 requires_face_verification=bool(row["requires_face_verification"]),

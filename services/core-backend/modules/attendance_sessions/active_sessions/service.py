@@ -42,7 +42,7 @@ class ActiveAttendanceSessionService:
             if profile is None or profile.profile_status != ACTIVE_PROFILE_STATUS:
                 raise StudentProfileNotFoundError()
 
-            return await self._repository.list_open_geofence_sessions_for_student(
+            return await self._repository.list_active_geofence_sessions_for_student(
                 connection,
                 profile.id,
                 current_time,

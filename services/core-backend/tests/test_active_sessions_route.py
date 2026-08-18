@@ -38,10 +38,12 @@ def build_session() -> ActiveAttendanceSessionRecord:
         course_name="Software Engineering Project",
         session_title="Geofence Demo - Near Centre",
         session_type="lecture",
+        lecturer_names="Dr Amal Silva",
         scheduled_start_at=CURRENT_TIME - timedelta(minutes=5),
         scheduled_end_at=CURRENT_TIME + timedelta(hours=1),
         check_in_opens_at=CURRENT_TIME - timedelta(minutes=2),
         check_in_closes_at=CURRENT_TIME + timedelta(minutes=30),
+        check_in_status="open",
         late_after_at=CURRENT_TIME + timedelta(minutes=15),
         venue="LH-02",
         requires_face_verification=True,
@@ -110,10 +112,12 @@ def test_returns_privacy_safe_camel_case_sessions(
             "courseName": "Software Engineering Project",
             "sessionTitle": "Geofence Demo - Near Centre",
             "sessionType": "lecture",
+            "lecturerNames": "Dr Amal Silva",
             "scheduledStartAt": "2026-08-13T05:25:00Z",
             "scheduledEndAt": "2026-08-13T06:30:00Z",
             "checkInOpensAt": "2026-08-13T05:28:00Z",
             "checkInClosesAt": "2026-08-13T06:00:00Z",
+            "checkInStatus": "open",
             "lateAfterAt": "2026-08-13T05:45:00Z",
             "venue": "LH-02",
             "requiresFaceVerification": True,
@@ -146,7 +150,7 @@ def test_service_receives_user_identity_from_token(
     assert service.requested_user_id == STUDENT_USER_ID
 
 
-def test_returns_empty_list_when_no_session_is_open(
+def test_returns_empty_list_when_no_active_session_exists(
     jwks_document,
     make_access_token,
 ) -> None:

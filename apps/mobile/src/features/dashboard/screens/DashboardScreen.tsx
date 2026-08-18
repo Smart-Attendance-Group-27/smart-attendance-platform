@@ -408,7 +408,7 @@ function toDashboardSession(
     startTime: session.scheduledStartAt,
     endTime: session.checkInClosesAt,
     lateThreshold: session.lateAfterAt ?? session.checkInClosesAt,
-    checkInStatus: 'open',
+    checkInStatus: session.checkInStatus,
     sessionTitle: session.sessionTitle,
     venue: session.venue ?? undefined,
   };

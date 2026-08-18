@@ -58,7 +58,7 @@ class FakeActiveSessionRepository:
         self.sessions = sessions
         self.request: tuple[UUID, datetime] | None = None
 
-    async def list_open_geofence_sessions_for_student(
+    async def list_active_geofence_sessions_for_student(
         self,
         connection: object,
         student_id: UUID,
@@ -100,10 +100,12 @@ def build_session() -> ActiveAttendanceSessionRecord:
         course_name="Software Engineering Project",
         session_title="Geofence Demo - Near Centre",
         session_type="lecture",
+        lecturer_names="Dr Jane Silva",
         scheduled_start_at=CURRENT_TIME - timedelta(minutes=5),
         scheduled_end_at=CURRENT_TIME + timedelta(hours=1),
         check_in_opens_at=CURRENT_TIME - timedelta(minutes=2),
         check_in_closes_at=CURRENT_TIME + timedelta(minutes=30),
+        check_in_status="open",
         late_after_at=CURRENT_TIME + timedelta(minutes=15),
         venue="LH-02",
         requires_face_verification=True,
@@ -128,7 +130,7 @@ async def test_lists_sessions_for_the_profile_derived_from_user() -> None:
     assert session_repository.request == (STUDENT_ID, CURRENT_TIME)
 
 
-async def test_returns_an_empty_list_when_no_session_is_open() -> None:
+async def test_returns_an_empty_list_when_no_active_session_exists() -> None:
     service = ActiveAttendanceSessionService(
         repository=FakeActiveSessionRepository([]),
         student_profile_repository=FakeStudentProfileRepository(build_profile()),
@@ -176,10 +178,12 @@ async def test_repository_maps_rows_and_enforces_discovery_filters() -> None:
                 "course_name": session.course_name,
                 "session_title": session.session_title,
                 "session_type": session.session_type,
+                "lecturer_names": session.lecturer_names,
                 "scheduled_start_at": session.scheduled_start_at,
                 "scheduled_end_at": session.scheduled_end_at,
                 "check_in_opens_at": session.check_in_opens_at,
                 "check_in_closes_at": session.check_in_closes_at,
+                "check_in_status": session.check_in_status,
                 "late_after_at": session.late_after_at,
                 "venue": session.venue,
                 "requires_face_verification": True,
@@ -190,7 +194,7 @@ async def test_repository_maps_rows_and_enforces_discovery_filters() -> None:
     )
 
     records = (
-        await ActiveAttendanceSessionRepository().list_open_geofence_sessions_for_student(
+        await ActiveAttendanceSessionRepository().list_active_geofence_sessions_for_student(
             connection,
             STUDENT_ID,
             CURRENT_TIME,
@@ -199,12 +203,14 @@ async def test_repository_maps_rows_and_enforces_discovery_filters() -> None:
 
     assert records == [session]
     assert connection.args == (STUDENT_ID, CURRENT_TIME)
-    assert "attendance_session.session_students" in connection.query
-    assert "eligible_student.student_id = $1" in connection.query
+    assert "academic.course_enrolments" in connection.query
+    assert "enrolment.student_id = $1" in connection.query
+    assert "enrolment.enrolment_status = 'enrolled'" in connection.query
+    assert "attendance_session.session_students" not in connection.query
     assert "session.status = 'active'" in connection.query
     assert "session.requires_geofence IS TRUE" in connection.query
-    assert "session.check_in_opens_at <= $2" in connection.query
-    assert "session.check_in_closes_at > $2" in connection.query
+    assert "WHEN session.check_in_opens_at > $2 THEN 'not_started'" in connection.query
+    assert "WHEN session.check_in_closes_at <= $2 THEN 'closed'" in connection.query
     assert "ORDER BY session.scheduled_start_at ASC, session.id ASC" in connection.query
     assert "centre_latitude" not in connection.query
     assert "centre_longitude" not in connection.query
