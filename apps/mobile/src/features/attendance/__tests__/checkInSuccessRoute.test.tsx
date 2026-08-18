@@ -15,6 +15,25 @@ let mockSearchParams: {
   sessionId?: string | string[];
 };
 
+jest.mock('../../auth/context/AuthContext', () => ({
+  useAuth: () => ({
+    session: {
+      status: 'authenticated',
+      accessToken: 'test-access-token',
+    },
+  }),
+}));
+
+jest.mock('../services/coreApiAttendanceService', () => {
+  const actual = jest.requireActual('../services/mockAttendanceService') as {
+    MockAttendanceService: new () => unknown;
+  };
+
+  return {
+    CoreApiAttendanceService: actual.MockAttendanceService,
+  };
+});
+
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockSearchParams,
   useRouter: () => ({
