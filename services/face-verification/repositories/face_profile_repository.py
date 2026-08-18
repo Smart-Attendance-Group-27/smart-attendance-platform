@@ -28,15 +28,10 @@ class StoredFaceEmbedding:
     dimension: int
 
 class FaceProfileRepository:
-    def __init__(self, session: AsyncSession, *, embedding_crypto: EmbeddingCrypto | None = None, default_model_version: str = "1",) -> None:
+    def __init__(self, session: AsyncSession, *, embedding_crypto: EmbeddingCrypto | None = None,) -> None:
         self._session = session
 
         self._embedding_crypto = embedding_crypto or EmbeddingCrypto(get_settings().face_embedding_encryption_key.get_secret_value())
-
-        self._default_model_version = default_model_version.strip()
-
-        if not self._default_model_version:
-            raise ValueError("Default model version cannot be blank")
 
     async def get_by_id(self, profile_id: UUID) -> FaceProfile | None:
         return await self._session.get(FaceProfile, profile_id)
@@ -62,7 +57,7 @@ class FaceProfileRepository:
         embedding: Sequence[float],
         *,
         model_name: str,
-        model_version: str | None = None,
+        model_version: str,
         generated_at: datetime | None = None,
     ) -> FaceProfile | None:
         
@@ -76,7 +71,7 @@ class FaceProfileRepository:
         if not normalized_model_name:
             raise ValueError("Model name cannot be blank")
 
-        selected_model_version = (model_version or self._default_model_version).strip()
+        selected_model_version = model_version.strip()
         
         if not selected_model_version:
             raise ValueError("Model version cannot be blank")

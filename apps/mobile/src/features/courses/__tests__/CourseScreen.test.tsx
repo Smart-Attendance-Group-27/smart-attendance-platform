@@ -6,9 +6,10 @@ import { CourseScreen } from '../screens/CourseScreen';
 
 describe('CourseScreen', () => {
   test('renders header and course list', async () => {
-    const { findByText } = await render(<CourseScreen />);
+    const { findByText, findByPlaceholderText } = await render(<CourseScreen />);
 
-    expect(await findByText('My courses')).toBeTruthy();
-    expect(await findByText('All courses')).toBeTruthy();
+    expect(await findByText('Courses')).toBeTruthy();
+    expect(await findByPlaceholderText('Search by course name or code')).toBeTruthy();
+    expect(await findByText(/CS3203/)).toBeTruthy();
   });
 });

@@ -63,6 +63,20 @@ def create_dependencies() -> tuple[AsyncMock, AsyncMock]:
     return session, repository
 
 
+def create_service(
+    *,
+    session: AsyncMock,
+    engine: FakeFaceEngine,
+    repository: AsyncMock,
+) -> ReferenceEnrollmentService:
+    return ReferenceEnrollmentService(
+        session=session,
+        face_engine=engine,
+        model_version="1",
+        repository=repository,
+    )
+
+
 def test_enrolls_new_student_reference_without_returning_embedding() -> None:
     student_id = uuid4()
     profile = create_profile(student_id=student_id)
@@ -71,9 +85,9 @@ def test_enrolls_new_student_reference_without_returning_embedding() -> None:
     repository.create_pending_profile.return_value = profile
     repository.save_generated_embedding.return_value = profile
     engine = FakeFaceEngine(successful_analysis())
-    service = ReferenceEnrollmentService(
+    service = create_service(
         session=session,
-        face_engine=engine,
+        engine=engine,
         repository=repository,
     )
 
@@ -111,9 +125,9 @@ def test_rejects_normal_reenrollment_of_generated_profile() -> None:
     session, repository = create_dependencies()
     repository.get_by_student_id.return_value = profile
     engine = FakeFaceEngine(successful_analysis())
-    service = ReferenceEnrollmentService(
+    service = create_service(
         session=session,
-        face_engine=engine,
+        engine=engine,
         repository=repository,
     )
 
@@ -140,9 +154,9 @@ def test_rejects_enrollment_of_revoked_profile() -> None:
     session, repository = create_dependencies()
     repository.get_by_student_id.return_value = profile
     engine = FakeFaceEngine(successful_analysis())
-    service = ReferenceEnrollmentService(
+    service = create_service(
         session=session,
-        face_engine=engine,
+        engine=engine,
         repository=repository,
     )
 
@@ -173,9 +187,9 @@ def test_records_failed_generation_when_photo_has_no_face() -> None:
             model_name="test-model",
         )
     )
-    service = ReferenceEnrollmentService(
+    service = create_service(
         session=session,
-        face_engine=engine,
+        engine=engine,
         repository=repository,
     )
 
@@ -200,9 +214,9 @@ def test_rolls_back_when_profile_disappears_while_saving() -> None:
     session, repository = create_dependencies()
     repository.get_by_student_id.return_value = profile
     repository.save_generated_embedding.return_value = None
-    service = ReferenceEnrollmentService(
+    service = create_service(
         session=session,
-        face_engine=FakeFaceEngine(successful_analysis()),
+        engine=FakeFaceEngine(successful_analysis()),
         repository=repository,
     )
 
@@ -230,9 +244,9 @@ def test_rolls_back_unexpected_face_engine_error() -> None:
         successful_analysis(),
         error=RuntimeError("unexpected engine failure"),
     )
-    service = ReferenceEnrollmentService(
+    service = create_service(
         session=session,
-        face_engine=engine,
+        engine=engine,
         repository=repository,
     )
 

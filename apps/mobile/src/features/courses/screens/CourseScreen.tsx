@@ -1,76 +1,41 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { useRouter } from 'expo-router';
 
-import { ScreenContainer } from '../../../components/ui';
-import { CourseSummaryCard, courseSummaries } from '../../../components/dashboard';
-import { typography, spacing, lightColors } from '../../../theme';
+import { CourseListScreen } from './CourseListScreen';
+import { CourseDetailsScreen } from './CourseDetailsScreen';
 
 export function CourseScreen() {
+  const router = useRouter();
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+
+  const handleBackFromList = () => {
+    // If they click back on the root course list, send them back to the Home tab
+    router.replace('/(student)/(tabs)');
+  };
+
+  const handleSelectCourse = (courseId: string) => {
+    setSelectedCourseId(courseId);
+  };
+
+  const handleBackFromDetails = () => {
+    setSelectedCourseId(null);
+  };
+
+  if (selectedCourseId) {
+    return (
+      <CourseDetailsScreen
+        courseId={selectedCourseId}
+        onBack={handleBackFromDetails}
+      />
+    );
+  }
+
   return (
-    <ScreenContainer scrollable contentContainerStyle={styles.container}>
-      <Text accessibilityRole="header" style={styles.title}>My courses</Text>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.rail}
-      >
-        {courseSummaries.map((c) => (
-          <CourseSummaryCard course={c} key={c.code} />
-        ))}
-      </ScrollView>
-
-      <View style={styles.listHeading}>
-        <Text style={styles.section}>All courses</Text>
-      </View>
-
-      <View style={styles.list}>
-        {courseSummaries.map((c) => (
-          <View key={c.code} style={styles.listItem}>
-            <Text style={styles.courseLabel}>{c.code} — {c.title}</Text>
-          </View>
-        ))}
-      </View>
-    </ScreenContainer>
+    <CourseListScreen
+      onSelectCourse={handleSelectCourse}
+      onBackPress={handleBackFromList}
+    />
   );
 }
 
 export default CourseScreen;
-
-const styles = StyleSheet.create({
-  container: {
-    paddingTop: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xl,
-  },
-  title: {
-    ...typography.screenTitle,
-    marginBottom: spacing.md,
-    color: lightColors.textPrimary,
-  },
-  rail: {
-    gap: spacing.md,
-    paddingRight: spacing.lg,
-    marginBottom: spacing.lg,
-  },
-  listHeading: {
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  section: {
-    ...typography.sectionTitle,
-    color: lightColors.textPrimary,
-  },
-  list: {
-    gap: spacing.sm,
-  },
-  listItem: {
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  courseLabel: {
-    ...typography.supporting,
-    color: lightColors.textSecondary,
-  },
-});

@@ -100,7 +100,14 @@ def test_rejects_empty_embedding_without_querying_database() -> None:
         ValueError,
         match="Embedding must contain at least one value",
     ):
-        asyncio.run(repository.save_generated_embedding(uuid4(), [], model_name="test-model"))
+        asyncio.run(
+            repository.save_generated_embedding(
+                uuid4(),
+                [],
+                model_name="test-model",
+                model_version="1",
+            )
+        )
 
     session.execute.assert_not_awaited()
 
