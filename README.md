@@ -19,6 +19,7 @@ Android phone.
 - Node.js and npm, for running the mobile app outside Docker
 - Android Studio / Android platform tools, for emulator or physical-device work
 - Supabase PostgreSQL credentials for the main application database
+- Shared UniAttend development Keycloak issuer URL for `Uni Attend`
 
 ## Docker Services
 
@@ -67,12 +68,8 @@ FACE_DB_SSL_MODE
 
 DYNAMIC_QR_HMAC_SECRET
 
-KEYCLOAK_ADMIN_USERNAME
-KEYCLOAK_ADMIN_PASSWORD
-KEYCLOAK_DB_NAME
-KEYCLOAK_DB_USER
-KEYCLOAK_DB_PASSWORD
 KEYCLOAK_EXPECTED_ISSUER
+CORE_KEYCLOAK_JWKS_URL
 KEYCLOAK_AUDIENCE
 
 WEB_PORT
@@ -162,13 +159,92 @@ The core backend can address the face-verification service through:
 http://face-verification:8001
 ```
 
-The core backend fetches Keycloak JWKS through Docker networking:
+When using the local Docker Keycloak fallback, the core backend can fetch JWKS
+through Docker networking:
 
 ```text
 http://keycloak:8080/realms/uniattend/protocol/openid-connect/certs
 ```
 
-## Keycloak Notes
+## Shared Keycloak Authentication
+
+The normal team development auth flow uses the shared deployed Keycloak realm:
+
+```text
+Realm:         Uni Attend
+Mobile client: uniattend-mobile
+Roles:         student, lecturer, administrator
+```
+
+Do not hardcode the deployed Keycloak URL. Put it in local env files only.
+
+For the Core API, set the root `.env` values:
+
+```text
+KEYCLOAK_EXPECTED_ISSUER=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend
+CORE_KEYCLOAK_JWKS_URL=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend/protocol/openid-connect/certs
+KEYCLOAK_AUDIENCE=uniattend-api
+```
+
+`KEYCLOAK_EXPECTED_ISSUER` must match the `iss` claim inside the access token
+exactly. `CORE_KEYCLOAK_JWKS_URL` is the endpoint the backend uses to fetch
+Keycloak public signing keys.
+
+For the mobile app, set `apps/mobile/.env` or `apps/mobile/.env.local`:
+
+```text
+EXPO_PUBLIC_KEYCLOAK_ISSUER_URL=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend
+EXPO_PUBLIC_KEYCLOAK_REALM="Uni Attend"
+EXPO_PUBLIC_KEYCLOAK_CLIENT_ID=uniattend-mobile
+EXPO_PUBLIC_CORE_API_URL=http://localhost:8000
+```
+
+Use `http://10.0.2.2:8000` for the Android emulator, or your laptop LAN IP for
+a physical phone over Wi-Fi. If using ADB reverse over USB, `localhost` /
+`127.0.0.1` is fine for the Core API.
+
+Nothing secret belongs in `EXPO_PUBLIC_*`; those values are bundled into the
+mobile app. The mobile Keycloak client is public and must not use a client
+secret.
+
+### Linking The Shared Keycloak Student To Supabase
+
+After a student logs into Keycloak, the backend validates the access token,
+reads the token `sub`, and resolves it through:
+
+```text
+identity.users.keycloak_user_id
+```
+
+For the one shared test student, make sure the matching Supabase application
+user row has the same Keycloak user ID:
+
+```sql
+UPDATE identity.users
+SET keycloak_user_id = '<keycloak-user-sub>'
+WHERE email = '<student-email>';
+```
+
+Use the existing application user row. Do not create a second auth mapping and
+do not use email as the runtime identity key.
+
+The mobile app proves the end-to-end flow through protected endpoints such as:
+
+```text
+GET /api/v1/me
+GET /api/v1/students/me/profile
+```
+
+Both require:
+
+```http
+Authorization: Bearer <keycloak-access-token>
+```
+
+## Local Keycloak Notes
+
+The local Keycloak container remains available as a fallback for isolated local
+testing.
 
 The Keycloak realm import comes from:
 
@@ -209,14 +285,19 @@ The mobile app runs outside Docker.
 For Android emulator, set `apps/mobile/.env` like:
 
 ```text
-EXPO_PUBLIC_KEYCLOAK_HOST=10.0.2.2
+EXPO_PUBLIC_KEYCLOAK_ISSUER_URL=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend
+EXPO_PUBLIC_KEYCLOAK_REALM="Uni Attend"
+EXPO_PUBLIC_KEYCLOAK_CLIENT_ID=uniattend-mobile
 EXPO_PUBLIC_CORE_API_URL=http://10.0.2.2:8000
 ```
 
-For a physical phone on the same Wi-Fi, use the laptop IPv4 address:
+For a physical phone on the same Wi-Fi, use the shared Keycloak issuer and the
+laptop IPv4 address for the local Core API:
 
 ```text
-EXPO_PUBLIC_KEYCLOAK_HOST=YOUR_LAPTOP_IP
+EXPO_PUBLIC_KEYCLOAK_ISSUER_URL=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend
+EXPO_PUBLIC_KEYCLOAK_REALM="Uni Attend"
+EXPO_PUBLIC_KEYCLOAK_CLIENT_ID=uniattend-mobile
 EXPO_PUBLIC_CORE_API_URL=http://YOUR_LAPTOP_IP:8000
 ```
 
@@ -231,7 +312,9 @@ adb reverse tcp:8081 tcp:8081
 Then use:
 
 ```text
-EXPO_PUBLIC_KEYCLOAK_HOST=127.0.0.1
+EXPO_PUBLIC_KEYCLOAK_ISSUER_URL=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend
+EXPO_PUBLIC_KEYCLOAK_REALM="Uni Attend"
+EXPO_PUBLIC_KEYCLOAK_CLIENT_ID=uniattend-mobile
 EXPO_PUBLIC_CORE_API_URL=http://127.0.0.1:8000
 ```
 

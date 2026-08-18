@@ -20,6 +20,7 @@ def build_verifier(
     *,
     expected_issuer: str | tuple[str, ...] = TEST_ISSUER,
     audience: str = TEST_AUDIENCE,
+    authorized_clients: tuple[str, ...] = (),
 ) -> KeycloakTokenVerifier:
     async def fetch_jwks() -> dict[str, Any]:
         return jwks_document
@@ -28,6 +29,7 @@ def build_verifier(
         JwksClient(fetch_jwks),
         expected_issuer=expected_issuer,
         audience=audience,
+        authorized_clients=authorized_clients,
     )
 
 
@@ -170,6 +172,43 @@ async def test_rejects_a_token_for_another_audience(
 
     with pytest.raises(InvalidAccessTokenError) as error:
         await verifier.verify(make_access_token(audience="account"))
+
+    assert "audience" in str(error.value)
+
+
+async def test_accepts_a_token_for_an_allowed_authorized_party(
+    jwks_document,
+    make_access_token,
+) -> None:
+    verifier = build_verifier(
+        jwks_document,
+        authorized_clients=("uniattend-mobile",),
+    )
+    token = make_access_token(
+        audience="account",
+        extra_claims={"azp": "uniattend-mobile"},
+    )
+
+    claims = await verifier.verify(token)
+
+    assert claims.subject == "keycloak-sub-linked-student"
+
+
+async def test_rejects_a_token_for_an_untrusted_authorized_party(
+    jwks_document,
+    make_access_token,
+) -> None:
+    verifier = build_verifier(
+        jwks_document,
+        authorized_clients=("uniattend-mobile",),
+    )
+    token = make_access_token(
+        audience="account",
+        extra_claims={"azp": "some-other-client"},
+    )
+
+    with pytest.raises(InvalidAccessTokenError) as error:
+        await verifier.verify(token)
 
     assert "audience" in str(error.value)
 
