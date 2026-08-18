@@ -1,0 +1,38 @@
+Students  (2)
+username - 230736r Password - student
+230736r@student.uniattend.test
+659a6da3-e6ab-4740-9ea3-2212948b9f27
+Manushan
+Hasanka
+230736R
+
+username - 230737r Password - student
+230737r@student.uniattend.test
+8fb03922-5c9c-4734-a823-e3f4932925eb
+Anura
+Kumara
+230737R
+
+
+Lecturers(2)
+username - lectuere01 Password - lecturer
+lecutere01@lectuere.uniattend.test
+325e2cdd-71b6-417e-bb6e-3c990ac7aace
+Indika 
+Perera
+lecturer01 
+
+username - lectuere02 Password - lecturer
+lecutere02@lectuere.uniattend.test
+22bd9602-6061-4869-9766-83f7ec03b24a
+Dulani
+Meedeniya
+lecturer02
+
+Admin(1)
+username - admin01 Password - admin
+admin01@lectuere.uniattend.test
+e66d4bf5-ed74-4f55-8ca8-6754199605db
+Kamal
+Perera
+
