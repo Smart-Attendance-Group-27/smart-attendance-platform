@@ -9,7 +9,13 @@ import {
   View,
 } from 'react-native';
 
-import { CourseSummaryCard, DashboardTopBar, UpcomingAttendanceList, courseSummaries } from '../../../components/dashboard';
+import {
+  CourseSummaryCard,
+  DashboardTopBar,
+  UpcomingAttendanceList,
+  courseSummaries,
+  type CourseSummary,
+} from '../../../components/dashboard';
 import { ActiveSessionCard } from '../../../components/dashboard/ActiveSessionCard';
 import { AppButton, ScreenContainer } from '../../../components/ui';
 import { lightColors, spacing, typography } from '../../../theme';
@@ -21,6 +27,8 @@ import type { Lecture, AttendanceSession } from '../types';
 import type { ActiveAttendanceSession } from '../types/activeAttendanceSession';
 import type { ProfileService } from '../../profile/services/profile.service';
 import { MockProfileService } from '../../profile/services/mockProfileService';
+import type { CourseService } from '../../courses/services/courseService';
+import type { Course } from '../../courses/mockCoursesData';
 
 type DashboardScreenProps = {
   activeSessionService?: ActiveAttendanceSessionService;
@@ -29,6 +37,7 @@ type DashboardScreenProps = {
     FaceVerificationApiService,
     'getReadinessStatus'
   >;
+  courseService?: CourseService;
   onReadinessCheckPress?: () => void;
   profileService?: ProfileService;
   onSignOutPress?: () => void;
@@ -38,18 +47,23 @@ export function DashboardScreen({
   activeSessionService,
   dashboardService,
   faceVerificationApiService,
+  courseService,
   onReadinessCheckPress,
   onSignOutPress,
   profileService,
 }: DashboardScreenProps) {
   const router = useRouter();
   const service = useMemo(() => dashboardService ?? new MockDashboardService(), [dashboardService]);
-  const profileServiceInstance = profileService ?? new MockProfileService();
+  const profileServiceInstance = useMemo(
+    () => profileService ?? new MockProfileService(),
+    [profileService],
+  );
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lectures, setLectures] = useState<Lecture[]>([]);
   const [activeSessions, setActiveSessions] = useState<AttendanceSession[]>([]);
+  const [courseCards, setCourseCards] = useState<CourseSummary[]>([]);
   const [requiresReadinessCheck, setRequiresReadinessCheck] = useState(false);
   const [userName, setUserName] = useState<string>('');
 
@@ -89,10 +103,12 @@ export function DashboardScreen({
         service,
         activeSessionService,
         faceVerificationApiService,
+        courseService,
       );
 
       setLectures(content.lectures);
       setActiveSessions(content.activeSessions);
+      setCourseCards(content.courseCards);
       setRequiresReadinessCheck(content.requiresReadinessCheck);
     } catch (err: any) {
       setError(err?.message ?? 'Unknown error');
@@ -110,15 +126,28 @@ export function DashboardScreen({
       setError(null);
 
       try {
+        try {
+          const profileResult = await profileServiceInstance.getMyStudentProfile();
+          if (profileResult.status === 'found') {
+            const full = profileResult.profile.fullName;
+            const first = full.split(' ')[0] ?? full;
+            setUserName(first);
+          }
+        } catch {
+          // Profile greeting is non-blocking.
+        }
+
         const content = await loadDashboardContent(
           service,
           activeSessionService,
           faceVerificationApiService,
+          courseService,
         );
 
         if (!mounted) return;
         setLectures(content.lectures);
         setActiveSessions(content.activeSessions);
+        setCourseCards(content.courseCards);
         setRequiresReadinessCheck(content.requiresReadinessCheck);
       } catch (err: any) {
         if (!mounted) return;
@@ -132,7 +161,7 @@ export function DashboardScreen({
     return () => {
       mounted = false;
     };
-  }, [activeSessionService, faceVerificationApiService, service]);
+  }, [activeSessionService, courseService, faceVerificationApiService, profileServiceInstance, service]);
 
   const handleStart = (sessionId?: string) => {
     if (!sessionId) return;
@@ -168,7 +197,7 @@ export function DashboardScreen({
 
         <View style={styles.greeting}>
           <Text accessibilityRole="header" style={styles.greetingTitle}>
-            {`Good morning, ${userName || 'Ashen'}`}
+            {`Good morning, ${userName || 'student'}`}
           </Text>
           <Text style={styles.period}>{`${dateString} · ${semesterText}`}</Text>
         </View>
@@ -219,7 +248,7 @@ export function DashboardScreen({
               showsHorizontalScrollIndicator={false}
               style={styles.courseScroll}
             >
-              {courseSummaries.map((course) => (
+              {courseCards.map((course) => (
                 <CourseSummaryCard course={course} key={course.code} />
               ))}
             </ScrollView>
@@ -248,15 +277,93 @@ async function loadDashboardContent(
     FaceVerificationApiService,
     'getReadinessStatus'
   >,
+  courseService?: CourseService,
 ) {
-  const [lectures, activeSessions, requiresReadinessCheck] =
+  const [courseData, activeSessions, requiresReadinessCheck] =
     await Promise.all([
-      dashboardService.getUpcomingLectures(),
+      loadCourseDashboardData(dashboardService, courseService),
       loadActiveSessions(dashboardService, activeSessionService),
       loadReadinessRequirement(faceVerificationApiService),
     ]);
 
-  return { lectures, activeSessions, requiresReadinessCheck };
+  return {
+    lectures: courseData.lectures,
+    activeSessions,
+    courseCards: courseData.courseCards,
+    requiresReadinessCheck,
+  };
+}
+
+async function loadCourseDashboardData(
+  dashboardService: DashboardService,
+  courseService?: CourseService,
+): Promise<{ lectures: Lecture[]; courseCards: CourseSummary[] }> {
+  if (!courseService) {
+    return {
+      lectures: await dashboardService.getUpcomingLectures(),
+      courseCards: courseSummaries,
+    };
+  }
+
+  const result = await courseService.listMyCourses();
+  if (result.status !== 'loaded') {
+    throw new Error(`Course request failed: ${result.status}`);
+  }
+
+  return {
+    lectures: result.courses.flatMap(courseToUpcomingLectures),
+    courseCards: result.courses.map(courseToSummaryCard),
+  };
+}
+
+function courseToSummaryCard(course: Course, index: number): CourseSummary {
+  const upcomingSessions = course.sessions.filter(
+    (session) => session.status === 'upcoming' || session.status === 'active',
+  ).length;
+  const colors = ['#173B7A', '#1D4ED8', '#254E9A', '#0F4C81', '#1E3A8A'];
+
+  return {
+    code: course.code,
+    title: course.title,
+    lecturer: course.lecturer,
+    attendancePercentage: course.attendancePercentage,
+    upcomingSessions,
+    color: colors[index % colors.length],
+  };
+}
+
+function courseToUpcomingLectures(course: Course): Lecture[] {
+  return course.sessions
+    .filter((session) => session.status === 'upcoming')
+    .slice(0, 3)
+    .map((session) => ({
+      id: session.id,
+      courseId: course.id,
+      courseCode: course.code,
+      courseName: course.title,
+      startTime: deriveStartTimeFromSession(session.timeText),
+      endTime: deriveStartTimeFromSession(session.timeText),
+      venue: deriveVenueFromSession(session.timeText),
+    }));
+}
+
+function deriveStartTimeFromSession(timeText: string): string {
+  // The course API already formats session display text for the course detail
+  // UI. The dashboard list only needs a stable sort/render value, so use now
+  // when the text does not carry a machine date.
+  const parts = timeText.split('·').map((part) => part.trim());
+  const maybeTime = parts[1]?.split('-')[0]?.trim();
+  const today = new Date();
+  if (maybeTime && /^\d{2}:\d{2}$/.test(maybeTime)) {
+    const [hours, minutes] = maybeTime.split(':').map(Number);
+    today.setHours(hours, minutes, 0, 0);
+  }
+  return today.toISOString();
+}
+
+function deriveVenueFromSession(timeText: string): string {
+  const parts = timeText.split('·').map((part) => part.trim());
+  return parts[2] || 'Venue TBA';
 }
 
 async function loadReadinessRequirement(
