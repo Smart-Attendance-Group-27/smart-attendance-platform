@@ -11,14 +11,16 @@ import { SymbolView } from 'expo-symbols';
 import { AppInput } from '../../../components/ui/AppInput';
 import { ScreenContainer } from '../../../components/ui/ScreenContainer';
 import { lightColors, spacing, typography, radii } from '../../../theme';
-import { mockCourses, type Course } from '../mockCoursesData';
+import type { Course } from '../mockCoursesData';
 
 type CourseListScreenProps = {
+  courses: Course[];
   onSelectCourse: (courseId: string) => void;
   onBackPress?: () => void;
 };
 
 export function CourseListScreen({
+  courses,
   onSelectCourse,
   onBackPress,
 }: CourseListScreenProps) {
@@ -27,13 +29,13 @@ export function CourseListScreen({
   // Filter courses based on code or title match
   const filteredCourses = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return mockCourses;
-    return mockCourses.filter(
+    if (!query) return courses;
+    return courses.filter(
       (c) =>
         c.code.toLowerCase().includes(query) ||
         c.title.toLowerCase().includes(query)
     );
-  }, [searchQuery]);
+  }, [courses, searchQuery]);
 
   const handleClearSearch = () => {
     setSearchQuery('');

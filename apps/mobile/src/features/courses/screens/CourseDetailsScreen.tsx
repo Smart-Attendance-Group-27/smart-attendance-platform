@@ -11,14 +11,16 @@ import { SymbolView } from 'expo-symbols';
 import { AppButton } from '../../../components/ui/AppButton';
 import { ScreenContainer } from '../../../components/ui/ScreenContainer';
 import { lightColors, spacing, typography, radii } from '../../../theme';
-import { mockCourses, type Course, type Session } from '../mockCoursesData';
+import type { Course, Session } from '../mockCoursesData';
 
 type CourseDetailsScreenProps = {
+  courses: Course[];
   courseId: string;
   onBack: () => void;
 };
 
 export function CourseDetailsScreen({
+  courses,
   courseId,
   onBack,
 }: CourseDetailsScreenProps) {
@@ -26,7 +28,7 @@ export function CourseDetailsScreen({
   // State to simulate identity verification flow (State 1: Active Now vs State 2: Waiting for QR check)
   const [isIdentityVerified, setIsIdentityVerified] = useState(false);
 
-  const course = mockCourses.find((c) => c.id === courseId);
+  const course = courses.find((c) => c.id === courseId);
 
   if (!course) {
     return (
