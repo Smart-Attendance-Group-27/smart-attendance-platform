@@ -13,12 +13,50 @@ For the complete local PostgreSQL, Keycloak, FastAPI, USB forwarding, and
 physical-phone walkthrough, see
 [`docs/geofence-validation-demo.md`](../../docs/geofence-validation-demo.md).
 
-## Local Keycloak Login
+## Shared Keycloak Login
 
 The mobile app uses Keycloak for credential entry. The app must not collect and
 submit a student's university password directly.
 
-For Android emulator testing, the app points to:
+For normal team development, point the app at the shared deployed Keycloak
+realm:
+
+```text
+EXPO_PUBLIC_KEYCLOAK_ISSUER_URL=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend
+EXPO_PUBLIC_KEYCLOAK_REALM="Uni Attend"
+EXPO_PUBLIC_KEYCLOAK_CLIENT_ID=uniattend-mobile
+```
+
+Do not put passwords, tokens or client secrets in `EXPO_PUBLIC_*` variables;
+the mobile client is public and uses Authorization Code Flow with PKCE.
+
+The Core API still runs locally during development. For Android emulator
+testing, use:
+
+```text
+EXPO_PUBLIC_CORE_API_URL=http://10.0.2.2:8000
+```
+
+For physical Android phone testing over Wi-Fi, use the computer's LAN IP for
+the Core API:
+
+```text
+EXPO_PUBLIC_CORE_API_URL=http://192.168.1.25:8000
+```
+
+Replace `192.168.1.25` with the IPv4 address shown by `ipconfig` on the
+computer running the FastAPI backend. Restart Expo after changing env values.
+
+## Local Keycloak Fallback
+
+If you are intentionally testing against the local Docker Keycloak realm,
+leave `EXPO_PUBLIC_KEYCLOAK_ISSUER_URL` blank and use:
+
+```text
+EXPO_PUBLIC_KEYCLOAK_HOST=10.0.2.2
+```
+
+For local Keycloak on the Android emulator, the resolved issuer is:
 
 ```text
 http://10.0.2.2:8080/realms/uniattend
@@ -26,19 +64,6 @@ http://10.0.2.2:8080/realms/uniattend
 
 `10.0.2.2` is the Android emulator address for the host machine where Docker is
 running.
-
-For physical Android phone testing over USB or Wi-Fi, point the app at the
-computer through USB forwarding or its LAN IP. Create
-`apps/mobile/.env.local` from `.env.example`. For Wi-Fi, use values like:
-
-```text
-EXPO_PUBLIC_KEYCLOAK_HOST=192.168.1.25
-EXPO_PUBLIC_CORE_API_URL=http://192.168.1.25:8000
-```
-
-Replace `192.168.1.25` with the IPv4 address shown by `ipconfig` on the
-computer running Keycloak and the FastAPI backend. Restart Expo after changing
-these values.
 
 ## Start Local Keycloak
 

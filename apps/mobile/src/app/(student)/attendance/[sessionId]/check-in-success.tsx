@@ -1,14 +1,25 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useMemo } from 'react';
 import { Text } from 'react-native';
 
 import { ScreenContainer } from '../../../../components/ui';
 import { CheckInResultScreen } from '../../../../features/attendance/screens/CheckInResultScreen';
-import { MockAttendanceService } from '../../../../features/attendance/services/mockAttendanceService';
-
-const attendanceService = new MockAttendanceService();
+import { CoreApiAttendanceService } from '../../../../features/attendance/services/coreApiAttendanceService';
+import { useAuth } from '../../../../features/auth/context/AuthContext';
+import { CoreApiClient } from '../../../../services/api/coreApiClient';
 
 export default function CheckInSuccessRoute() {
   const router = useRouter();
+  const { session } = useAuth();
+  const accessToken =
+    session.status === 'authenticated' ? session.accessToken : undefined;
+  const attendanceService = useMemo(
+    () =>
+      new CoreApiAttendanceService(
+        new CoreApiClient({ getAccessToken: () => accessToken }),
+      ),
+    [accessToken],
+  );
   const { sessionId: sessionIdParam } = useLocalSearchParams<{
     sessionId?: string | string[];
   }>();
@@ -26,6 +37,10 @@ export default function CheckInSuccessRoute() {
         </Text>
       </ScreenContainer>
     );
+  }
+
+  if (session.status !== 'authenticated') {
+    return null;
   }
 
   return (

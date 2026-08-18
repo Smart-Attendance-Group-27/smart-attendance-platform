@@ -62,6 +62,9 @@ function isResponse(value: unknown): value is ActiveAttendanceSession {
     typeof response.courseName === 'string' &&
     typeof response.sessionTitle === 'string' &&
     typeof response.sessionType === 'string' &&
+    (response.lecturerNames === undefined ||
+      response.lecturerNames === null ||
+      typeof response.lecturerNames === 'string') &&
     isDateTime(response.scheduledStartAt) &&
     isDateTime(response.scheduledEndAt) &&
     isDateTime(response.checkInOpensAt) &&

@@ -54,6 +54,7 @@ def build_authentication_service(settings: Settings) -> AuthenticationService:
         jwks_client,
         expected_issuer=settings.keycloak_accepted_issuers,
         audience=settings.keycloak_audience,
+        authorized_clients=settings.keycloak_accepted_authorized_clients,
         algorithm=settings.keycloak_signing_algorithm,
         leeway_seconds=settings.keycloak_leeway_seconds,
     )

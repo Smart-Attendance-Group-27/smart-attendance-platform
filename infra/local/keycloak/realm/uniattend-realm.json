@@ -112,7 +112,7 @@
     {
       "clientId": "uniattend-web",
       "name": "UniAttend Web Dashboard",
-      "description": "Confidential client for the Lecturer/Administrator Next.js dashboard (apps/web). Authorization Code with PKCE; the client secret is used only server-side (Route Handlers), never sent to the browser. Direct Access Grants and the implicit flow stay disabled.",
+      "description": "Confidential client for the Lecturer/Administrator Next.js dashboard. Authorization Code with PKCE; the client secret is used only server-side, never sent to the browser. Direct Access Grants and the implicit flow stay disabled.",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,

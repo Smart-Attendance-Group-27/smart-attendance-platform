@@ -38,16 +38,21 @@ export type OidcDiscovery = {
 // hot path, so an extra discovery fetch per flow is simpler and safer than staleness.
 export async function getOidcDiscovery(): Promise<OidcDiscovery> {
   const { issuer } = requireConfig();
-  const response = await fetch(`${issuer}/.well-known/openid-configuration`, { cache: "no-store" });
+  const internalIssuer = process.env.KEYCLOAK_INTERNAL_ISSUER ?? issuer;
+  const response = await fetch(`${internalIssuer}/.well-known/openid-configuration`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`Failed to fetch Keycloak discovery document (${response.status}).`);
   }
   const doc = (await response.json()) as Record<string, unknown>;
+
+  const authorizationEndpoint = String(doc.authorization_endpoint).replace(internalIssuer, issuer);
+  const endSessionEndpoint = String(doc.end_session_endpoint).replace(internalIssuer, issuer);
+
   return {
-    issuer: String(doc.issuer),
-    authorizationEndpoint: String(doc.authorization_endpoint),
+    issuer,
+    authorizationEndpoint,
     tokenEndpoint: String(doc.token_endpoint),
-    endSessionEndpoint: String(doc.end_session_endpoint),
+    endSessionEndpoint,
     jwksUri: String(doc.jwks_uri),
   };
 }

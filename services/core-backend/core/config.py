@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     keycloak_additional_issuers: str | None = None
     keycloak_jwks_url: str | None = None
     keycloak_audience: str = "uniattend-api"
+    # Some shared-development Keycloak clients may not include the API audience
+    # in access tokens. In that case, accept tokens issued to one of these
+    # public/confidential clients via the verified `azp` claim.
+    keycloak_authorized_clients: str | None = "uniattend-mobile,uniattend-web"
     keycloak_signing_algorithm: str = "RS256"
     keycloak_jwks_cache_seconds: float = Field(default=300, gt=0)
     keycloak_jwks_min_refresh_seconds: float = Field(default=30, ge=0)
@@ -66,6 +70,10 @@ class Settings(BaseSettings):
     # Required by dynamic QR generation and verification. Static QR sessions
     # do not use this secret.
     dynamic_qr_hmac_secret: SecretStr | None = None
+
+    # Internal service URL for the separately deployed face-verification API.
+    face_verification_service_url: str | None = "http://localhost:8001"
+
     # General geofence safeguards. Session-specific radius, accuracy buffer and
     # maximum accuracy values are loaded from the session geofence snapshot.
     geofence_max_reading_age_seconds: float = Field(default=30, gt=0)
@@ -91,6 +99,7 @@ class Settings(BaseSettings):
         "db_user",
         "redis_url",
         "dynamic_qr_hmac_secret",
+        "face_verification_service_url",
         mode="before",
     )
     @classmethod
@@ -174,6 +183,18 @@ class Settings(BaseSettings):
                 if (stripped := raw.strip())
             )
         return tuple(dict.fromkeys(issuers))
+
+    @property
+    def keycloak_accepted_authorized_clients(self) -> tuple[str, ...]:
+        if not self.keycloak_authorized_clients:
+            return ()
+        return tuple(
+            dict.fromkeys(
+                client
+                for raw in self.keycloak_authorized_clients.split(",")
+                if (client := raw.strip())
+            )
+        )
 
     @property
     def is_keycloak_configured(self) -> bool:

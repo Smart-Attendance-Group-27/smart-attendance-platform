@@ -12,6 +12,7 @@ class ActiveAttendanceSessionResponse(BaseModel):
     course_name: str = Field(alias="courseName")
     session_title: str = Field(alias="sessionTitle")
     session_type: str = Field(alias="sessionType")
+    lecturer_names: str | None = Field(alias="lecturerNames")
     scheduled_start_at: datetime = Field(alias="scheduledStartAt")
     scheduled_end_at: datetime = Field(alias="scheduledEndAt")
     check_in_opens_at: datetime = Field(alias="checkInOpensAt")

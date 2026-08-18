@@ -1,278 +1,361 @@
 # Smart Attendance Platform
 
-University attendance platform with student mobile check-in, Keycloak login,
-FastAPI backend services, and QR-based attendance verification.
+UniAttend is a monorepo for university attendance workflows:
 
-This README explains how to run the project locally up to the current QR
-verification flow:
+- `apps/web` - Next.js lecturer QR test/dashboard app
+- `apps/mobile` - Expo React Native student app
+- `services/core-backend` - FastAPI core API
+- `services/face-verification` - separate FastAPI face-verification service
+- `infra/local/keycloak` - local Keycloak realm import files
+- `database` - SQL schema, migrations and seed files
 
-```text
-Keycloak login
-FastAPI core backend
-Next.js web page
-Expo mobile app on a real Android phone
-```
-
-## Project Structure
-
-```text
-smart-attendance-platform/
-├─ apps/
-│  ├─ mobile/              Expo React Native student app
-│  └─ web/                 Next.js QR test web app
-├─ services/
-│  └─ core-backend/        FastAPI core API
-├─ infra/
-│  └─ local/keycloak/      Local Keycloak Docker setup
-└─ database/               Database schema and seed files
-```
+The Docker setup runs the server-side development environment. The Expo mobile
+app is not Dockerized and should keep running on an Android emulator or a real
+Android phone.
 
 ## Prerequisites
 
-Install these first:
-
-- Node.js and npm
-- Python 3.12+
 - Docker Desktop
-- Android Studio / Android platform tools
-- A real Android phone with USB debugging enabled
+- Node.js and npm, for running the mobile app outside Docker
+- Android Studio / Android platform tools, for emulator or physical-device work
+- Supabase PostgreSQL credentials for the main application database
+- Shared UniAttend development Keycloak issuer URL for `Uni Attend`
 
-Install JavaScript dependencies from the repository root:
+## Docker Services
+
+The root `docker-compose.yml` starts:
+
+- Next.js web app
+- FastAPI core backend
+- FastAPI face-verification service
+- Redis
+- Keycloak
+- Keycloak PostgreSQL database
+
+It does not start:
+
+- Expo / React Native mobile app
+- Main Supabase PostgreSQL database
+
+## Environment Setup
+
+Create a local root env file:
 
 ```powershell
-npm install
+Copy-Item .env.example .env
 ```
 
-## 1. Start Local Keycloak
+Fill in `.env` with local values. Do not commit `.env`.
 
-Keycloak handles login for the mobile app.
+Important variables:
+
+```text
+CORE_DB_URI
+CORE_DB_HOST
+CORE_DB_PORT
+CORE_DB_NAME
+CORE_DB_USER
+CORE_DB_PASSWORD
+CORE_DB_SSL_MODE
+
+FACE_DB_URI
+FACE_DB_HOST
+FACE_DB_PORT
+FACE_DB_NAME
+FACE_DB_USER
+FACE_DB_PASSWORD
+FACE_DB_SSL_MODE
+
+DYNAMIC_QR_HMAC_SECRET
+
+KEYCLOAK_EXPECTED_ISSUER
+CORE_KEYCLOAK_JWKS_URL
+KEYCLOAK_AUDIENCE
+
+WEB_PORT
+CORE_API_PORT
+FACE_VERIFICATION_PORT
+KEYCLOAK_HTTP_PORT
+REDIS_PORT
+```
+
+`CORE_DB_URI` points to the external Supabase database. If `CORE_DB_URI` is set,
+the separate `CORE_DB_*` fields are ignored by the backend.
+
+`FACE_DB_URI` is optional. If it is blank, Docker Compose passes the core
+database settings to the face-verification service.
+
+Generate a local dynamic QR secret with:
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+## Start Docker Environment
 
 From the repository root:
 
 ```powershell
-docker compose --env-file infra/local/keycloak/.env.example -f infra/local/keycloak/docker-compose.yml up -d
+docker compose up --build
 ```
 
-Check that the containers are running:
+To run in the background:
 
 ```powershell
-docker compose --env-file infra/local/keycloak/.env.example -f infra/local/keycloak/docker-compose.yml ps
+docker compose up --build -d
 ```
 
-Verify the imported `uniattend` realm:
+Check status:
 
 ```powershell
-curl.exe -I http://localhost:8080/realms/uniattend
+docker compose ps
 ```
 
-Expected:
+Stop containers:
+
+```powershell
+docker compose down
+```
+
+Stop containers and remove local Redis/Keycloak database volumes:
+
+```powershell
+docker compose down -v
+```
+
+## Service URLs
+
+Default local URLs:
 
 ```text
-HTTP/1.1 200 OK
+Web app:                  http://localhost:3000
+QR test page:             http://localhost:3000/qr-test
+Core API:                 http://localhost:8000
+Core API health:          http://localhost:8000/health
+Core API DB health:       http://localhost:8000/health/db
+Face service:             http://localhost:8001
+Face service health:      http://localhost:8001/health
+Keycloak:                 http://localhost:8080
+Keycloak admin console:   http://localhost:8080/admin
+Redis:                    localhost:6379
+Keycloak PostgreSQL:      localhost:5433
 ```
 
-Keycloak admin console:
+The web container calls the backend through Docker networking:
 
 ```text
-http://localhost:8080/admin
+http://core-api:8000
 ```
 
-Default local credentials:
+The core backend calls Redis through Docker networking:
 
 ```text
-Username: admin
-Password: admin
+redis://redis:6379/0
 ```
 
-## 2. Start the FastAPI Core Backend
-
-The backend creates QR sessions and verifies scanned QR codes.
-
-Create `services/core-backend/.env` from:
+The core backend can address the face-verification service through:
 
 ```text
-services/core-backend/.env.example
+http://face-verification:8001
 ```
 
-Fill in the required database values, including Supabase/PostgreSQL credentials.
-
-Install Python dependencies:
-
-```powershell
-cd services/core-backend
-python -m pip install -r requirements.txt
-```
-
-For laptop-only testing, this is enough:
-
-```powershell
-python -m uvicorn main:app --reload
-```
-
-For real mobile phone testing, expose the backend to your local network:
-
-```powershell
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-Check from your laptop:
-
-```powershell
-curl.exe http://localhost:8000/health
-curl.exe http://localhost:8000/health/db
-```
-
-Then find your laptop IPv4 address:
-
-```powershell
-ipconfig
-```
-
-From your phone browser, open:
+When using the local Docker Keycloak fallback, the core backend can fetch JWKS
+through Docker networking:
 
 ```text
-http://YOUR_LAPTOP_IP:8000/health
+http://keycloak:8080/realms/uniattend/protocol/openid-connect/certs
 ```
 
-Example:
+## Shared Keycloak Authentication
+
+The normal team development auth flow uses the shared deployed Keycloak realm:
 
 ```text
-http://192.168.1.5:8000/health
+Realm:         Uni Attend
+Mobile client: uniattend-mobile
+Roles:         student, lecturer, administrator
 ```
 
-If the phone cannot open this URL:
+Do not hardcode the deployed Keycloak URL. Put it in local env files only.
 
-- make sure phone and laptop are on the same Wi-Fi
-- make sure VPN/mobile data is not interfering
-- allow Python/Uvicorn through Windows Defender Firewall for private networks
-- confirm FastAPI was started with `--host 0.0.0.0`
+For the Core API, set the root `.env` values:
 
-## 3. Run the Web QR Test App
+```text
+KEYCLOAK_EXPECTED_ISSUER=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend
+CORE_KEYCLOAK_JWKS_URL=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend/protocol/openid-connect/certs
+KEYCLOAK_AUDIENCE=uniattend-api
+```
 
-The web app is used as the lecturer-side QR test screen.
+`KEYCLOAK_EXPECTED_ISSUER` must match the `iss` claim inside the access token
+exactly. `CORE_KEYCLOAK_JWKS_URL` is the endpoint the backend uses to fetch
+Keycloak public signing keys.
 
-From the repository root:
+For the mobile app, set `apps/mobile/.env` or `apps/mobile/.env.local`:
+
+```text
+EXPO_PUBLIC_KEYCLOAK_ISSUER_URL=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend
+EXPO_PUBLIC_KEYCLOAK_REALM="Uni Attend"
+EXPO_PUBLIC_KEYCLOAK_CLIENT_ID=uniattend-mobile
+EXPO_PUBLIC_CORE_API_URL=http://localhost:8000
+```
+
+Use `http://10.0.2.2:8000` for the Android emulator, or your laptop LAN IP for
+a physical phone over Wi-Fi. If using ADB reverse over USB, `localhost` /
+`127.0.0.1` is fine for the Core API.
+
+Nothing secret belongs in `EXPO_PUBLIC_*`; those values are bundled into the
+mobile app. The mobile Keycloak client is public and must not use a client
+secret.
+
+### Linking The Shared Keycloak Student To Supabase
+
+After a student logs into Keycloak, the backend validates the access token,
+reads the token `sub`, and resolves it through:
+
+```text
+identity.users.keycloak_user_id
+```
+
+For the one shared test student, make sure the matching Supabase application
+user row has the same Keycloak user ID:
+
+```sql
+UPDATE identity.users
+SET keycloak_user_id = '<keycloak-user-sub>'
+WHERE email = '<student-email>';
+```
+
+Use the existing application user row. Do not create a second auth mapping and
+do not use email as the runtime identity key.
+
+The mobile app proves the end-to-end flow through protected endpoints such as:
+
+```text
+GET /api/v1/me
+GET /api/v1/students/me/profile
+```
+
+Both require:
+
+```http
+Authorization: Bearer <keycloak-access-token>
+```
+
+## Local Keycloak Notes
+
+The local Keycloak container remains available as a fallback for isolated local
+testing.
+
+The Keycloak realm import comes from:
+
+```text
+infra/local/keycloak/realm
+```
+
+`KEYCLOAK_EXPECTED_ISSUER` must match the issuer in the access token exactly.
+That issuer depends on the URL the browser or mobile app uses to reach
+Keycloak.
+
+For browser-only local testing, this is usually:
+
+```text
+http://localhost:8080/realms/uniattend
+```
+
+For Android emulator testing, use the emulator-accessible host in the mobile
+configuration, usually:
+
+```text
+http://10.0.2.2:8080/realms/uniattend
+```
+
+For a physical phone over Wi-Fi, use your laptop IPv4 address:
+
+```text
+http://YOUR_LAPTOP_IP:8080/realms/uniattend
+```
+
+If the mobile login URL changes, update `KEYCLOAK_EXPECTED_ISSUER` and restart
+the `core-api` container.
+
+## Android Access
+
+The mobile app runs outside Docker.
+
+For Android emulator, set `apps/mobile/.env` like:
+
+```text
+EXPO_PUBLIC_KEYCLOAK_ISSUER_URL=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend
+EXPO_PUBLIC_KEYCLOAK_REALM="Uni Attend"
+EXPO_PUBLIC_KEYCLOAK_CLIENT_ID=uniattend-mobile
+EXPO_PUBLIC_CORE_API_URL=http://10.0.2.2:8000
+```
+
+For a physical phone on the same Wi-Fi, use the shared Keycloak issuer and the
+laptop IPv4 address for the local Core API:
+
+```text
+EXPO_PUBLIC_KEYCLOAK_ISSUER_URL=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend
+EXPO_PUBLIC_KEYCLOAK_REALM="Uni Attend"
+EXPO_PUBLIC_KEYCLOAK_CLIENT_ID=uniattend-mobile
+EXPO_PUBLIC_CORE_API_URL=http://YOUR_LAPTOP_IP:8000
+```
+
+For a physical phone connected by USB with ADB reverse:
 
 ```powershell
-npm.cmd run dev --workspace=apps/web
+adb reverse tcp:8000 tcp:8000
+adb reverse tcp:8080 tcp:8080
+adb reverse tcp:8081 tcp:8081
 ```
 
-Open:
+Then use:
+
+```text
+EXPO_PUBLIC_KEYCLOAK_ISSUER_URL=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend
+EXPO_PUBLIC_KEYCLOAK_REALM="Uni Attend"
+EXPO_PUBLIC_KEYCLOAK_CLIENT_ID=uniattend-mobile
+EXPO_PUBLIC_CORE_API_URL=http://127.0.0.1:8000
+```
+
+Start the mobile dev client from `apps/mobile`:
+
+```powershell
+npx.cmd expo start --dev-client --host lan --clear
+```
+
+Rebuild/reinstall the Android app only when native dependencies or native config
+change:
+
+```powershell
+npx.cmd expo run:android --device
+```
+
+## QR Test Flow
+
+1. Start Docker:
+
+```powershell
+docker compose up --build
+```
+
+2. Open:
 
 ```text
 http://localhost:3000/qr-test
 ```
 
-Use this development attendance session ID:
+3. Use the development attendance session ID:
 
 ```text
 40000000-0000-0000-0000-000000000001
 ```
 
-Click `Create QR session`.
+4. Create either a static or dynamic QR session.
 
-The page calls the FastAPI backend and displays a QR code. The QR code contains:
+5. Scan the QR from the mobile app after the face-verification screen.
 
-```json
-{
-  "qrSessionId": "...",
-  "qrValue": "..."
-}
-```
-
-The mobile scanner uses `qrSessionId` in the URL path and sends `qrValue` in the
-request body to verify the scan.
-
-The web app defaults to:
-
-```text
-CORE_BACKEND_URL=http://127.0.0.1:8000
-```
-
-If needed, create `apps/web/.env.local`:
-
-```text
-CORE_BACKEND_URL=http://127.0.0.1:8000
-```
-
-## 4. Configure Mobile for a Real Android Phone
-
-The Android emulator can use `10.0.2.2`, but a real phone must use your laptop's
-LAN IP address.
-
-Create or update:
-
-```text
-apps/mobile/.env
-```
-
-Example:
-
-```text
-EXPO_PUBLIC_KEYCLOAK_HOST=192.168.1.5
-EXPO_PUBLIC_CORE_API_URL=http://192.168.1.5:8000
-```
-
-Replace `192.168.1.5` with your laptop IPv4 address from `ipconfig`.
-
-Before starting the mobile app, verify these URLs from the phone browser:
-
-```text
-http://YOUR_LAPTOP_IP:8080/realms/uniattend
-http://YOUR_LAPTOP_IP:8000/health
-```
-
-Both must work from the phone.
-
-## 5. Run / Restart the Mobile App on a Real Phone
-
-Connect the phone by USB and enable USB debugging.
-
-Install or rebuild the Android dev client:
-
-```powershell
-cd apps/mobile
-npx.cmd expo run:android --device
-```
-
-Start Expo with the dev client:
-
-```powershell
-npx.cmd expo start --dev-client --clear
-```
-
-Then fully close and reopen the installed UniAttend app on the phone.
-
-Do not use Expo Go for this project because the app uses native modules such as:
-
-- `expo-camera`
-- `expo-crypto`
-- `expo-secure-store`
-- `expo-dev-client`
-
-If native module errors appear, uninstall the app from the phone and rebuild:
-
-```powershell
-adb uninstall com.group27.uniattend
-npx.cmd expo run:android --device
-```
-
-## Current QR Verification Flow
-
-1. Start Keycloak.
-2. Start FastAPI backend with `--host 0.0.0.0 --port 8000`.
-3. Start the web app.
-4. Open `http://localhost:3000/qr-test`.
-5. Generate a QR session for:
-
-```text
-40000000-0000-0000-0000-000000000001
-```
-
-6. Open the mobile app on the real phone.
-7. Complete the mock flow until the QR scanner screen.
-8. Scan the QR from the web page.
-9. The mobile app calls:
+The mobile app sends:
 
 ```http
 POST /api/v1/qr-sessions/{qrSessionId}/verify
@@ -286,21 +369,30 @@ with:
 }
 ```
 
-The screen shows one of:
+## Useful Commands
 
-```text
-QR verified
-Invalid QR code
-QR code expired
-QR session closed
-Connection / verification error
+Docker logs:
+
+```powershell
+docker compose logs -f core-api
+docker compose logs -f web
+docker compose logs -f keycloak
 ```
 
-The raw QR value is not shown in the mobile UI.
+Restart one service:
 
-## Useful Validation Commands
+```powershell
+docker compose restart core-api
+```
 
-From the repository root:
+Rebuild one service:
+
+```powershell
+docker compose build core-api
+docker compose up -d core-api
+```
+
+Run JavaScript checks outside Docker:
 
 ```powershell
 npm.cmd run typecheck --workspace=apps/mobile
@@ -310,24 +402,39 @@ npm.cmd run lint --workspace=apps/web
 npm.cmd run build --workspace=apps/web
 ```
 
-From `services/core-backend`:
+Run backend tests outside Docker:
 
 ```powershell
+cd services/core-backend
 python -m pytest tests
 ```
 
-## Stop Local Services
-
-Stop Keycloak:
+Run face-verification tests outside Docker:
 
 ```powershell
-docker compose --env-file infra/local/keycloak/.env.example -f infra/local/keycloak/docker-compose.yml down
+cd services/face-verification
+python -m pytest tests
 ```
 
-Stop FastAPI, Expo, and Next.js by pressing:
+## Docker Networking
+
+Inside Docker Compose, containers use service names:
 
 ```text
-Ctrl+C
+web -> core-api:8000
+core-api -> redis:6379
+core-api -> keycloak:8080
+core-api -> face-verification:8001
+keycloak -> keycloak-db:5432
 ```
 
-in their terminal windows.
+From your browser or Android device, use the host-published ports:
+
+```text
+localhost:3000
+localhost:8000
+localhost:8080
+```
+
+The Android emulator cannot use container service names. Use `10.0.2.2` to reach
+services published on the host machine.

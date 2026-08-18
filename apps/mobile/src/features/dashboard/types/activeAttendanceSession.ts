@@ -6,6 +6,7 @@ export type ActiveAttendanceSession = {
   readonly courseName: string;
   readonly sessionTitle: string;
   readonly sessionType: string;
+  readonly lecturerNames?: string | null;
   readonly scheduledStartAt: string;
   readonly scheduledEndAt: string;
   readonly checkInOpensAt: string;
