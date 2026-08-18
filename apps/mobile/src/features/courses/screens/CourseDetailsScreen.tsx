@@ -230,7 +230,6 @@ export function CourseDetailsScreen({
                 <Text style={styles.weekHead}>{week}</Text>
                 {sessions.map((session) => {
                   const isActiveNow = session.status === 'active' && !isIdentityVerified;
-                  const isWaitingQr = session.status === 'active' && isIdentityVerified;
 
                   return (
                     <View

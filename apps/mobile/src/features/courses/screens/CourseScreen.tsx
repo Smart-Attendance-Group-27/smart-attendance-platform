@@ -23,22 +23,17 @@ export function CourseScreen({ courseService }: CourseScreenProps = {}) {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [requestNumber, setRequestNumber] = useState(0);
   const [state, setState] = useState<CourseScreenState>(
-    courseService
-      ? { status: 'loading' }
-      : { status: 'ready', courses: mockCourses },
+    { status: 'loading' },
   );
 
   useEffect(() => {
-    if (!courseService) {
-      setState({ status: 'ready', courses: mockCourses });
-      return;
-    }
-
     let mounted = true;
-    setState({ status: 'loading' });
 
-    courseService
-      .listMyCourses()
+    const coursesRequest = courseService
+      ? courseService.listMyCourses()
+      : Promise.resolve({ status: 'loaded' as const, courses: mockCourses });
+
+    coursesRequest
       .then((result) => {
         if (!mounted) {
           return;
@@ -98,7 +93,10 @@ export function CourseScreen({ courseService }: CourseScreenProps = {}) {
         <View style={{ flex: 1, justifyContent: 'center' }}>
           <Text>{state.message}</Text>
           <AppButton
-            onPress={() => setRequestNumber((value) => value + 1)}
+            onPress={() => {
+              setState({ status: 'loading' });
+              setRequestNumber((value) => value + 1);
+            }}
             style={{ marginTop: spacing.md }}
             title="Retry"
           />
