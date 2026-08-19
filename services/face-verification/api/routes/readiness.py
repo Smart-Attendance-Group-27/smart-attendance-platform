@@ -1,7 +1,16 @@
+import logging
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 
 from api.dependencies.auth import get_current_student_id
 from api.dependencies.readiness import get_readiness_verification_service
@@ -11,11 +20,13 @@ from api.schemas.readiness import (
 )
 from services.readiness_verification_service import (
     ReadinessVerificationService,
+    ReadinessVerificationResult,
     ReadinessVerificationStatus,
 )
 
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
+logger = logging.getLogger("uvicorn.error")
 
 # type cannot be changed after it is created
 ALLOWED_IMAGE_TYPES = frozenset({"image/jpeg", "image/png"})
@@ -46,6 +57,7 @@ async def get_readiness_status(
 @router.post("/readiness",response_model=ReadinessVerificationResponse,)
 
 async def verify_readiness(
+    request: Request,
     image: Annotated[UploadFile, File(description="JPEG or PNG face capture")],
     student_id: Annotated[UUID, Depends(get_current_student_id)],
     service: Annotated[ReadinessVerificationService,Depends(get_readiness_verification_service),],
@@ -71,9 +83,42 @@ async def verify_readiness(
         captured_image=captured_image,
     )
 
+    if _development_diagnostics_enabled(request):
+        _log_readiness_diagnostics(result)
+
     return ReadinessVerificationResponse(
         status=result.status,
         message=_message_for_status(result.status),
+    )
+
+
+def _development_diagnostics_enabled(request: Request) -> bool:
+    settings = getattr(request.app.state, "settings", None)
+    environment = getattr(settings, "app_environment", "")
+
+    return (
+        isinstance(environment, str)
+        and environment.strip().lower() == "development"
+    )
+
+
+def _log_readiness_diagnostics(result: ReadinessVerificationResult) -> None:
+    """Log comparison metadata without tokens, images, or embeddings."""
+
+    logger.info(
+        "Face readiness diagnostic: status=%s student_id=%s profile_id=%s "
+        "verification_config_id=%s similarity_score=%s "
+        "similarity_threshold=%s detection_confidence=%s model_name=%s "
+        "failure_reason=%s",
+        result.status.value,
+        result.student_id,
+        result.profile_id,
+        result.verification_config_id,
+        result.similarity_score,
+        result.similarity_threshold,
+        result.detection_confidence,
+        result.model_name,
+        result.failure_reason,
     )
 
 

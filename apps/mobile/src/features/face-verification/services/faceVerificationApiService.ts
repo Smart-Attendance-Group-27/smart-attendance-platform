@@ -1,3 +1,5 @@
+import { File } from 'expo-file-system';
+
 import {
   CoreApiClient,
   type AccessTokenProvider,
@@ -10,8 +12,8 @@ import type {
 import type { FaceVerificationResult } from '../types/faceVerification';
 
 const defaultFaceVerificationApiBaseUrl = 'http://10.0.2.2:8001';
-const readinessStatusPath =
-  '/api/v1/face-verification/readiness/status';
+const defaultFaceVerificationRequestTimeoutMs = 5_000;
+const readinessStatusPath = '/api/v1/face-verification/readiness/status';
 const readinessVerificationPath = '/api/v1/face-verification/readiness';
 
 const readinessStatuses = new Set<FaceReadinessStatus>([
@@ -57,14 +59,14 @@ export class FaceVerificationApiService {
   constructor({
     getAccessToken,
     baseUrl,
-    timeoutMs,
+    timeoutMs = defaultFaceVerificationRequestTimeoutMs,
   }: FaceVerificationApiServiceOptions) {
     this.apiClient = new CoreApiClient({
       baseUrl: baseUrl
         ? stripTrailingSlash(baseUrl)
         : resolveFaceVerificationApiBaseUrl(),
       getAccessToken,
-      ...(timeoutMs === undefined ? {} : { timeoutMs }),
+      timeoutMs,
     });
   }
 
@@ -83,14 +85,8 @@ export class FaceVerificationApiService {
 
   async verifyReadiness(captureUri: string): Promise<FaceVerificationResult> {
     const formData = new FormData();
-    formData.append(
-      'image',
-      {
-        uri: captureUri,
-        name: 'readiness-capture.jpg',
-        type: 'image/jpeg',
-      } as unknown as Blob,
-    );
+    const captureFile = new File(captureUri);
+    formData.append('image', captureFile);
 
     const result = await this.apiClient.postFormData<unknown>(
       readinessVerificationPath,

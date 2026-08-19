@@ -1,4 +1,6 @@
+import logging
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
@@ -135,6 +137,59 @@ def test_valid_jpeg_returns_passed_readiness_result() -> None:
     assert response.json() == {"status": "passed","message": "Face readiness verification passed",}
 
     service.verify.assert_awaited_once_with(student_id=student_id,captured_image=captured_image,)
+
+
+def test_logs_comparison_diagnostics_in_development(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    student_id = uuid4()
+    profile_id = uuid4()
+    config_id = uuid4()
+    service = AsyncMock(spec=ReadinessVerificationService)
+    service.verify.return_value = ReadinessVerificationResult(
+        status=ReadinessVerificationStatus.FAILED,
+        student_id=student_id,
+        profile_id=profile_id,
+        verification_config_id=config_id,
+        similarity_score=0.42,
+        similarity_threshold=0.5,
+        detection_confidence=0.91,
+        model_name="buffalo_l",
+        failure_reason="Face similarity was below the required threshold",
+    )
+    app = create_test_app(student_id=student_id, service=service)
+    app.state.settings = SimpleNamespace(app_environment="development")
+
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        with TestClient(app) as client:
+            response = post_image(client)
+
+    assert response.status_code == 200
+    assert "Face readiness diagnostic" in caplog.text
+    assert "status=failed" in caplog.text
+    assert "similarity_score=0.42" in caplog.text
+    assert "similarity_threshold=0.5" in caplog.text
+    assert "detection_confidence=0.91" in caplog.text
+    assert "model_name=buffalo_l" in caplog.text
+
+
+def test_does_not_log_comparison_diagnostics_in_production(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    student_id = uuid4()
+    service = create_service(
+        student_id=student_id,
+        result_status=ReadinessVerificationStatus.FAILED,
+    )
+    app = create_test_app(student_id=student_id, service=service)
+    app.state.settings = SimpleNamespace(app_environment="production")
+
+    with caplog.at_level(logging.INFO, logger="uvicorn.error"):
+        with TestClient(app) as client:
+            response = post_image(client)
+
+    assert response.status_code == 200
+    assert "Face readiness diagnostic" not in caplog.text
 
 
 def test_rejects_unsupported_image_type() -> None:
