@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getValidAccessToken } from "@/lib/auth/dal";
 
 const CORE_BACKEND_URL =
   process.env.CORE_BACKEND_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
@@ -10,11 +11,13 @@ export async function GET(
   context: RouteContext<"/api/qr-sessions/[qrSessionId]/stream">,
 ) {
   const { qrSessionId } = await context.params;
+  const accessToken = await getValidAccessToken();
   const backendResponse = await fetch(
     `${CORE_BACKEND_URL}/api/v1/qr-sessions/${qrSessionId}/stream`,
     {
       headers: {
         Accept: "text/event-stream",
+        Authorization: `Bearer ${accessToken}`,
       },
       cache: "no-store",
       signal: request.signal,
