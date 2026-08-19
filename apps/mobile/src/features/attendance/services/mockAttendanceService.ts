@@ -22,6 +22,7 @@ const attendanceSessions: Readonly<Record<string, AttendanceSession>> = {
     checkInClosesAt: '2026-07-20T10:20:00+05:30',
     lateThreshold: '2026-07-20T10:10:00+05:30',
     checkInStatus: 'open',
+    requiresQr: false,
   },
   'attendance-session-closed': {
     id: 'attendance-session-closed',
@@ -38,6 +39,7 @@ const attendanceSessions: Readonly<Record<string, AttendanceSession>> = {
     checkInClosesAt: '2026-07-14T08:20:00+05:30',
     lateThreshold: '2026-07-14T08:10:00+05:30',
     checkInStatus: 'closed',
+    requiresQr: false,
   },
 };
 
