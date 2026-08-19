@@ -47,11 +47,11 @@ export default function AttendanceSessionDetailsRoute() {
     <AttendanceSessionDetailsScreen
       attendanceService={attendanceService}
       onBack={() => router.back()}
-      onStartCheckIn={() =>
+      onStartCheckIn={(requiresQr) =>
         router.push({
           pathname:
             '/(student)/attendance/[sessionId]/location-check',
-          params: { sessionId },
+          params: { sessionId, requiresQr: requiresQr ? '1' : '0' },
         })
       }
       sessionId={sessionId}
