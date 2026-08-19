@@ -25,6 +25,7 @@ import {
   SessionDetail,
   SessionStatus,
   SessionStudentRow,
+  TimetableOption,
   TodayLecture,
   VerificationOutcome,
 } from "@/types/lecturer";
@@ -174,6 +175,18 @@ export async function getSessionList(): Promise<TodayLecture[]> {
     .map(mapToTodayLecture);
 }
 
+// The set of timetable slots a lecturer can start a new session from — see
+// app/actions/sessions.ts and modules/attendance_sessions/lecturer_sessions
+// on the backend for why creation is scoped to existing timetable entries
+// rather than being fully freeform.
+export async function getSessionCreationOptions(): Promise<TimetableOption[]> {
+  const timetable = await getLecturerTimetable();
+  return timetable.map((entry) => ({
+    id: entry.id,
+    label: `${entry.courseCode} · ${formatDayOfWeek(entry.dayOfWeek)} ${formatTimeRange(entry.startTime, entry.endTime)} · ${entry.classroomCode ?? "No room"}`,
+  }));
+}
+
 function mapVerificationOutcome(status: string | null, requires: boolean): VerificationOutcome {
   if (!requires) return "not_required";
   if (status === null) return "not_submitted";
@@ -236,6 +249,7 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
     students: students.map((student) => ({
       studentId: student.studentId,
       studentIndex: student.registrationNumber,
+      fullName: student.fullName,
       initialFaceCheck: mapVerificationOutcome(student.faceStatus, session.requiresFaceVerification),
       qrVerification: mapQrOutcome(student.qrStatus, session.requiresQr),
       finalStatus: mapFinalStatus(student.attendanceStatus, student.reviewStatus),
