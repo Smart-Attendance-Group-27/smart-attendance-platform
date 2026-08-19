@@ -309,6 +309,7 @@ class QrSessionService:
         lecturer_id: UUID,
     ) -> None:
         async with pool.acquire() as connection:
+            connection = cast(asyncpg.Connection, connection)
             owns_qr_session = await self._repository.qr_batch_owned_by_lecturer(
                 connection,
                 qr_session_id,
@@ -336,6 +337,7 @@ class QrSessionService:
         # Cache miss/failure path: load from PostgreSQL, then write back with a
         # bounded TTL.
         async with pool.acquire() as connection:
+            connection = cast(asyncpg.Connection, connection)
             metadata = await self._repository.fetch_qr_batch_metadata(
                 connection,
                 qr_session_id,
@@ -361,6 +363,7 @@ class QrSessionService:
         # First read the QR/session/student state needed to classify the scan.
         # The QR attempt write happens later after classification.
         async with pool.acquire() as connection:
+            connection = cast(asyncpg.Connection, connection)
             verification_record = await self._repository.fetch_qr_verification_record(
                 connection,
                 qr_session_id,
@@ -429,6 +432,7 @@ class QrSessionService:
         # Record that the student attempted QR validation. The raw QR value is
         # intentionally not written here; only the outcome is stored.
         async with pool.acquire() as connection:
+            connection = cast(asyncpg.Connection, connection)
             async with connection.transaction():
                 qr_token_id = await self._repository.find_qr_token_id_for_batch(
                     connection,

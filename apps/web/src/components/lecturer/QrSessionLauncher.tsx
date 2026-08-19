@@ -79,7 +79,9 @@ export function QrSessionLauncher({
   // qrSession is the created backend QR batch. dynamicQr is separate because
   // dynamic sessions rotate values without recreating the batch.
   const [qrSession, setQrSession] = useState<QrSessionResponse | null>(null);
-  const [dynamicQr, setDynamicQr] = useState<DynamicQrStreamPayload | null>(null);
+  const [dynamicQr, setDynamicQr] = useState<DynamicQrStreamPayload | null>(
+    null,
+  );
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -125,7 +127,9 @@ export function QrSessionLauncher({
 
     // Dynamic QR creation does not return a QR value. After the batch is
     // created, this stream supplies the current rotating value to display.
-    const source = new EventSource(`/api/qr-sessions/${qrSession.qrSessionId}/stream`);
+    const source = new EventSource(
+      `/api/qr-sessions/${qrSession.qrSessionId}/stream`,
+    );
 
     source.addEventListener("qr.rotate", (event) => {
       try {
@@ -147,7 +151,9 @@ export function QrSessionLauncher({
       setStreamStatus((currentStatus) =>
         currentStatus === "connected" ? "connected" : "closed",
       );
-      setError((currentError) => currentError || "Dynamic QR stream is unavailable.");
+      setError(
+        (currentError) => currentError || "Dynamic QR stream is unavailable.",
+      );
     };
 
     return () => {
@@ -177,21 +183,23 @@ export function QrSessionLauncher({
     setStreamStatus("idle");
 
     try {
-      // This calls the local Next.js API route. That route forwards the request
-      // to FastAPI with the lecturer's access token attached.
-      const response = await fetch(`/api/attendance-sessions/${sessionId}/qr-sessions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      // Create Dynamic or static QR session.
+      const response = await fetch(
+        `/api/attendance-sessions/${sessionId}/qr-sessions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            mode,
+            validForSeconds: validityNumber,
+            ...(mode === "dynamic"
+              ? { refreshIntervalSeconds: refreshIntervalNumber }
+              : {}),
+          }),
         },
-        body: JSON.stringify({
-          mode,
-          validForSeconds: validityNumber,
-          ...(mode === "dynamic"
-            ? { refreshIntervalSeconds: refreshIntervalNumber }
-            : {}),
-        }),
-      });
+      );
 
       const data = await response.json();
 
@@ -205,12 +213,18 @@ export function QrSessionLauncher({
         // the backend. Dynamic is allowed to start without qrValue.
         throw new Error("The backend did not return a static QR value.");
       }
-
+      // Save the QR session returned from backend into React state.
       setQrSession(createdSession);
       // Dynamic starts in "connecting" until the first qr.rotate event arrives.
-      setStreamStatus(createdSession.mode === "dynamic" ? "connecting" : "idle");
+      setStreamStatus(
+        createdSession.mode === "dynamic" ? "connecting" : "idle",
+      );
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unexpected QR launch error.");
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unexpected QR launch error.",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -221,12 +235,15 @@ export function QrSessionLauncher({
       <Card title="QR launch settings" subtitle={`${courseCode} · ${room}`}>
         <div className="space-y-4">
           <Notice title="Screen sharing mode">
-            Launch the QR session, then share this page with students. Static QR keeps the same value until the QR session expires; dynamic QR rotates through the live stream.
+            Launch the QR session, then share this page with students. Static QR
+            keeps the same value until the QR session expires; dynamic QR
+            rotates through the live stream.
           </Notice>
 
           {!isLaunchEnabled ? (
             <Notice variant="warning" title="QR launch unavailable">
-              This session is not currently active or QR verification is disabled.
+              This session is not currently active or QR verification is
+              disabled.
             </Notice>
           ) : null}
 
@@ -250,7 +267,9 @@ export function QrSessionLauncher({
                     type="radio"
                     value={option}
                   />
-                  <span className="block font-semibold capitalize">{option}</span>
+                  <span className="block font-semibold capitalize">
+                    {option}
+                  </span>
                   <span className="mt-1 block text-[10px] text-[var(--muted)]">
                     {option === "static" ? "One QR value" : "Auto-rotating QR"}
                   </span>
@@ -288,7 +307,9 @@ export function QrSessionLauncher({
                 inputMode="numeric"
                 max={300}
                 min={1}
-                onChange={(event) => setRefreshIntervalSeconds(event.target.value)}
+                onChange={(event) =>
+                  setRefreshIntervalSeconds(event.target.value)
+                }
                 type="number"
                 value={refreshIntervalSeconds}
               />
@@ -301,7 +322,9 @@ export function QrSessionLauncher({
             onClick={launchQrSession}
             variant="primary"
           >
-            {isLoading ? `Launching ${mode} QR session...` : `Launch ${mode} QR session`}
+            {isLoading
+              ? `Launching ${mode} QR session...`
+              : `Launch ${mode} QR session`}
           </Button>
 
           {error ? (
@@ -319,25 +342,41 @@ export function QrSessionLauncher({
               <div className="flex flex-col items-center text-center">
                 {/* This is the lecturer's share-screen QR. Students scan this
                     JSON payload from the mobile app, not a plain URL. */}
-                <QRCodeSVG value={qrCodePayload} size={340} level="M" marginSize={4} />
+                <QRCodeSVG
+                  value={qrCodePayload}
+                  size={340}
+                  level="M"
+                  marginSize={4}
+                />
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
-                  <StatusBadge tone={qrSession.mode === "dynamic" ? "warning" : "success"}>
-                    {qrSession.mode === "dynamic" ? `Dynamic · ${streamStatus}` : "Static · active"}
+                  <StatusBadge
+                    tone={qrSession.mode === "dynamic" ? "warning" : "success"}
+                  >
+                    {qrSession.mode === "dynamic"
+                      ? `Dynamic · ${streamStatus}`
+                      : "Static · active"}
                   </StatusBadge>
-                  <StatusBadge tone="info">{formatDuration(validityNumber)}</StatusBadge>
+                  <StatusBadge tone="info">
+                    {formatDuration(validityNumber)}
+                  </StatusBadge>
                 </div>
                 <p className="mt-4 text-sm font-semibold text-[#2d3d49]">
                   Scan this QR after location and face verification
                 </p>
                 <p className="mt-1 max-w-lg text-xs leading-relaxed text-[var(--muted)]">
-                  The code contains only the QR session ID and the current QR value. Raw QR values are verified by the backend and are not shown to students here.
+                  The code contains only the QR session ID and the current QR
+                  value. Raw QR values are verified by the backend and are not
+                  shown to students here.
                 </p>
               </div>
             ) : (
               <div className="text-center">
-                <p className="text-base font-semibold text-[#33434f]">No QR session launched</p>
+                <p className="text-base font-semibold text-[#33434f]">
+                  No QR session launched
+                </p>
                 <p className="mt-2 max-w-md text-xs leading-relaxed text-[var(--muted)]">
-                  Choose static or dynamic mode, set the timing, then launch the QR session for this active attendance session.
+                  Choose static or dynamic mode, set the timing, then launch the
+                  QR session for this active attendance session.
                 </p>
               </div>
             )}
@@ -345,30 +384,44 @@ export function QrSessionLauncher({
 
           <aside className="space-y-3 text-xs">
             <div className="border border-[var(--line)] bg-[#fafbfc] p-3">
-              <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Session</p>
+              <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                Session
+              </p>
               <p className="mt-1 font-semibold text-[#2d3d49]">{courseCode}</p>
               <p className="mt-1 text-[var(--muted)]">{courseName}</p>
             </div>
             <div className="border border-[var(--line)] bg-[#fafbfc] p-3">
-              <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Check-in window</p>
-              <p className="mt-1 font-semibold text-[#2d3d49]">{checkInWindow}</p>
+              <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                Check-in window
+              </p>
+              <p className="mt-1 font-semibold text-[#2d3d49]">
+                {checkInWindow}
+              </p>
             </div>
             <div className="border border-[var(--line)] bg-[#fafbfc] p-3">
-              <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">QR session ID</p>
+              <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                QR session ID
+              </p>
               <p className="mt-1 break-all font-mono text-[11px] text-[#2d3d49]">
                 {qrSession?.qrSessionId ?? "—"}
               </p>
             </div>
             <div className="border border-[var(--line)] bg-[#fafbfc] p-3">
-              <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Current value window</p>
+              <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                Current value window
+              </p>
               <dl className="mt-1 space-y-1">
                 <div className="flex justify-between gap-3">
                   <dt className="text-[var(--muted)]">Valid from</dt>
-                  <dd className="text-right font-semibold">{formatDateTime(displayedValidFrom)}</dd>
+                  <dd className="text-right font-semibold">
+                    {formatDateTime(displayedValidFrom)}
+                  </dd>
                 </div>
                 <div className="flex justify-between gap-3">
                   <dt className="text-[var(--muted)]">Expires</dt>
-                  <dd className="text-right font-semibold">{formatDateTime(displayedExpiresAt)}</dd>
+                  <dd className="text-right font-semibold">
+                    {formatDateTime(displayedExpiresAt)}
+                  </dd>
                 </div>
                 {dynamicQr ? (
                   <div className="flex justify-between gap-3">
