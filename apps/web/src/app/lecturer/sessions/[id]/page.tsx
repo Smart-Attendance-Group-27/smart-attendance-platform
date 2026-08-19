@@ -63,9 +63,13 @@ export default async function SessionMonitorPage(props: PageProps<"/lecturer/ses
         </div>
 
         <div className="flex flex-wrap gap-1.5 border-b border-[var(--line)] bg-[#fafbfc] p-2.5">
-          <Button disabled={!isActive} className="gap-2">
+          <LinkButton
+            aria-disabled={!isActive || session.requiresQr !== true}
+            className={!isActive || session.requiresQr !== true ? "pointer-events-none opacity-50" : "gap-2"}
+            href={`/lecturer/sessions/${session.sessionId}/qr`}
+          >
             Launch QR verification <StatusBadge tone="purple">Optional</StatusBadge>
-          </Button>
+          </LinkButton>
           <Button disabled={!isActive}>Pause check-in</Button>
           <Button>Session policy</Button>
         </div>

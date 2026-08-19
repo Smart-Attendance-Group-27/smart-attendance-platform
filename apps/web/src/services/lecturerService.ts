@@ -224,6 +224,7 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
     checkInWindow: formatTimeRange(session.checkInOpensAt, session.checkInClosesAt),
     lateThreshold: formatClockTime(session.lateAfterAt),
     lecturerName: (await getCurrentUser())?.name ?? "",
+    requiresQr: session.requiresQr,
     summary: {
       presentCount,
       presentPercent: roundToOneDecimal((presentCount / enrolledCount) * 100),
