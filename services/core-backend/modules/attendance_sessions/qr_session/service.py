@@ -86,6 +86,9 @@ class CurrentDynamicQrSession:
 
 
 class QrSessionService:
+    # This class is the QR module's business layer. Routes call it, repositories
+    # provide data access, and this service decides which domain result
+    # ("accepted", "invalid", "expired", "closed") should be returned.
     def __init__(
         self,
         repository: QrSessionRepository | None = None,
@@ -117,6 +120,8 @@ class QrSessionService:
         current_time = self._ensure_utc(self._clock())
         requested_expires_at = current_time + timedelta(seconds=valid_for_seconds)
 
+        # Creation is transactional because we must close older active QR
+        # batches and create the new batch/token as one consistent operation.
         async with pool.acquire() as connection:
             async with connection.transaction():
                 attendance_session = await self._repository.lock_attendance_session(
@@ -137,6 +142,8 @@ class QrSessionService:
                 qr_session_id = self._uuid_factory()
                 qr_token_id = self._uuid_factory()
                 qr_value = self._qr_value_generator()
+                # Static QR stores only the hash. The raw value is returned
+                # once to the lecturer UI for QR rendering and is not persisted.
                 token_hash = self._hash_qr_value(qr_value)
 
                 deactivated_qr_session_ids = (
@@ -181,6 +188,8 @@ class QrSessionService:
 
         await self._delete_cached_qr_batches(deactivated_qr_session_ids)
 
+        # Static QR returns qr_value because the web page must render it as the
+        # QR code. Dynamic creation returns None and relies on /current or SSE.
         return CreatedQrSession(
             qr_session_id=qr_session_id,
             attendance_session_id=attendance_session_id,
@@ -203,6 +212,8 @@ class QrSessionService:
         current_time = self._ensure_utc(self._clock())
         requested_expires_at = current_time + timedelta(seconds=valid_for_seconds)
 
+        # Dynamic QR creates only the batch metadata. Individual QR values are
+        # derived later using HMAC, so no rotating token rows are stored.
         async with pool.acquire() as connection:
             async with connection.transaction():
                 attendance_session = await self._repository.lock_attendance_session(
@@ -255,6 +266,8 @@ class QrSessionService:
                 )
 
         await self._delete_cached_qr_batches(deactivated_qr_session_ids)
+        # Dynamic QR reads the same batch/session metadata repeatedly while the
+        # stream is open, so prime Redis after creation to reduce DB reads.
         await self._set_cached_qr_batch_metadata(
             QrBatchMetadata(
                 id=qr_session_id,
@@ -311,8 +324,12 @@ class QrSessionService:
                 qr_session_id,
             )
             if cached_metadata is not None:
+                # Redis is a read-through optimization only. Returning here is
+                # safe because cache entries expire quickly and DB remains truth.
                 return cached_metadata
 
+        # Cache miss/failure path: load from PostgreSQL, then write back with a
+        # bounded TTL.
         async with pool.acquire() as connection:
             metadata = await self._repository.fetch_qr_batch_metadata(
                 connection,
@@ -332,8 +349,12 @@ class QrSessionService:
         student_user_id: UUID,
     ) -> VerifiedQrSession:
         current_time = self._ensure_utc(self._clock())
+        # Hash immediately so the raw QR value is not stored, logged, or passed
+        # into static-token database writes.
         submitted_token_hash = self._hash_qr_value(qr_value)
 
+        # First read the QR/session/student state needed to classify the scan.
+        # The QR attempt write happens later after classification.
         async with pool.acquire() as connection:
             verification_record = await self._repository.fetch_qr_verification_record(
                 connection,
@@ -380,6 +401,8 @@ class QrSessionService:
                 )
 
         if verification_record.qr_mode == DYNAMIC_QR_MODE:
+            # Dynamic values are generated from the current time window and
+            # server-side secret, not read from qr_tokens.
             verification_status = await self._classify_dynamic_qr_verification(
                 pool,
                 qr_session_id,
@@ -387,6 +410,8 @@ class QrSessionService:
                 current_time,
             )
         else:
+            # Static values are validated by comparing the submitted hash with
+            # the stored token_hash.
             verification_status = self._classify_qr_verification(
                 verification_record,
                 submitted_token_hash,
@@ -396,6 +421,8 @@ class QrSessionService:
         if attempt.status != IN_PROGRESS_STATUS:
             verification_status = "closed"
 
+        # Record that the student attempted QR validation. The raw QR value is
+        # intentionally not written here; only the outcome is stored.
         async with pool.acquire() as connection:
             async with connection.transaction():
                 qr_token_id = await self._repository.find_qr_token_id_for_batch(
@@ -438,6 +465,8 @@ class QrSessionService:
         self._validate_dynamic_qr_metadata(metadata, current_time)
 
         assert metadata.refresh_interval_seconds is not None
+        # The sequence number identifies the active time window. Every device
+        # observing the same server time window gets the same expected value.
         sequence = calculate_dynamic_qr_sequence(
             metadata.activated_at,
             metadata.refresh_interval_seconds,
@@ -453,6 +482,8 @@ class QrSessionService:
         if expires_at > batch_expires_at:
             expires_at = batch_expires_at
 
+        # HMAC makes dynamic QR deterministic for the backend but impossible to
+        # predict without DYNAMIC_QR_HMAC_SECRET.
         qr_value = generate_dynamic_qr_value(qr_session_id, sequence, secret)
 
         return CurrentDynamicQrSession(
@@ -492,6 +523,8 @@ class QrSessionService:
             if await self._client_is_disconnected(is_disconnected):
                 break
 
+            # Sleep until the current dynamic window expires, then regenerate
+            # and yield the next QR value.
             wait_seconds = self._calculate_dynamic_qr_stream_wait_seconds(
                 current_qr_session,
                 self._clock(),
@@ -608,6 +641,8 @@ class QrSessionService:
         submitted_token_hash: str,
         current_time: datetime,
     ) -> str:
+        # Static QR classification maps all database/session/token conditions
+        # into the mobile-facing domain statuses.
         if verification_record is None:
             return "invalid"
 
@@ -639,6 +674,8 @@ class QrSessionService:
         if current_time < token_valid_from or current_time >= token_expires_at:
             return "expired"
 
+        # compare_digest avoids timing-sensitive equality checks and is the
+        # final static QR hash comparison.
         if not compare_digest(verification_record.token_hash, submitted_token_hash):
             return "invalid"
 
@@ -652,6 +689,8 @@ class QrSessionService:
         current_time: datetime,
     ) -> str:
         try:
+            # Reuse current dynamic QR generation so verification and SSE stream
+            # agree on the active QR value for the same time window.
             current_qr_session = await self.get_current_dynamic_qr_session(
                 pool,
                 qr_session_id,
@@ -675,6 +714,8 @@ class QrSessionService:
         verification_record: QrVerificationRecord,
         current_time: datetime,
     ) -> bool:
+        # Anything that means "students should not be able to verify now" is
+        # collapsed to the user-facing "closed" result.
         if verification_record.attendance_session_id is None:
             return True
 
@@ -807,4 +848,6 @@ class QrSessionService:
     ) -> int:
         expires_at = QrSessionService._ensure_utc(metadata.expires_at)
         natural_ttl = int((expires_at - current_time).total_seconds())
+        # Keep Redis short-lived because session close/cancel can happen before
+        # the QR batch's natural expiry.
         return min(natural_ttl, MAX_QR_BATCH_CACHE_TTL_SECONDS)

@@ -15,6 +15,8 @@ QrSessionMode = Literal["static", "dynamic"]
 
 
 class CreateQrSessionRequest(BaseModel):
+    # Web sends camelCase JSON. populate_by_name lets tests/service code still
+    # use Python snake_case while the public API stays frontend-friendly.
     model_config = ConfigDict(populate_by_name=True)
 
     mode: QrSessionMode = "static"
@@ -33,6 +35,8 @@ class CreateQrSessionRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_mode_refresh_interval(self) -> "CreateQrSessionRequest":
+        # Static QR has one fixed value, so refreshIntervalSeconds only makes
+        # sense for dynamic QR. Dynamic defaults to a safe 15-second rotation.
         if self.mode == "static" and self.refresh_interval_seconds is not None:
             raise ValueError(
                 "refreshIntervalSeconds is only supported for dynamic QR sessions.",
@@ -64,6 +68,8 @@ QrVerificationStatus = Literal["accepted", "invalid", "expired", "closed"]
 
 
 class VerifyQrSessionRequest(BaseModel):
+    # qrValue is the raw scanned value from the mobile camera. The schema only
+    # validates shape; the service handles hashing and secure comparison.
     model_config = ConfigDict(populate_by_name=True)
 
     qr_value: str = Field(alias="qrValue", min_length=1)

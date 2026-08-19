@@ -13,6 +13,8 @@ def calculate_dynamic_qr_sequence(
     refresh_interval_seconds: int,
     now: datetime,
 ) -> int:
+    # Sequence number is the dynamic QR "time bucket". For example, with a
+    # 15-second refresh interval, every 15-second window gets a new sequence.
     activated_at_utc = _ensure_utc(activated_at)
     now_utc = _ensure_utc(now)
 
@@ -31,6 +33,8 @@ def generate_dynamic_qr_value(
     sequence: int,
     secret: str,
 ) -> str:
+    # Dynamic QR values are deterministic for the backend but unpredictable to
+    # clients because the message is signed with a server-side HMAC secret.
     if sequence < 0:
         raise ValueError("sequence must not be negative.")
 
@@ -51,6 +55,7 @@ def get_dynamic_qr_window(
     refresh_interval_seconds: int,
     sequence: int,
 ) -> tuple[datetime, datetime]:
+    # The mobile verification result is only accepted inside this exact window.
     if refresh_interval_seconds <= 0:
         raise ValueError("refresh_interval_seconds must be greater than zero.")
 
@@ -85,6 +90,8 @@ def seconds_until_next_rotation(
 
 
 def build_dynamic_qr_message(qr_session_id: UUID, sequence: int) -> str:
+    # Keep the signed message stable and explicit so web stream generation and
+    # mobile verification always derive the same dynamic QR value.
     return f"{DYNAMIC_QR_MESSAGE_PREFIX}:{qr_session_id}:{sequence}"
 
 

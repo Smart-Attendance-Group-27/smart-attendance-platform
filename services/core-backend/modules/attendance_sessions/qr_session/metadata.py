@@ -5,6 +5,8 @@ from uuid import UUID
 
 @dataclass(frozen=True)
 class QrBatchMetadata:
+    # Compact shape shared by PostgreSQL reads and Redis cache entries. Dynamic
+    # QR uses this to decide whether a batch/session can still emit QR values.
     id: UUID
     attendance_session_id: UUID
     attendance_session_status: str | None

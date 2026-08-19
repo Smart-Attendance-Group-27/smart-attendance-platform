@@ -15,6 +15,8 @@ QR_BATCH_CACHE_KEY_PREFIX = "qr:batch"
 
 
 class QrBatchMetadataCache:
+    # Redis stores QR batch/session metadata only as a cache. PostgreSQL remains
+    # the source of truth, so every Redis failure degrades to a cache miss.
     def __init__(self, redis_client: Redis | None) -> None:
         self._redis_client = redis_client
 
@@ -26,6 +28,8 @@ class QrBatchMetadataCache:
             return None
 
         try:
+            # Dynamic QR /current and /stream call this often, so cache hits
+            # avoid repeated joins against the attendance-session tables.
             cached_value = await self._redis_client.get(
                 self._build_cache_key(qr_session_id),
             )
@@ -52,6 +56,8 @@ class QrBatchMetadataCache:
             return
 
         try:
+            # TTL is chosen by the service and capped there to avoid long-lived
+            # stale metadata after a lecturer closes/cancels a session.
             await self._redis_client.set(
                 self._build_cache_key(qr_session_id),
                 self._serialize_metadata(metadata),
@@ -71,6 +77,7 @@ class QrBatchMetadataCache:
 
     @staticmethod
     def _build_cache_key(qr_session_id: UUID) -> str:
+        # One cache entry per QR batch/session id.
         return f"{QR_BATCH_CACHE_KEY_PREFIX}:{qr_session_id}"
 
     @staticmethod

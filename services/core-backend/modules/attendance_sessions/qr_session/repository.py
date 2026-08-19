@@ -43,11 +43,15 @@ class QrVerificationRecord:
 
 
 class QrSessionRepository:
+    # Repository methods are intentionally thin: raw SQL lives here, while QR
+    # business decisions stay in QrSessionService.
     async def lock_attendance_session(
         self,
         connection: asyncpg.Connection,
         session_id: UUID,
     ) -> AttendanceSessionRecord | None:
+        # Creation locks the parent attendance session so two lecturer actions
+        # cannot create conflicting active QR batches at the same time.
         row = await connection.fetchrow(
             """
             SELECT id, status, scheduled_end_at, closed_at, cancelled_at, requires_qr
@@ -131,6 +135,9 @@ class QrSessionRepository:
         session_id: UUID,
         deactivated_at: datetime,
     ) -> list[UUID]:
+        # A session should have at most one active QR batch. When a lecturer
+        # launches a new QR, older active batches are deactivated and their
+        # static token rows are revoked.
         rows = await connection.fetch(
             """
             WITH deactivated_batches AS (
@@ -171,6 +178,8 @@ class QrSessionRepository:
         expires_at: datetime,
         issued_by: UUID,
     ) -> None:
+        # qr_token_batches is the QR session table. Its id is the qr_session_id
+        # used later by mobile verification and dynamic stream endpoints.
         await connection.execute(
             """
             INSERT INTO attendance_session.qr_token_batches (
@@ -206,6 +215,8 @@ class QrSessionRepository:
         valid_from: datetime,
         expires_at: datetime,
     ) -> None:
+        # Static QR has one token row containing only token_hash. Dynamic QR has
+        # no rotating token rows because values are generated with HMAC.
         await connection.execute(
             """
             INSERT INTO attendance_session.qr_tokens (
@@ -315,6 +326,8 @@ class QrSessionRepository:
         connection: asyncpg.Connection,
         qr_session_id: UUID,
     ) -> QrBatchMetadata | None:
+        # Metadata read used by dynamic /current and /stream. This is the shape
+        # cached in Redis because these endpoints ask for it repeatedly.
         row = await connection.fetchrow(
             """
             SELECT
@@ -363,6 +376,8 @@ class QrSessionRepository:
         connection: asyncpg.Connection,
         qr_session_id: UUID,
     ) -> QrVerificationRecord | None:
+        # Verification needs the QR batch, parent attendance session, and token
+        # state in one read so the service can classify the scan safely.
         row = await connection.fetchrow(
             """
             SELECT

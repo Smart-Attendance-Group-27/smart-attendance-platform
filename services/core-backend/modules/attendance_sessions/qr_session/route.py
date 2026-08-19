@@ -34,9 +34,13 @@ from modules.attendance_sessions.qr_session.service import (
 from modules.identity.auth.dependencies import CurrentLecturer, CurrentStudent
 
 router = APIRouter(tags=["qr-sessions"])
+# Lecturer-facing endpoint group: a QR session is always launched under a
+# parent attendance session.
 create_qr_session_router = APIRouter(
     prefix="/attendance-sessions/{session_id}/qr-sessions",
 )
+# Student/stream endpoint group: after creation, the QR batch ID becomes the
+# qr_session_id used for current QR, SSE stream, and verification requests.
 verify_qr_session_router = APIRouter(prefix="/qr-sessions/{qr_session_id}")
 
 _SESSION_NOT_FOUND_DETAIL = "The attendance session was not found, or does not belong to this lecturer."
@@ -45,6 +49,9 @@ _QR_NOT_REQUIRED_DETAIL = "QR verification is not enabled for this attendance se
 
 
 def get_qr_session_service(request: Request) -> QrSessionService:
+    # Infrastructure is injected from FastAPI app.state. Redis is optional:
+    # without it, the cache wrapper returns misses and the service reads the
+    # source-of-truth metadata from PostgreSQL.
     redis_client = getattr(request.app.state, "redis_client", None)
     settings = getattr(request.app.state, "settings", None)
     dynamic_qr_hmac_secret = getattr(settings, "dynamic_qr_hmac_secret", None)
@@ -60,6 +67,8 @@ async def get_initial_dynamic_qr_session(
     current_lecturer: CurrentLecturer,
     qr_session_service: QrSessionService = Depends(get_qr_session_service),
 ) -> CurrentDynamicQrSession:
+    # Shared dependency for /current and /stream. It checks lecturer ownership
+    # before exposing any dynamic QR value to the lecturer web UI.
     try:
         await qr_session_service.assert_lecturer_owns_qr_session(
             http_request.app.state.db_pool,
@@ -107,6 +116,8 @@ async def create_qr_session(
     request_payload = payload or CreateQrSessionRequest()
 
     try:
+        # Static and dynamic QR sessions share one HTTP endpoint. The request
+        # body selects the mode; the service owns the actual business rules.
         if request_payload.mode == "dynamic":
             assert request_payload.refresh_interval_seconds is not None
             created_qr_session = await qr_session_service.create_dynamic_qr_session(
@@ -164,6 +175,9 @@ async def verify_qr_session(
     qr_session_service: QrSessionService = Depends(get_qr_session_service),
 ) -> VerifyQrSessionResponse:
     try:
+        # The route receives the scanned raw qrValue from mobile, but the
+        # service immediately hashes/classifies it and never stores that raw
+        # value.
         verified_qr_session = await qr_session_service.verify_qr_session(
             http_request.app.state.db_pool,
             qr_session_id,
@@ -237,6 +251,8 @@ async def stream_current_dynamic_qr_session(
     ),
     qr_session_service: QrSessionService = Depends(get_qr_session_service),
 ) -> AsyncIterator[ServerSentEvent]:
+    # Dynamic QR uses SSE so the lecturer page keeps one connection open and
+    # receives each rotated QR value as a qr.rotate event.
     async for streamed_qr_session in qr_session_service.stream_current_dynamic_qr_sessions(
         http_request.app.state.db_pool,
         qr_session_id,
