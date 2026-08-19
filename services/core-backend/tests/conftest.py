@@ -222,8 +222,7 @@ def build_authentication_service_for_tests(
 
     return AuthenticationService(
         KeycloakTokenVerifier(
-            JwksClient(fetch_jwks),
-            expected_issuer=expected_issuer,
+            {expected_issuer: JwksClient(fetch_jwks)},
             audience=audience,
         ),
     )
