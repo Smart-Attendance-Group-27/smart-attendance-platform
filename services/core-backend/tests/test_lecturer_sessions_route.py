@@ -16,9 +16,12 @@ from conftest import (
 from main import create_app
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
 from modules.attendance_sessions.lecturer_sessions.exception import (
+    ClassroomGeofenceNotConfiguredError,
+    InvalidSessionScheduleError,
     SessionAlreadyActiveError,
     SessionNotActiveError,
     SessionNotFoundError,
+    TimetableEntryNotFoundError,
 )
 from modules.attendance_sessions.lecturer_sessions.repository import (
     LecturerSessionRecord,
@@ -110,6 +113,12 @@ class StubLecturerSessionService:
             raise self.error
         return self.session
 
+    async def create_for_user(self, pool, user_id, **kwargs):
+        self.calls.append("create")
+        if self.error is not None:
+            raise self.error
+        return self.session
+
     async def activate_for_user(self, pool, user_id, session_id):
         self.calls.append("activate")
         if self.error is not None:
@@ -194,6 +203,79 @@ def test_get_missing_session_returns_404(jwks_document, make_access_token) -> No
         )
 
     assert response.status_code == 404
+
+
+def build_create_payload(**overrides) -> dict:
+    payload = {
+        "timetableEntryId": "3a000000-0000-0000-0000-000000000001",
+        "sessionTitle": "CS3203 Lecture",
+        "sessionType": "lecture",
+        "scheduledStartAt": CURRENT_TIME.isoformat(),
+        "scheduledEndAt": (CURRENT_TIME + timedelta(hours=1)).isoformat(),
+        "requiresFaceVerification": True,
+        "requiresGeofence": True,
+        "requiresQr": False,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_create_session(client: TestClient, service: StubLecturerSessionService, make_access_token) -> None:
+    response = client.post(
+        SESSIONS_URL,
+        json=build_create_payload(),
+        headers=authorize(lecturer_token(make_access_token)),
+    )
+
+    assert response.status_code == 201
+    assert service.calls == ["create"]
+    assert response.json()["id"] == str(SESSION_ID)
+
+
+def test_create_session_rejects_non_lecturer_role(client: TestClient, make_access_token) -> None:
+    response = client.post(
+        SESSIONS_URL,
+        json=build_create_payload(),
+        headers=authorize(make_access_token(subject=LINKED_STUDENT_SUBJECT, roles=("student",))),
+    )
+
+    assert response.status_code == 403
+
+
+def test_create_session_missing_timetable_entry_returns_404(jwks_document, make_access_token) -> None:
+    service = StubLecturerSessionService(error=TimetableEntryNotFoundError())
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            SESSIONS_URL,
+            json=build_create_payload(),
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    assert response.status_code == 404
+
+
+def test_create_session_invalid_schedule_returns_422(jwks_document, make_access_token) -> None:
+    service = StubLecturerSessionService(error=InvalidSessionScheduleError("bad schedule"))
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            SESSIONS_URL,
+            json=build_create_payload(),
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    assert response.status_code == 422
+
+
+def test_create_session_geofence_not_configured_returns_422(jwks_document, make_access_token) -> None:
+    service = StubLecturerSessionService(error=ClassroomGeofenceNotConfiguredError("no geofence"))
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            SESSIONS_URL,
+            json=build_create_payload(),
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    assert response.status_code == 422
 
 
 def test_activate_session(client: TestClient, service: StubLecturerSessionService, make_access_token) -> None:
