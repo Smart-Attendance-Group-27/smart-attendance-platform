@@ -9,6 +9,7 @@ from adapters.core_api_student_profile_client import (
     CoreApiStudentProfileClient,
 )
 from adapters.insightface_engine import create_configured_insightface_engine
+from api.routes.attendance import router as attendance_router
 from api.routes.health import router as health_router
 from api.routes.readiness import router as readiness_router
 from core.config import get_settings
@@ -56,6 +57,7 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(readiness_router)
+    app.include_router(attendance_router)
 
     return app
 

@@ -39,20 +39,16 @@ def _read_settings(request: Request) -> Settings:
 def build_authentication_service(settings: Settings) -> AuthenticationService:
     settings.require_keycloak_configuration()
 
-    assert settings.keycloak_jwks_url is not None
-    assert settings.keycloak_expected_issuer is not None
-
-    jwks_client = JwksClient(
-        build_http_jwks_fetcher(
-            settings.keycloak_jwks_url,
-            settings.keycloak_jwks_timeout_seconds,
-        ),
-        cache_seconds=settings.keycloak_jwks_cache_seconds,
-        min_refresh_seconds=settings.keycloak_jwks_min_refresh_seconds,
-    )
+    jwks_clients_by_issuer = {
+        issuer: JwksClient(
+            build_http_jwks_fetcher(jwks_url, settings.keycloak_jwks_timeout_seconds),
+            cache_seconds=settings.keycloak_jwks_cache_seconds,
+            min_refresh_seconds=settings.keycloak_jwks_min_refresh_seconds,
+        )
+        for issuer, jwks_url in settings.keycloak_issuer_jwks_pairs
+    }
     token_verifier = KeycloakTokenVerifier(
-        jwks_client,
-        expected_issuer=settings.keycloak_accepted_issuers,
+        jwks_clients_by_issuer,
         audience=settings.keycloak_audience,
         authorized_clients=settings.keycloak_accepted_authorized_clients,
         algorithm=settings.keycloak_signing_algorithm,

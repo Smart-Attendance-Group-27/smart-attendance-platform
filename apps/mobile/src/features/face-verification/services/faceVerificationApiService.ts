@@ -9,12 +9,20 @@ import type {
   FaceReadinessResult,
   FaceReadinessStatus,
 } from '../types/readinessStatus';
-import type { FaceVerificationResult } from '../types/faceVerification';
+import type {
+  FaceVerificationRequest,
+  FaceVerificationResult,
+} from '../types/faceVerification';
+import type { FaceVerificationService } from './faceVerificationService';
 
 const defaultFaceVerificationApiBaseUrl = 'http://10.0.2.2:8001';
 const defaultFaceVerificationRequestTimeoutMs = 5_000;
 const readinessStatusPath = '/api/v1/face-verification/readiness/status';
 const readinessVerificationPath = '/api/v1/face-verification/readiness';
+
+function attendanceVerificationPath(sessionId: string): string {
+  return `/api/v1/face-verification/attendance-sessions/${encodeURIComponent(sessionId)}/verify`;
+}
 
 const readinessStatuses = new Set<FaceReadinessStatus>([
   'not_checked',
@@ -53,7 +61,7 @@ export function resolveFaceVerificationApiBaseUrl(): string {
  * Authenticated client for the separately deployed face-verification service.
  * The current access token is requested immediately before every API call.
  */
-export class FaceVerificationApiService {
+export class FaceVerificationApiService implements FaceVerificationService {
   private readonly apiClient: CoreApiClient;
 
   constructor({
@@ -90,6 +98,30 @@ export class FaceVerificationApiService {
 
     const result = await this.apiClient.postFormData<unknown>(
       readinessVerificationPath,
+      formData,
+    );
+
+    if (result.status !== 'ok') {
+      return { status: 'verification_failure' };
+    }
+
+    return toFaceVerificationResult(result.data);
+  }
+
+  /** Verifies a live capture against a specific attendance session's
+   * verification attempt (created by the geofence step) — distinct from
+   * verifyReadiness, which checks profile enrolment in isolation and never
+   * touches a session or an attendance record. */
+  async verifyFace({
+    sessionId,
+    capture,
+  }: FaceVerificationRequest): Promise<FaceVerificationResult> {
+    const formData = new FormData();
+    const captureFile = new File(capture.uri);
+    formData.append('image', captureFile);
+
+    const result = await this.apiClient.postFormData<unknown>(
+      attendanceVerificationPath(sessionId),
       formData,
     );
 

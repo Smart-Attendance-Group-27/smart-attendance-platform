@@ -13,8 +13,12 @@ import { CoreApiClient } from '../../../../services/api/coreApiClient';
 export default function LocationCheckRoute() {
   const router = useRouter();
   const { session } = useAuth();
-  const { sessionId: sessionIdParam } = useLocalSearchParams<{
+  const {
+    sessionId: sessionIdParam,
+    requiresQr: requiresQrParam,
+  } = useLocalSearchParams<{
     sessionId?: string | string[];
+    requiresQr?: string | string[];
   }>();
   const accessToken =
     session.status === 'authenticated' ? session.accessToken : undefined;
@@ -32,6 +36,9 @@ export default function LocationCheckRoute() {
     ? sessionIdParam[0]
     : sessionIdParam;
   const sessionId = sessionIdValue?.trim();
+  const requiresQr = Array.isArray(requiresQrParam)
+    ? requiresQrParam[0]
+    : requiresQrParam;
 
   if (session.status !== 'authenticated') {
     return null;
@@ -56,7 +63,7 @@ export default function LocationCheckRoute() {
         router.push({
           pathname:
             '/(student)/attendance/[sessionId]/face-introduction',
-          params: { sessionId: validatedSessionId },
+          params: { sessionId: validatedSessionId, requiresQr },
         })
       }
       sessionId={sessionId}

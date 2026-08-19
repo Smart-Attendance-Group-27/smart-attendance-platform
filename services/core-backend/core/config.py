@@ -47,13 +47,13 @@ class Settings(BaseSettings):
     # KEYCLOAK_JWKS_URL is resolved from the backend, so it may use a different
     # host than the issuer (for example localhost instead of a LAN address).
     keycloak_expected_issuer: str | None = None
-    # Optional comma-separated extra accepted issuers. Keycloak stamps the
-    # `iss` claim with whatever host/IP the client actually reached it
-    # through — a browser-based web login (server-side, same machine) reaches
-    # it via localhost, while a phone testing over Wi-Fi reaches it via the
-    # laptop's LAN IP, so the two logins mint tokens with different issuers.
-    # Rather than requiring this to be flipped every time you switch between
-    # them, list every issuer this backend should accept.
+    # Optional extra accepted issuers, each with its OWN signing-key source:
+    # different Keycloak deployments (e.g. the local Docker Keycloak used by
+    # the web app vs. the shared deployed Keycloak used by mobile) sign
+    # tokens with different private keys, so trusting a second issuer name is
+    # not enough — the matching JWKS must be fetched from that issuer's own
+    # Keycloak too. Format is comma-separated "issuer|jwks_url" pairs:
+    #   KEYCLOAK_ADDITIONAL_ISSUERS="http://a/realms/x|http://a/realms/x/protocol/openid-connect/certs,http://b/..."
     keycloak_additional_issuers: str | None = None
     keycloak_jwks_url: str | None = None
     keycloak_audience: str = "uniattend-api"
@@ -167,22 +167,51 @@ class Settings(BaseSettings):
         return self
 
     @property
-    def keycloak_accepted_issuers(self) -> tuple[str, ...]:
-        """All issuer strings a token's `iss` claim may match.
+    def keycloak_issuer_jwks_pairs(self) -> tuple[tuple[str, str], ...]:
+        """(issuer, jwks_url) pairs this backend accepts, primary first.
 
-        Always includes KEYCLOAK_EXPECTED_ISSUER (when set) plus any values
-        from KEYCLOAK_ADDITIONAL_ISSUERS, deduplicated, order preserved.
+        Each issuer carries its own JWKS source because different Keycloak
+        deployments sign with different keys — trusting an issuer name alone
+        is not enough to verify a token's signature. Deduplicated by issuer,
+        first occurrence wins, order preserved.
         """
-        issuers = []
-        if self.keycloak_expected_issuer:
-            issuers.append(self.keycloak_expected_issuer)
+        pairs: list[tuple[str, str]] = []
+        if self.keycloak_expected_issuer and self.keycloak_jwks_url:
+            pairs.append((self.keycloak_expected_issuer, self.keycloak_jwks_url))
+
         if self.keycloak_additional_issuers:
-            issuers.extend(
-                stripped.rstrip("/")
-                for raw in self.keycloak_additional_issuers.split(",")
-                if (stripped := raw.strip())
-            )
-        return tuple(dict.fromkeys(issuers))
+            for raw in self.keycloak_additional_issuers.split(","):
+                entry = raw.strip()
+                if not entry:
+                    continue
+                if "|" not in entry:
+                    raise ConfigurationError(
+                        "KEYCLOAK_ADDITIONAL_ISSUERS entries must be "
+                        '"issuer|jwks_url" pairs separated by commas.',
+                    )
+                issuer, jwks_url = entry.split("|", 1)
+                issuer = issuer.strip().rstrip("/")
+                jwks_url = jwks_url.strip()
+                if not issuer or not jwks_url:
+                    raise ConfigurationError(
+                        "KEYCLOAK_ADDITIONAL_ISSUERS entries must include "
+                        "both a non-empty issuer and a non-empty jwks_url.",
+                    )
+                pairs.append((issuer, jwks_url))
+
+        seen: set[str] = set()
+        deduped: list[tuple[str, str]] = []
+        for issuer, jwks_url in pairs:
+            if issuer in seen:
+                continue
+            seen.add(issuer)
+            deduped.append((issuer, jwks_url))
+        return tuple(deduped)
+
+    @property
+    def keycloak_accepted_issuers(self) -> tuple[str, ...]:
+        """All issuer strings a token's `iss` claim may match."""
+        return tuple(issuer for issuer, _ in self.keycloak_issuer_jwks_pairs)
 
     @property
     def keycloak_accepted_authorized_clients(self) -> tuple[str, ...]:

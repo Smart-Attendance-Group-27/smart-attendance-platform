@@ -1,4 +1,4 @@
-from collections.abc import Container
+from collections.abc import Container, Mapping
 from typing import Any
 
 import jwt
@@ -26,23 +26,29 @@ class KeycloakTokenVerifier:
     accepted when either its `aud` contains the configured API audience or its
     `azp` matches an explicitly allowed Keycloak client.
 
-    expected_issuer may be a single issuer string or a container of several
-    accepted issuers (PyJWT accepts either natively) — useful in local dev
-    where the same Keycloak realm is reachable through more than one host.
+    jwks_clients_by_issuer maps each trusted issuer to the JwksClient that
+    fetches *that issuer's own* signing keys. This supports more than one
+    Keycloak deployment at once (e.g. local Docker Keycloak for the web app
+    and a shared deployed Keycloak for mobile) — trusting an issuer name
+    alone is not enough, since each deployment signs with its own key, so the
+    correct key source must be selected per token rather than fixed globally.
+    The unverified `iss` claim is read only to pick which JWKS source to
+    check against; the token is still fully signature-verified against that
+    source's keys afterward, so a forged `iss` cannot bypass verification.
     """
 
     def __init__(
         self,
-        jwks_client: JwksClient,
+        jwks_clients_by_issuer: Mapping[str, JwksClient],
         *,
-        expected_issuer: str | Container[str],
         audience: str,
         authorized_clients: Container[str] = (),
         algorithm: str = "RS256",
         leeway_seconds: float = 0,
     ) -> None:
-        self._jwks_client = jwks_client
-        self._expected_issuer = expected_issuer
+        if not jwks_clients_by_issuer:
+            raise ValueError("At least one accepted issuer must be configured")
+        self._jwks_clients_by_issuer = dict(jwks_clients_by_issuer)
         self._audience = audience
         self._authorized_clients = authorized_clients
         self._algorithm = algorithm
@@ -60,8 +66,13 @@ class KeycloakTokenVerifier:
         if not isinstance(key_id, str) or not key_id:
             raise InvalidAccessTokenError("Access token has no signing key ID.")
 
-        signing_key = await self._jwks_client.get_signing_key(key_id)
-        claims = self._decode(access_token, signing_key.key)
+        issuer = self._read_unverified_issuer(access_token)
+        jwks_client = self._jwks_clients_by_issuer.get(issuer)
+        if jwks_client is None:
+            raise InvalidAccessTokenError("Access token issuer is not accepted.")
+
+        signing_key = await jwks_client.get_signing_key(key_id)
+        claims = self._decode(access_token, signing_key.key, issuer)
         self._validate_token_client(claims)
 
         subject = claims.get("sub")
@@ -82,13 +93,32 @@ class KeycloakTokenVerifier:
         except PyJWTError as error:
             raise InvalidAccessTokenError("Access token is malformed.") from error
 
-    def _decode(self, access_token: str, signing_key: Any) -> dict[str, Any]:
+    def _read_unverified_issuer(self, access_token: str) -> str:
+        try:
+            claims = jwt.decode(
+                access_token,
+                options={
+                    "verify_signature": False,
+                    "verify_exp": False,
+                    "verify_aud": False,
+                    "verify_iss": False,
+                },
+            )
+        except PyJWTError as error:
+            raise InvalidAccessTokenError("Access token is malformed.") from error
+
+        issuer = claims.get("iss")
+        if not isinstance(issuer, str) or not issuer:
+            raise InvalidAccessTokenError("Access token is missing a required claim.")
+        return issuer
+
+    def _decode(self, access_token: str, signing_key: Any, issuer: str) -> dict[str, Any]:
         try:
             return jwt.decode(
                 access_token,
                 key=signing_key,
                 algorithms=[self._algorithm],
-                issuer=self._expected_issuer,
+                issuer=issuer,
                 leeway=self._leeway_seconds,
                 options={
                     "require": list(REQUIRED_CLAIMS),

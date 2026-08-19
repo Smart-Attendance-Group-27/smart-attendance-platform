@@ -67,6 +67,9 @@ describe('AttendanceSessionDetailsRoute', () => {
       pathname: '/(student)/attendance/[sessionId]/location-check',
       params: {
         sessionId: 'attendance-session-active',
+        // 'attendance-session-active' in mockAttendanceService.ts is seeded
+        // with requiresQr: false.
+        requiresQr: '0',
       },
     });
   });

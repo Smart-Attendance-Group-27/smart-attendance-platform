@@ -1,24 +1,43 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useMemo } from 'react';
 import { Text } from 'react-native';
 
 import { ScreenContainer } from '../../../../components/ui';
+import { useAuth } from '../../../../features/auth/context/AuthContext';
 import { FaceVerificationScreen } from '../../../../features/face-verification/screens/FaceVerificationScreen';
-import { MockFaceVerificationService } from '../../../../features/face-verification/services/mockFaceVerificationService';
-
-const faceVerificationService = new MockFaceVerificationService({
-  result: { status: 'success' },
-  delayMs: 750,
-});
+import { FaceVerificationApiService } from '../../../../features/face-verification/services/faceVerificationApiService';
 
 export default function FaceVerificationRoute() {
   const router = useRouter();
-  const { sessionId: sessionIdParam } = useLocalSearchParams<{
+  const { session } = useAuth();
+  const accessToken =
+    session.status === 'authenticated' ? session.accessToken : undefined;
+  const faceVerificationService = useMemo(
+    () =>
+      new FaceVerificationApiService({
+        getAccessToken: () => accessToken,
+      }),
+    [accessToken],
+  );
+  const {
+    sessionId: sessionIdParam,
+    requiresQr: requiresQrParam,
+  } = useLocalSearchParams<{
     sessionId?: string | string[];
+    requiresQr?: string | string[];
   }>();
   const sessionIdValue = Array.isArray(sessionIdParam)
     ? sessionIdParam[0]
     : sessionIdParam;
   const sessionId = sessionIdValue?.trim();
+  const requiresQrValue = Array.isArray(requiresQrParam)
+    ? requiresQrParam[0]
+    : requiresQrParam;
+  const requiresQr = requiresQrValue === '1';
+
+  if (session.status !== 'authenticated') {
+    return null;
+  }
 
   if (!sessionId) {
     return (
@@ -37,11 +56,19 @@ export default function FaceVerificationRoute() {
       key={sessionId}
       onBack={() => router.back()}
       onFaceVerified={(verifiedSessionId) =>
-        router.push({
-          pathname:
-            '/(student)/attendance/[sessionId]/qr-scanner',
-          params: { sessionId: verifiedSessionId },
-        })
+        router.push(
+          requiresQr
+            ? {
+                pathname:
+                  '/(student)/attendance/[sessionId]/qr-scanner',
+                params: { sessionId: verifiedSessionId },
+              }
+            : {
+                pathname:
+                  '/(student)/attendance/[sessionId]/check-in-success',
+                params: { sessionId: verifiedSessionId },
+              },
+        )
       }
       sessionId={sessionId}
     />

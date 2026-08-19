@@ -175,6 +175,7 @@ def test_deprecated_token_secret_is_optional() -> None:
 def test_accepted_issuers_includes_only_the_primary_issuer_by_default() -> None:
     settings = build_settings(
         keycloak_expected_issuer="http://localhost:8080/realms/uniattend",
+        keycloak_jwks_url="http://localhost:8080/realms/uniattend/protocol/openid-connect/certs",
     )
 
     assert settings.keycloak_accepted_issuers == ("http://localhost:8080/realms/uniattend",)
@@ -183,7 +184,11 @@ def test_accepted_issuers_includes_only_the_primary_issuer_by_default() -> None:
 def test_accepted_issuers_includes_additional_issuers() -> None:
     settings = build_settings(
         keycloak_expected_issuer="http://localhost:8080/realms/uniattend",
-        keycloak_additional_issuers="http://10.0.0.5:8080/realms/uniattend/, http://10.0.0.6:8080/realms/uniattend",
+        keycloak_jwks_url="http://localhost:8080/realms/uniattend/protocol/openid-connect/certs",
+        keycloak_additional_issuers=(
+            "http://10.0.0.5:8080/realms/uniattend/|http://10.0.0.5:8080/realms/uniattend/protocol/openid-connect/certs, "
+            "http://10.0.0.6:8080/realms/uniattend|http://10.0.0.6:8080/realms/uniattend/protocol/openid-connect/certs"
+        ),
     )
 
     assert settings.keycloak_accepted_issuers == (
@@ -191,12 +196,29 @@ def test_accepted_issuers_includes_additional_issuers() -> None:
         "http://10.0.0.5:8080/realms/uniattend",
         "http://10.0.0.6:8080/realms/uniattend",
     )
+    assert settings.keycloak_issuer_jwks_pairs == (
+        (
+            "http://localhost:8080/realms/uniattend",
+            "http://localhost:8080/realms/uniattend/protocol/openid-connect/certs",
+        ),
+        (
+            "http://10.0.0.5:8080/realms/uniattend",
+            "http://10.0.0.5:8080/realms/uniattend/protocol/openid-connect/certs",
+        ),
+        (
+            "http://10.0.0.6:8080/realms/uniattend",
+            "http://10.0.0.6:8080/realms/uniattend/protocol/openid-connect/certs",
+        ),
+    )
 
 
 def test_accepted_issuers_deduplicates_repeated_values() -> None:
     settings = build_settings(
         keycloak_expected_issuer="http://localhost:8080/realms/uniattend",
-        keycloak_additional_issuers="http://localhost:8080/realms/uniattend",
+        keycloak_jwks_url="http://localhost:8080/realms/uniattend/protocol/openid-connect/certs",
+        keycloak_additional_issuers=(
+            "http://localhost:8080/realms/uniattend|http://localhost:8080/realms/uniattend/protocol/openid-connect/certs"
+        ),
     )
 
     assert settings.keycloak_accepted_issuers == ("http://localhost:8080/realms/uniattend",)
@@ -206,3 +228,14 @@ def test_accepted_issuers_is_empty_when_nothing_is_configured() -> None:
     settings = build_settings()
 
     assert settings.keycloak_accepted_issuers == ()
+
+
+def test_additional_issuers_without_a_jwks_url_pair_is_rejected() -> None:
+    settings = build_settings(
+        keycloak_expected_issuer="http://localhost:8080/realms/uniattend",
+        keycloak_jwks_url="http://localhost:8080/realms/uniattend/protocol/openid-connect/certs",
+        keycloak_additional_issuers="http://10.0.0.5:8080/realms/uniattend",
+    )
+
+    with pytest.raises(ConfigurationError):
+        _ = settings.keycloak_issuer_jwks_pairs

@@ -5,6 +5,8 @@ from uuid import UUID
 
 import asyncpg
 
+SESSION_SCHEDULED_STATUS = "scheduled"
+
 # Session status is derived from timestamps (activated_at/closed_at/cancelled_at),
 # not a DB enum — attendance_session.sessions.status has no CHECK constraint and
 # existing code only ever compares it to the literal 'active'. See
@@ -35,6 +37,16 @@ class LecturerSessionRecord:
     present_count: int
     late_count: int
     pending_review_count: int
+
+
+@dataclass(frozen=True)
+class TimetableEntryForSessionRecord:
+    id: UUID
+    course_offering_id: UUID
+    classroom_id: UUID | None
+    classroom_latitude: Decimal | None
+    classroom_longitude: Decimal | None
+    classroom_default_geofence_radius_m: Decimal | None
 
 
 @dataclass(frozen=True)
@@ -198,6 +210,155 @@ class LecturerSessionRepository:
             WHERE id = $1
             """,
             session_id,
+        )
+
+    async def find_timetable_entry_for_lecturer(
+        self,
+        connection: asyncpg.Connection,
+        timetable_entry_id: UUID,
+        lecturer_id: UUID,
+    ) -> TimetableEntryForSessionRecord | None:
+        row = await connection.fetchrow(
+            """
+            SELECT
+                entry.id,
+                entry.course_offering_id,
+                classroom.id AS classroom_id,
+                classroom.latitude AS classroom_latitude,
+                classroom.longitude AS classroom_longitude,
+                classroom.default_geofence_radius_m AS classroom_default_geofence_radius_m
+            FROM academic.timetable_entries AS entry
+            JOIN academic.course_offerings AS offering
+                ON offering.id = entry.course_offering_id
+            JOIN academic.course_lecturers AS assignment
+                ON assignment.course_offering_id = offering.id
+            LEFT JOIN academic.classrooms AS classroom
+                ON classroom.id = entry.classroom_id
+            WHERE entry.id = $1
+              AND assignment.lecturer_id = $2
+              AND entry.status = 'active'
+            """,
+            timetable_entry_id,
+            lecturer_id,
+        )
+        if row is None:
+            return None
+
+        return TimetableEntryForSessionRecord(
+            id=row["id"],
+            course_offering_id=row["course_offering_id"],
+            classroom_id=row["classroom_id"],
+            classroom_latitude=row["classroom_latitude"],
+            classroom_longitude=row["classroom_longitude"],
+            classroom_default_geofence_radius_m=row["classroom_default_geofence_radius_m"],
+        )
+
+    async def create_session(
+        self,
+        connection: asyncpg.Connection,
+        *,
+        session_id: UUID,
+        course_offering_id: UUID,
+        timetable_entry_id: UUID,
+        created_by: UUID,
+        session_title: str,
+        session_type: str,
+        scheduled_start_at: datetime,
+        scheduled_end_at: datetime,
+        check_in_opens_at: datetime,
+        check_in_closes_at: datetime,
+        late_after_at: datetime,
+        requires_face_verification: bool,
+        requires_geofence: bool,
+        requires_qr: bool,
+    ) -> None:
+        await connection.execute(
+            """
+            INSERT INTO attendance_session.sessions (
+                id, course_offering_id, timetable_entry_id, timetable_exception_id,
+                created_by, session_title, session_type,
+                scheduled_start_at, scheduled_end_at,
+                check_in_opens_at, check_in_closes_at, late_after_at,
+                status, requires_face_verification, requires_geofence, requires_qr,
+                activated_at, closed_at, cancelled_at, cancellation_reason,
+                created_at, updated_at
+            )
+            VALUES (
+                $1, $2, $3, NULL,
+                $4, $5, $6,
+                $7, $8,
+                $9, $10, $11,
+                $12, $13, $14, $15,
+                NULL, NULL, NULL, NULL,
+                now(), now()
+            )
+            """,
+            session_id,
+            course_offering_id,
+            timetable_entry_id,
+            created_by,
+            session_title,
+            session_type,
+            scheduled_start_at,
+            scheduled_end_at,
+            check_in_opens_at,
+            check_in_closes_at,
+            late_after_at,
+            SESSION_SCHEDULED_STATUS,
+            requires_face_verification,
+            requires_geofence,
+            requires_qr,
+        )
+
+    async def create_session_students_from_enrolments(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+        course_offering_id: UUID,
+    ) -> int:
+        rows = await connection.fetch(
+            """
+            INSERT INTO attendance_session.session_students (
+                id, session_id, student_id, course_enrolment_id, created_at
+            )
+            SELECT gen_random_uuid(), $1, enrolment.student_id, enrolment.id, now()
+            FROM academic.course_enrolments AS enrolment
+            WHERE enrolment.course_offering_id = $2
+              AND enrolment.enrolment_status = 'enrolled'
+            ON CONFLICT (session_id, student_id) DO NOTHING
+            RETURNING id
+            """,
+            session_id,
+            course_offering_id,
+        )
+        return len(rows)
+
+    async def create_session_geofence(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+        *,
+        centre_latitude: Decimal,
+        centre_longitude: Decimal,
+        radius_m: Decimal,
+        accuracy_buffer_m: Decimal,
+        maximum_allowed_accuracy_m: Decimal,
+    ) -> None:
+        await connection.execute(
+            """
+            INSERT INTO attendance_session.session_geofences (
+                session_id, centre_latitude, centre_longitude, radius_m,
+                accuracy_buffer_m, maximum_allowed_accuracy_m,
+                created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, now(), now())
+            """,
+            session_id,
+            centre_latitude,
+            centre_longitude,
+            radius_m,
+            accuracy_buffer_m,
+            maximum_allowed_accuracy_m,
         )
 
     async def list_students_for_session(

@@ -158,6 +158,65 @@ describe('FaceVerificationApiService', () => {
     },
   );
 
+  test('uploads an attendance capture to the session-scoped endpoint', async () => {
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(jsonResponse(200, { status: 'passed' }));
+
+    await buildService().verifyFace({
+      sessionId: 'session-42',
+      capture: { uri: 'file:///face-capture.jpg' },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${baseUrl}/api/v1/face-verification/attendance-sessions/session-42/verify`,
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.any(FormData),
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }),
+    );
+  });
+
+  test.each([
+    ['passed', 'success'],
+    ['no_face', 'face_not_detected'],
+    ['multiple_faces', 'multiple_faces'],
+    ['failed', 'verification_failure'],
+    ['verification_attempt_not_found', 'verification_failure'],
+    ['verification_attempt_closed', 'verification_failure'],
+  ])(
+    'maps attendance verification result %s to camera result %s',
+    async (backendStatus, expectedStatus) => {
+      jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(jsonResponse(200, { status: backendStatus }));
+
+      await expect(
+        buildService().verifyFace({
+          sessionId: 'session-42',
+          capture: { uri: 'file:///face-capture.jpg' },
+        }),
+      ).resolves.toEqual({ status: expectedStatus });
+    },
+  );
+
+  test('reports verification_failure when the attendance request fails outright', async () => {
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(jsonResponse(503, { detail: 'unavailable' }));
+
+    await expect(
+      buildService().verifyFace({
+        sessionId: 'session-42',
+        capture: { uri: 'file:///face-capture.jpg' },
+      }),
+    ).resolves.toEqual({ status: 'verification_failure' });
+  });
+
   test('uses the configured face-verification API URL', () => {
     const previousValue =
       process.env.EXPO_PUBLIC_FACE_VERIFICATION_API_URL;

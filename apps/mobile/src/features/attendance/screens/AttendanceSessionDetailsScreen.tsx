@@ -23,7 +23,7 @@ type AttendanceSessionDetailsScreenProps = {
   sessionId: string;
   attendanceService: AttendanceService;
   onBack: () => void;
-  onStartCheckIn: () => void;
+  onStartCheckIn: (requiresQr: boolean) => void;
 };
 
 type AttendanceSessionDetailsState =
@@ -202,7 +202,7 @@ function SessionContent({
   onStartCheckIn,
 }: {
   session: AttendanceSession;
-  onStartCheckIn: () => void;
+  onStartCheckIn: (requiresQr: boolean) => void;
 }) {
   const formattedSession = formatAttendanceSession(session);
   const isOpen = session.checkInStatus === 'open';
@@ -239,7 +239,7 @@ function SessionContent({
         <View style={styles.action}>
           <AppButton
             accessibilityLabel="Start attendance check-in"
-            onPress={onStartCheckIn}
+            onPress={() => onStartCheckIn(session.requiresQr)}
             title="Start Check-In"
           />
         </View>

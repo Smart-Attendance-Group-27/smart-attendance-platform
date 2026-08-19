@@ -6,6 +6,22 @@ from pydantic import BaseModel, ConfigDict, Field
 from modules.attendance_sessions.lecturer_sessions.repository import LecturerSessionRecord
 
 
+class CreateSessionRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    timetable_entry_id: UUID = Field(alias="timetableEntryId")
+    session_title: str = Field(alias="sessionTitle", min_length=1, max_length=255)
+    session_type: str = Field(default="lecture", alias="sessionType", min_length=1, max_length=20)
+    scheduled_start_at: datetime = Field(alias="scheduledStartAt")
+    scheduled_end_at: datetime = Field(alias="scheduledEndAt")
+    check_in_opens_at: datetime | None = Field(default=None, alias="checkInOpensAt")
+    check_in_closes_at: datetime | None = Field(default=None, alias="checkInClosesAt")
+    late_after_at: datetime | None = Field(default=None, alias="lateAfterAt")
+    requires_face_verification: bool = Field(default=True, alias="requiresFaceVerification")
+    requires_geofence: bool = Field(default=True, alias="requiresGeofence")
+    requires_qr: bool = Field(default=False, alias="requiresQr")
+
+
 def derive_session_status(record: LecturerSessionRecord) -> str:
     """Derives a status string from timestamps rather than a DB enum.
 
