@@ -122,6 +122,7 @@ export type SessionDetail = {
   checkInWindow: string;
   lateThreshold: string;
   lecturerName: string;
+  requiresQr?: boolean;
   summary: {
     presentCount: number;
     presentPercent: number;

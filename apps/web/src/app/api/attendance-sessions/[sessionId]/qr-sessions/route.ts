@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getValidAccessToken } from "@/lib/auth/dal";
 
 const CORE_BACKEND_URL =
   process.env.CORE_BACKEND_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
@@ -40,11 +41,13 @@ export async function POST(
     );
   }
 
+  const accessToken = await getValidAccessToken();
   const backendResponse = await fetch(
     `${CORE_BACKEND_URL}/api/v1/attendance-sessions/${sessionId}/qr-sessions`,
     {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(requestBody),
