@@ -116,8 +116,7 @@ async def create_qr_session(
     request_payload = payload or CreateQrSessionRequest()
 
     try:
-        # Static and dynamic QR sessions share one HTTP endpoint. The request
-        # body selects the mode; the service owns the actual business rules.
+        # Static and dynamic QR session creation accordingly 
         if request_payload.mode == "dynamic":
             assert request_payload.refresh_interval_seconds is not None
             created_qr_session = await qr_session_service.create_dynamic_qr_session(

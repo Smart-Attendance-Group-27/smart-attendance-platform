@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from secrets import compare_digest, token_urlsafe
+from typing import cast
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -123,6 +124,7 @@ class QrSessionService:
         # Creation is transactional because we must close older active QR
         # batches and create the new batch/token as one consistent operation.
         async with pool.acquire() as connection:
+            connection = cast(asyncpg.Connection, connection)
             async with connection.transaction():
                 attendance_session = await self._repository.lock_attendance_session(
                     connection,
@@ -215,6 +217,7 @@ class QrSessionService:
         # Dynamic QR creates only the batch metadata. Individual QR values are
         # derived later using HMAC, so no rotating token rows are stored.
         async with pool.acquire() as connection:
+            connection = cast(asyncpg.Connection, connection)
             async with connection.transaction():
                 attendance_session = await self._repository.lock_attendance_session(
                     connection,
@@ -266,8 +269,8 @@ class QrSessionService:
                 )
 
         await self._delete_cached_qr_batches(deactivated_qr_session_ids)
-        # Dynamic QR reads the same batch/session metadata repeatedly while the
-        # stream is open, so prime Redis after creation to reduce DB reads.
+
+        #Insert QR metadata into cache for dynamic QR session 
         await self._set_cached_qr_batch_metadata(
             QrBatchMetadata(
                 id=qr_session_id,
@@ -296,6 +299,8 @@ class QrSessionService:
             valid_from=current_time,
             expires_at=actual_expires_at,
         )
+
+
 
     async def assert_lecturer_owns_qr_session(
         self,

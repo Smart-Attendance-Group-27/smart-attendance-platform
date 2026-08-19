@@ -12,6 +12,9 @@ type QrMode = "static" | "dynamic";
 type StreamStatus = "idle" | "connecting" | "connected" | "closed";
 
 type QrSessionResponse = {
+  // Mirrors CreateQrSessionResponse from the FastAPI QR module. For static QR,
+  // qrValue is returned immediately; for dynamic QR, qrValue is null because
+  // rotating values arrive later through the SSE stream.
   qrSessionId: string;
   attendanceSessionId: string;
   mode: QrMode;
@@ -23,6 +26,8 @@ type QrSessionResponse = {
 };
 
 type DynamicQrStreamPayload = {
+  // Payload emitted by the backend as a "qr.rotate" SSE event. Each event
+  // represents the current dynamic QR value and its valid time window.
   qrSessionId: string;
   qrValue: string;
   sequence: number;
@@ -66,9 +71,13 @@ export function QrSessionLauncher({
   checkInWindow,
   isLaunchEnabled,
 }: QrSessionLauncherProps) {
+  // Lecturer-controlled launch settings. Static uses only validForSeconds;
+  // dynamic additionally uses refreshIntervalSeconds.
   const [mode, setMode] = useState<QrMode>("static");
   const [validForSeconds, setValidForSeconds] = useState("300");
   const [refreshIntervalSeconds, setRefreshIntervalSeconds] = useState("15");
+  // qrSession is the created backend QR batch. dynamicQr is separate because
+  // dynamic sessions rotate values without recreating the batch.
   const [qrSession, setQrSession] = useState<QrSessionResponse | null>(null);
   const [dynamicQr, setDynamicQr] = useState<DynamicQrStreamPayload | null>(null);
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
@@ -78,6 +87,8 @@ export function QrSessionLauncher({
   const validityNumber = Number(validForSeconds);
   const refreshIntervalNumber = Number(refreshIntervalSeconds);
   const canSubmit =
+    // Keep frontend validation aligned with backend schema limits:
+    // validForSeconds = 30..86400, dynamic refresh = 1..300.
     isLaunchEnabled &&
     Number.isInteger(validityNumber) &&
     validityNumber >= 30 &&
@@ -88,6 +99,8 @@ export function QrSessionLauncher({
         refreshIntervalNumber <= 300));
 
   const displayedQrValue =
+    // Static displays the one value returned from creation. Dynamic displays
+    // the latest value received from the live SSE stream.
     qrSession?.mode === "dynamic" ? dynamicQr?.qrValue : qrSession?.qrValue;
 
   const displayedValidFrom =
@@ -99,6 +112,8 @@ export function QrSessionLauncher({
   const qrCodePayload = useMemo(() => {
     if (!qrSession || !displayedQrValue) return "";
 
+    // The student scanner expects both identifiers: qrSessionId maps to the
+    // backend qr_token_batches.id, and qrValue is the raw value to verify.
     return JSON.stringify({
       qrSessionId: qrSession.qrSessionId,
       qrValue: displayedQrValue,
@@ -108,10 +123,14 @@ export function QrSessionLauncher({
   useEffect(() => {
     if (!qrSession || qrSession.mode !== "dynamic") return;
 
+    // Dynamic QR creation does not return a QR value. After the batch is
+    // created, this stream supplies the current rotating value to display.
     const source = new EventSource(`/api/qr-sessions/${qrSession.qrSessionId}/stream`);
 
     source.addEventListener("qr.rotate", (event) => {
       try {
+        // Every qr.rotate event replaces the previous QR value. The QR image
+        // below re-renders because qrCodePayload depends on dynamicQr.
         setDynamicQr(JSON.parse(event.data) as DynamicQrStreamPayload);
         setStreamStatus("connected");
         setError("");
@@ -123,6 +142,8 @@ export function QrSessionLauncher({
     });
 
     source.onerror = () => {
+      // If a dynamic stream drops after at least one QR was shown, keep the
+      // current QR visible but warn the lecturer that live rotation is broken.
       setStreamStatus((currentStatus) =>
         currentStatus === "connected" ? "connected" : "closed",
       );
@@ -130,11 +151,15 @@ export function QrSessionLauncher({
     };
 
     return () => {
+      // Prevent old EventSource connections when switching modes, launching a
+      // new session, or leaving the page.
       source.close();
     };
   }, [qrSession]);
 
   function selectMode(nextMode: QrMode) {
+    // Switching mode clears previous session state so a stale static/dynamic QR
+    // cannot remain visible after lecturer changes the launch settings.
     setMode(nextMode);
     setQrSession(null);
     setDynamicQr(null);
@@ -152,6 +177,8 @@ export function QrSessionLauncher({
     setStreamStatus("idle");
 
     try {
+      // This calls the local Next.js API route. That route forwards the request
+      // to FastAPI with the lecturer's access token attached.
       const response = await fetch(`/api/attendance-sessions/${sessionId}/qr-sessions`, {
         method: "POST",
         headers: {
@@ -174,10 +201,13 @@ export function QrSessionLauncher({
 
       const createdSession = data as QrSessionResponse;
       if (createdSession.mode === "static" && !createdSession.qrValue) {
+        // Static QR cannot be displayed without the one raw value returned by
+        // the backend. Dynamic is allowed to start without qrValue.
         throw new Error("The backend did not return a static QR value.");
       }
 
       setQrSession(createdSession);
+      // Dynamic starts in "connecting" until the first qr.rotate event arrives.
       setStreamStatus(createdSession.mode === "dynamic" ? "connecting" : "idle");
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unexpected QR launch error.");
@@ -287,6 +317,8 @@ export function QrSessionLauncher({
           <div className="flex min-h-[520px] items-center justify-center border border-dashed border-[#cbd4dc] bg-[#f7fafc] p-6">
             {qrSession && qrCodePayload ? (
               <div className="flex flex-col items-center text-center">
+                {/* This is the lecturer's share-screen QR. Students scan this
+                    JSON payload from the mobile app, not a plain URL. */}
                 <QRCodeSVG value={qrCodePayload} size={340} level="M" marginSize={4} />
                 <div className="mt-4 flex flex-wrap justify-center gap-2">
                   <StatusBadge tone={qrSession.mode === "dynamic" ? "warning" : "success"}>
