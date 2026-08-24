@@ -15,8 +15,7 @@ QrSessionMode = Literal["static", "dynamic"]
 
 
 class CreateQrSessionRequest(BaseModel):
-    # Web sends camelCase JSON. populate_by_name lets tests/service code still
-    # use Python snake_case while the public API stays frontend-friendly.
+
     model_config = ConfigDict(populate_by_name=True)
 
     mode: QrSessionMode = "static"

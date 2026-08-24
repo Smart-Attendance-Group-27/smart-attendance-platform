@@ -111,6 +111,7 @@ async def create_qr_session(
     http_request: Request,
     current_lecturer: CurrentLecturer,
     payload: Annotated[CreateQrSessionRequest | None, Body()] = None,
+    #inject the service dependency for QR session operations
     qr_session_service: QrSessionService = Depends(get_qr_session_service),
 ) -> CreateQrSessionResponse:
     request_payload = payload or CreateQrSessionRequest()
