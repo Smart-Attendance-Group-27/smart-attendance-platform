@@ -13,6 +13,10 @@ import type { FaceVerificationResult } from '../types/faceVerification';
 
 const defaultFaceVerificationApiBaseUrl = 'http://10.0.2.2:8001';
 const defaultFaceVerificationRequestTimeoutMs = 5_000;
+// Local CPU inference can take longer than an ordinary status request. Keep
+// the upload request alive after capture so the app receives the result that
+// the service records.
+const defaultFaceVerificationProcessingTimeoutMs = 30_000;
 const readinessStatusPath = '/api/v1/face-verification/readiness/status';
 const readinessVerificationPath = '/api/v1/face-verification/readiness';
 
@@ -38,6 +42,7 @@ export type FaceVerificationApiServiceOptions = {
   readonly getAccessToken: AccessTokenProvider;
   readonly baseUrl?: string;
   readonly timeoutMs?: number;
+  readonly verificationTimeoutMs?: number;
 };
 
 export function resolveFaceVerificationApiBaseUrl(): string {
@@ -55,18 +60,27 @@ export function resolveFaceVerificationApiBaseUrl(): string {
  */
 export class FaceVerificationApiService {
   private readonly apiClient: CoreApiClient;
+  private readonly verificationApiClient: CoreApiClient;
 
   constructor({
     getAccessToken,
     baseUrl,
     timeoutMs = defaultFaceVerificationRequestTimeoutMs,
+    verificationTimeoutMs = defaultFaceVerificationProcessingTimeoutMs,
   }: FaceVerificationApiServiceOptions) {
+    const resolvedBaseUrl = baseUrl
+      ? stripTrailingSlash(baseUrl)
+      : resolveFaceVerificationApiBaseUrl();
+
     this.apiClient = new CoreApiClient({
-      baseUrl: baseUrl
-        ? stripTrailingSlash(baseUrl)
-        : resolveFaceVerificationApiBaseUrl(),
+      baseUrl: resolvedBaseUrl,
       getAccessToken,
       timeoutMs,
+    });
+    this.verificationApiClient = new CoreApiClient({
+      baseUrl: resolvedBaseUrl,
+      getAccessToken,
+      timeoutMs: verificationTimeoutMs,
     });
   }
 
@@ -88,7 +102,7 @@ export class FaceVerificationApiService {
     const captureFile = new File(captureUri);
     formData.append('image', captureFile);
 
-    const result = await this.apiClient.postFormData<unknown>(
+    const result = await this.verificationApiClient.postFormData<unknown>(
       readinessVerificationPath,
       formData,
     );

@@ -139,6 +139,36 @@ describe('FaceVerificationApiService', () => {
     );
   });
 
+  test('keeps the readiness upload open while face processing exceeds the standard request timeout', async () => {
+    jest.useFakeTimers();
+
+    try {
+      jest.spyOn(global, 'fetch').mockImplementation(
+        (_input, init) =>
+          new Promise<Response>((resolve, reject) => {
+            const responseTimer = setTimeout(() => {
+              resolve(jsonResponse(200, { status: 'passed' }));
+            }, 6_000);
+
+            init?.signal?.addEventListener('abort', () => {
+              clearTimeout(responseTimer);
+              reject(new Error('request aborted'));
+            });
+          }),
+      );
+
+      const result = buildService().verifyReadiness(
+        'file:///face-capture.jpg',
+      );
+
+      await jest.advanceTimersByTimeAsync(6_000);
+
+      await expect(result).resolves.toEqual({ status: 'success' });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   test.each([
     ['passed', 'success'],
     ['no_face', 'face_not_detected'],
