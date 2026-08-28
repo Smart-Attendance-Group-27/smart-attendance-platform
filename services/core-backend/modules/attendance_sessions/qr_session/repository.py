@@ -286,6 +286,8 @@ class QrSessionRepository:
             """,
             verification_attempt_id,
         )
+        if value is None:
+            raise RuntimeError("Unable to determine the next QR attempt number")
         return int(value)
 
     async def insert_qr_validation_attempt(

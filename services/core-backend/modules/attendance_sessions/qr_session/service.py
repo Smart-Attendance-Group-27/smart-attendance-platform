@@ -342,8 +342,7 @@ class QrSessionService:
         student_user_id: UUID,
     ) -> VerifiedQrSession:
         current_time = self._ensure_utc(self._clock())
-        # Hash immediately so the raw QR value is not stored, logged, or passed
-        # into static-token database writes.
+        
         submitted_token_hash = self._hash_qr_value(qr_value)
 
         # First read the QR/session/student state needed to classify the scan.
@@ -377,13 +376,6 @@ class QrSessionService:
                     "The student is not eligible for this attendance session.",
                 )
 
-            # Not locked: this connection is released before the write step
-            # below (see get_qr_batch_metadata's own separate acquire, which
-            # classification may call into) rather than held across it, so a
-            # lock taken here wouldn't cover the eventual write anyway. The
-            # qr_validation_attempts unique index on (verification_attempt_id,
-            # attempt_number) is what actually prevents a duplicate number
-            # under a race, matching geofence's equivalent tolerance.
             attempt = await self._verification_repository.find_verification_attempt(
                 connection,
                 verification_record.attendance_session_id,
@@ -404,8 +396,7 @@ class QrSessionService:
                 current_time,
             )
         else:
-            # Static values are validated by comparing the submitted hash with
-            # the stored token_hash.
+            # Static QR 
             verification_status = self._classify_qr_verification(
                 verification_record,
                 submitted_token_hash,
