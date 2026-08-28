@@ -45,7 +45,7 @@ class QrVerificationRecord:
 class QrSessionRepository:
     # Repository methods are intentionally thin: raw SQL lives here, while QR
     # business decisions stay in QrSessionService.
-    async def lock_attendance_session(
+    async def fetch_attendance_session(
         self,
         connection: asyncpg.Connection,
         session_id: UUID,
@@ -326,8 +326,8 @@ class QrSessionRepository:
         connection: asyncpg.Connection,
         qr_session_id: UUID,
     ) -> QrBatchMetadata | None:
-        # Metadata read used by dynamic /current and /stream. This is the shape
-        # cached in Redis because these endpoints ask for it repeatedly.
+        # Metadata read used by dynamic stream generation. This is the shape
+        # cached in Redis because the stream asks for it repeatedly.
         row = await connection.fetchrow(
             """
             SELECT

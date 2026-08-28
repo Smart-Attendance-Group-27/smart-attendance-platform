@@ -28,8 +28,8 @@ class QrBatchMetadataCache:
             return None
 
         try:
-            # Dynamic QR /current and /stream call this often, so cache hits
-            # avoid repeated joins against the attendance-session tables.
+            # Dynamic QR streaming calls this often, so cache hits avoid
+            # repeated joins against the attendance-session tables.
             cached_value = await self._redis_client.get(
                 self._build_cache_key(qr_session_id),
             )

@@ -40,7 +40,7 @@ create_qr_session_router = APIRouter(
     prefix="/attendance-sessions/{session_id}/qr-sessions",
 )
 # Student/stream endpoint group: after creation, the QR batch ID becomes the
-# qr_session_id used for current QR, SSE stream, and verification requests.
+# qr_session_id used for SSE stream and verification requests.
 verify_qr_session_router = APIRouter(prefix="/qr-sessions/{qr_session_id}")
 
 _SESSION_NOT_FOUND_DETAIL = "The attendance session was not found, or does not belong to this lecturer."
@@ -67,7 +67,7 @@ async def get_initial_dynamic_qr_session(
     current_lecturer: CurrentLecturer,
     qr_session_service: QrSessionService = Depends(get_qr_session_service),
 ) -> CurrentDynamicQrSession:
-    # Shared dependency for /current and /stream. It checks lecturer ownership
+    # Shared dependency for the dynamic stream. It checks lecturer ownership
     # before exposing any dynamic QR value to the lecturer web UI.
     try:
         await qr_session_service.assert_lecturer_owns_qr_session(
@@ -214,27 +214,6 @@ async def verify_qr_session(
         qr_session_id=verified_qr_session.qr_session_id,
         status=verified_qr_session.status,
         verified_at=verified_qr_session.verified_at,
-    )
-
-
-@verify_qr_session_router.get(
-    "/current",
-    response_model=CurrentDynamicQrSessionResponse,
-    status_code=status.HTTP_200_OK,
-)
-async def get_current_dynamic_qr_session(
-    qr_session_id: UUID,
-    http_request: Request,
-    current_qr_session: CurrentDynamicQrSession = Depends(
-        get_initial_dynamic_qr_session,
-    ),
-) -> CurrentDynamicQrSessionResponse:
-    return CurrentDynamicQrSessionResponse(
-        qr_session_id=current_qr_session.qr_session_id,
-        qr_value=current_qr_session.qr_value,
-        sequence=current_qr_session.sequence,
-        valid_from=current_qr_session.valid_from,
-        expires_at=current_qr_session.expires_at,
     )
 
 

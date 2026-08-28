@@ -34,13 +34,7 @@ class CreateQrSessionRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_mode_refresh_interval(self) -> "CreateQrSessionRequest":
-        # Static QR has one fixed value, so refreshIntervalSeconds only makes
-        # sense for dynamic QR. Dynamic defaults to a safe 15-second rotation.
-        if self.mode == "static" and self.refresh_interval_seconds is not None:
-            raise ValueError(
-                "refreshIntervalSeconds is only supported for dynamic QR sessions.",
-            )
-
+        #validate the refresh_interval
         if self.mode == "dynamic" and self.refresh_interval_seconds is None:
             self.refresh_interval_seconds = DEFAULT_DYNAMIC_QR_REFRESH_INTERVAL_SECONDS
 

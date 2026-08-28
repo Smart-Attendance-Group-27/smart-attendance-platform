@@ -179,27 +179,7 @@ class QrNotRequiredService(SuccessfulQrSessionService):
         raise QrNotRequiredError()
 
 
-class MissingQrSessionService(SuccessfulQrSessionService):
-    async def assert_lecturer_owns_qr_session(
-        self,
-        pool: object,
-        qr_session_id: UUID,
-        lecturer_id: UUID,
-    ) -> None:
-        raise QrSessionNotFoundError()
-
-
-class NotOwnedQrSessionService(SuccessfulQrSessionService):
-    async def assert_lecturer_owns_qr_session(
-        self,
-        pool: object,
-        qr_session_id: UUID,
-        lecturer_id: UUID,
-    ) -> None:
-        raise LecturerSessionAccessError()
-
-
-class StaticQrSessionCurrentService(SuccessfulQrSessionService):
+class StaticQrSessionStreamService(SuccessfulQrSessionService):
     async def get_current_dynamic_qr_session(
         self,
         pool: object,
@@ -207,17 +187,6 @@ class StaticQrSessionCurrentService(SuccessfulQrSessionService):
     ) -> CurrentDynamicQrSession:
         raise DynamicQrSessionUnavailableError(
             "QR session is not a dynamic QR session.",
-        )
-
-
-class MissingDynamicQrSecretService(SuccessfulQrSessionService):
-    async def get_current_dynamic_qr_session(
-        self,
-        pool: object,
-        qr_session_id: UUID,
-    ) -> CurrentDynamicQrSession:
-        raise DynamicQrConfigurationError(
-            "Dynamic QR HMAC secret is not configured.",
         )
 
 
@@ -568,97 +537,6 @@ def test_verify_qr_session_route_maps_verification_not_started_to_409(
     assert response.status_code == 409
 
 
-def test_get_current_dynamic_qr_session_route_returns_camel_case_response(
-    jwks_document,
-    make_access_token,
-) -> None:
-    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
-        response = client.get(
-            f"/api/v1/qr-sessions/{QR_SESSION_ID}/current",
-            headers=authorize(lecturer_token(make_access_token)),
-        )
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "qrSessionId": "50000000-0000-0000-0000-000000000001",
-        "qrValue": "current-dynamic-qr-value",
-        "sequence": 17,
-        "validFrom": "2026-08-06T10:04:15Z",
-        "expiresAt": "2026-08-06T10:04:30Z",
-    }
-
-
-def test_get_current_dynamic_qr_session_route_rejects_non_lecturer_role(
-    jwks_document,
-    make_access_token,
-) -> None:
-    with build_client(jwks_document, SuccessfulQrSessionService()) as client:
-        response = client.get(
-            f"/api/v1/qr-sessions/{QR_SESSION_ID}/current",
-            headers=authorize(student_token(make_access_token)),
-        )
-
-    assert response.status_code == 403
-
-
-def test_get_current_dynamic_qr_session_route_maps_not_owned_to_404(
-    jwks_document,
-    make_access_token,
-) -> None:
-    with build_client(jwks_document, NotOwnedQrSessionService()) as client:
-        response = client.get(
-            f"/api/v1/qr-sessions/{QR_SESSION_ID}/current",
-            headers=authorize(lecturer_token(make_access_token)),
-        )
-
-    assert response.status_code == 404
-
-
-def test_get_current_dynamic_qr_session_route_maps_missing_session_to_404(
-    jwks_document,
-    make_access_token,
-) -> None:
-    with build_client(jwks_document, MissingQrSessionService()) as client:
-        response = client.get(
-            f"/api/v1/qr-sessions/{QR_SESSION_ID}/current",
-            headers=authorize(lecturer_token(make_access_token)),
-        )
-
-    assert response.status_code == 404
-
-
-def test_get_current_dynamic_qr_session_route_rejects_static_session(
-    jwks_document,
-    make_access_token,
-) -> None:
-    with build_client(jwks_document, StaticQrSessionCurrentService()) as client:
-        response = client.get(
-            f"/api/v1/qr-sessions/{QR_SESSION_ID}/current",
-            headers=authorize(lecturer_token(make_access_token)),
-        )
-
-    assert response.status_code == 409
-    assert response.json() == {
-        "detail": "QR session is not a dynamic QR session.",
-    }
-
-
-def test_get_current_dynamic_qr_session_route_rejects_missing_secret(
-    jwks_document,
-    make_access_token,
-) -> None:
-    with build_client(jwks_document, MissingDynamicQrSecretService()) as client:
-        response = client.get(
-            f"/api/v1/qr-sessions/{QR_SESSION_ID}/current",
-            headers=authorize(lecturer_token(make_access_token)),
-        )
-
-    assert response.status_code == 500
-    assert response.json() == {
-        "detail": "Dynamic QR HMAC secret is not configured.",
-    }
-
-
 def test_stream_dynamic_qr_session_route_sends_named_rotation_event(
     jwks_document,
     make_access_token,
@@ -689,7 +567,7 @@ def test_stream_dynamic_qr_session_route_rejects_static_session_before_streaming
     jwks_document,
     make_access_token,
 ) -> None:
-    with build_client(jwks_document, StaticQrSessionCurrentService()) as client:
+    with build_client(jwks_document, StaticQrSessionStreamService()) as client:
         response = client.get(
             f"/api/v1/qr-sessions/{QR_SESSION_ID}/stream",
             headers=authorize(lecturer_token(make_access_token)),

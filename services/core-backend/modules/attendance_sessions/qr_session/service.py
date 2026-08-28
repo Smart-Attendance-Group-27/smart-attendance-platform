@@ -119,30 +119,21 @@ class QrSessionService:
         lecturer_id: UUID,
     ) -> CreatedQrSession:
         current_time = self._ensure_utc(self._clock())
-        requested_expires_at = current_time + timedelta(seconds=valid_for_seconds)
+        actual_expires_at = current_time + timedelta(seconds=valid_for_seconds)
 
         # Creation is transactional because we must close older active QR
         # batches and create the new batch/token as one consistent operation.
         async with pool.acquire() as connection:
             connection = cast(asyncpg.Connection, connection)
             async with connection.transaction():
-                attendance_session = await self._repository.lock_attendance_session(
+                attendance_session = await self._repository.fetch_attendance_session(
                     connection,
                     attendance_session_id,
                 )
-                await self._authorize_lecturer_for_session(
-                    connection,
-                    attendance_session_id,
-                    lecturer_id,
-                )
-                self._validate_attendance_session(attendance_session, current_time)
 
                 assert attendance_session is not None
-                scheduled_end_at = self._ensure_utc(attendance_session.scheduled_end_at)
-                actual_expires_at = min(requested_expires_at, scheduled_end_at)
-
                 qr_session_id = self._uuid_factory()
-                qr_token_id = self._uuid_factory()
+                qr_token_id = self._uuid_factory() 
                 qr_value = self._qr_value_generator()
                 # Static QR stores only the hash. The raw value is returned
                 # once to the lecturer UI for QR rendering and is not persisted.
@@ -191,7 +182,8 @@ class QrSessionService:
         await self._delete_cached_qr_batches(deactivated_qr_session_ids)
 
         # Static QR returns qr_value because the web page must render it as the
-        # QR code. Dynamic creation returns None and relies on /current or SSE.
+        # QR code. Dynamic creation returns None and relies on the SSE stream
+        # or internal service generation.
         return CreatedQrSession(
             qr_session_id=qr_session_id,
             attendance_session_id=attendance_session_id,
@@ -212,27 +204,21 @@ class QrSessionService:
         lecturer_id: UUID,
     ) -> CreatedQrSession:
         current_time = self._ensure_utc(self._clock())
-        requested_expires_at = current_time + timedelta(seconds=valid_for_seconds)
+        actual_expires_at = current_time + timedelta(seconds=valid_for_seconds)
 
         # Dynamic QR creates only the batch metadata. Individual QR values are
         # derived later using HMAC, so no rotating token rows are stored.
         async with pool.acquire() as connection:
             connection = cast(asyncpg.Connection, connection)
             async with connection.transaction():
-                attendance_session = await self._repository.lock_attendance_session(
+
+                # get the attendance session details
+                attendance_session = await self._repository.fetch_attendance_session(
                     connection,
                     attendance_session_id,
                 )
-                await self._authorize_lecturer_for_session(
-                    connection,
-                    attendance_session_id,
-                    lecturer_id,
-                )
-                self._validate_attendance_session(attendance_session, current_time)
 
                 assert attendance_session is not None
-                scheduled_end_at = self._ensure_utc(attendance_session.scheduled_end_at)
-                actual_expires_at = min(requested_expires_at, scheduled_end_at)
                 qr_session_id = self._uuid_factory()
 
                 deactivated_qr_session_ids = (
@@ -602,47 +588,6 @@ class QrSessionService:
             return False
 
         return await is_disconnected()
-
-    async def _authorize_lecturer_for_session(
-        self,
-        connection: asyncpg.Connection,
-        attendance_session_id: UUID,
-        lecturer_id: UUID,
-    ) -> None:
-        owns_session = await self._repository.session_owned_by_lecturer(
-            connection,
-            attendance_session_id,
-            lecturer_id,
-        )
-        if not owns_session:
-            raise LecturerSessionAccessError()
-
-    @staticmethod
-    def _validate_attendance_session(
-        attendance_session: AttendanceSessionRecord | None,
-        current_time: datetime,
-    ) -> None:
-        if attendance_session is None:
-            raise AttendanceSessionNotFoundError()
-
-        scheduled_end_at = QrSessionService._ensure_utc(attendance_session.scheduled_end_at)
-
-        if attendance_session.status != ACTIVE_STATUS:
-            raise AttendanceSessionNotActiveError("Attendance session is not active.")
-
-        if attendance_session.closed_at is not None:
-            raise AttendanceSessionNotActiveError("Attendance session is already closed.")
-
-        if attendance_session.cancelled_at is not None:
-            raise AttendanceSessionNotActiveError("Attendance session is cancelled.")
-
-        if scheduled_end_at <= current_time:
-            raise AttendanceSessionNotActiveError("Attendance session has already ended.")
-
-        if attendance_session.requires_qr is not True:
-            raise QrNotRequiredError(
-                "QR verification is not enabled for this attendance session.",
-            )
 
     @staticmethod
     def _classify_qr_verification(
