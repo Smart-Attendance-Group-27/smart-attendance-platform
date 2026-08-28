@@ -6,14 +6,13 @@ from fastapi import (
     APIRouter,
     Depends,
     File,
-    HTTPException,
     Request,
     UploadFile,
-    status,
 )
 
 from api.dependencies.auth import get_current_student_id
 from api.dependencies.readiness import get_readiness_verification_service
+from api.face_image_upload import MAX_IMAGE_BYTES, read_face_image_upload
 from api.schemas.readiness import (
     ReadinessStatusResponse,
     ReadinessVerificationResponse,
@@ -25,11 +24,7 @@ from services.readiness_verification_service import (
 )
 
 
-MAX_IMAGE_BYTES = 5 * 1024 * 1024
 logger = logging.getLogger("uvicorn.error")
-
-# type cannot be changed after it is created
-ALLOWED_IMAGE_TYPES = frozenset({"image/jpeg", "image/png"})
 
 router = APIRouter(prefix="/api/v1/face-verification",tags=["face-verification"],)
 
@@ -62,21 +57,7 @@ async def verify_readiness(
     student_id: Annotated[UUID, Depends(get_current_student_id)],
     service: Annotated[ReadinessVerificationService,Depends(get_readiness_verification_service),],
 ) -> ReadinessVerificationResponse:
-    
-    if image.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,detail="Only JPEG and PNG images are supported",)
-
-    try:
-        captured_image = await image.read(MAX_IMAGE_BYTES + 1)
-
-    finally:
-        await image.close()
-
-    if not captured_image:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="The uploaded image is empty",)
-
-    if len(captured_image) > MAX_IMAGE_BYTES:
-        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE,detail="The uploaded image is too large",)
+    captured_image = await read_face_image_upload(image)
 
     result = await service.verify(
         student_id=student_id,

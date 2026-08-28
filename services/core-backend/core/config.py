@@ -75,6 +75,7 @@ class Settings(BaseSettings):
 
     # Internal service URL for the separately deployed face-verification API.
     face_verification_service_url: str | None = "http://localhost:8001"
+    face_verification_timeout_seconds: float = Field(default=30, gt=0)
 
     # General geofence safeguards. Session-specific radius, accuracy buffer and
     # maximum accuracy values are loaded from the session geofence snapshot.
