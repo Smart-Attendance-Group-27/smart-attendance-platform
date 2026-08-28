@@ -56,6 +56,7 @@ services:
       KEYCLOAK_JWKS_URL: ${CORE_KEYCLOAK_JWKS_URL:-http://keycloak:8080/realms/uniattend/protocol/openid-connect/certs}
       KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-uniattend-api}
       KEYCLOAK_AUTHORIZED_CLIENTS: ${KEYCLOAK_AUTHORIZED_CLIENTS:-uniattend-mobile,uniattend-web}
+      KEYCLOAK_LEEWAY_SECONDS: ${KEYCLOAK_LEEWAY_SECONDS:-5}
       DYNAMIC_QR_HMAC_SECRET: ${DYNAMIC_QR_HMAC_SECRET:?Set DYNAMIC_QR_HMAC_SECRET in the root .env file}
       FACE_VERIFICATION_SERVICE_URL: ${FACE_VERIFICATION_SERVICE_URL:-http://face-verification:8001}
     ports:
