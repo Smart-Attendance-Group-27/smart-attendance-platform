@@ -9,7 +9,7 @@ export type FaceVerificationRequest = {
 
 export type FaceVerificationResult =
   | { status: 'success' }
-  | { status: 'face_not_detected' }
-  | { status: 'multiple_faces' }
-  | { status: 'liveness_failure' }
-  | { status: 'verification_failure' };
+  | { status: 'face_not_detected'; canRetry?: boolean }
+  | { status: 'multiple_faces'; canRetry?: boolean }
+  | { status: 'liveness_failure'; canRetry?: boolean }
+  | { status: 'verification_failure'; canRetry?: boolean };

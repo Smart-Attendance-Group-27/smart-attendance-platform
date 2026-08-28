@@ -468,6 +468,32 @@ describe('FaceVerificationScreen', () => {
     expect(props.onFaceVerified).not.toHaveBeenCalled();
   });
 
+  test('does not offer another capture after the final attendance face attempt', async () => {
+    const { service } = createService({
+      status: 'verification_failure',
+      canRetry: false,
+    });
+    const props = createScreenProps(service);
+    const screen = await render(
+      <FaceVerificationScreen {...props} />,
+    );
+
+    await captureAndVerify(screen);
+
+    expect(await screen.findByText('Face verification failed')).toBeTruthy();
+    expect(
+      await screen.findByText(
+        'No face verification attempts remain for this session.',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Retry face verification' }),
+    ).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Return to attendance session' }),
+    ).toBeTruthy();
+  });
+
   test('retry starts a new request, shows processing, and then shows success', async () => {
     const retryResult = createDeferred<FaceVerificationResult>();
     const verifyFace = jest.fn<FaceVerificationService['verifyFace']>();

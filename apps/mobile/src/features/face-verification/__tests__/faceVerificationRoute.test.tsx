@@ -21,6 +21,15 @@ jest.mock('expo-router', () => ({
   }),
 }));
 
+jest.mock('../../auth/context/AuthContext', () => ({
+  useAuth: () => ({
+    session: {
+      status: 'authenticated',
+      accessToken: 'header.payload.signature',
+    },
+  }),
+}));
+
 jest.mock('../screens/FaceVerificationScreen', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { Pressable, Text } = require('react-native');

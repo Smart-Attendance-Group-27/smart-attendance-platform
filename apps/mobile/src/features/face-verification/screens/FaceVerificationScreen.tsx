@@ -429,6 +429,7 @@ function VerificationAction({
   continueTitle,
   state,
   onContinue,
+  onExit,
   onOpenCamera,
   onVerify,
 }: {
@@ -437,6 +438,7 @@ function VerificationAction({
   continueTitle: string;
   state: FaceVerificationUiState;
   onContinue: () => void;
+  onExit: () => void;
   onOpenCamera: () => void;
   onVerify: () => void;
 }) {
@@ -446,6 +448,16 @@ function VerificationAction({
         accessibilityLabel={continueAccessibilityLabel}
         onPress={onContinue}
         title={continueTitle}
+      />
+    );
+  }
+
+  if ('canRetry' in state && state.canRetry === false) {
+    return (
+      <AppButton
+        accessibilityLabel="Return to attendance session"
+        onPress={onExit}
+        title="Return to Session"
       />
     );
   }
@@ -628,7 +640,10 @@ export function FaceVerificationScreen({
       if (isMounted.current && activeRequest.current === requestId) {
         setState(result);
 
-        if (result.status === 'success') {
+        if (
+          result.status === 'success' ||
+          ('canRetry' in result && result.canRetry === false)
+        ) {
           setCameraActive(false);
           setCameraReady(false);
         }
@@ -653,9 +668,18 @@ export function FaceVerificationScreen({
     onFaceVerified(sessionId);
   };
 
-  const content =
+  const defaultContent =
     (isReadinessCheck ? readinessStatusContent[state.status] : undefined) ??
     statusContent[state.status];
+  const content =
+    !isReadinessCheck &&
+    'canRetry' in state &&
+    state.canRetry === false
+      ? {
+          ...defaultContent,
+          message: 'No face verification attempts remain for this session.',
+        }
+      : defaultContent;
   const processing = state.status === 'processing';
   const showReadinessStage =
     isReadinessCheck && isVerificationOutcomeState(state.status);
@@ -701,6 +725,7 @@ export function FaceVerificationScreen({
           }
           continueTitle={isReadinessCheck ? 'Done' : 'Continue'}
           onContinue={continueToResult}
+          onExit={onBack}
           onOpenCamera={() => void openCamera()}
           onVerify={() => {
             if (isReadinessCheck && isVerificationFailureState(state.status)) {
