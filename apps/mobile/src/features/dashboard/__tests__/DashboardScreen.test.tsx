@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { DashboardScreen } from '../screens/DashboardScreen';
 import type { ActiveAttendanceSessionService } from '../services/activeAttendanceSessionService';
@@ -7,16 +7,29 @@ import type { DashboardService } from '../services/dashboardService';
 import type { FaceVerificationApiService } from '../../face-verification/services/faceVerificationApiService';
 
 const mockPush = jest.fn();
+let mockFocusCallback:
+  | (() => void | (() => void))
+  | undefined;
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({
-    push: mockPush,
-  }),
-}));
+jest.mock('expo-router', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const React = require('react');
+
+  return {
+    useFocusEffect: (callback: () => void | (() => void)) => {
+      mockFocusCallback = callback;
+      React.useEffect(callback, [callback]);
+    },
+    useRouter: () => ({
+      push: mockPush,
+    }),
+  };
+});
 
 describe('DashboardScreen', () => {
   beforeEach(() => {
     mockPush.mockClear();
+    mockFocusCallback = undefined;
   });
 
   test('renders upcoming lectures from the service', async () => {
@@ -235,6 +248,53 @@ describe('DashboardScreen', () => {
         name: 'Check Face Verification Readiness',
       }),
     ).toBeNull();
+  });
+
+  test('removes the readiness button when the dashboard regains focus after a passed check', async () => {
+    const getReadinessStatus =
+      jest.fn<FaceVerificationApiService['getReadinessStatus']>();
+    getReadinessStatus
+      .mockResolvedValueOnce({
+        status: 'loaded',
+        readiness: {
+          status: 'not_checked',
+          requiresReadinessCheck: true,
+          checkedAt: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'loaded',
+        readiness: {
+          status: 'passed',
+          requiresReadinessCheck: false,
+          checkedAt: '2026-08-28T08:30:00Z',
+        },
+      });
+    const screen = await render(
+      <DashboardScreen
+        dashboardService={createEmptyDashboardService()}
+        faceVerificationApiService={{ getReadinessStatus }}
+      />,
+    );
+
+    expect(
+      await screen.findByRole('button', {
+        name: 'Check Face Verification Readiness',
+      }),
+    ).toBeTruthy();
+
+    await act(async () => {
+      mockFocusCallback?.();
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('button', {
+          name: 'Check Face Verification Readiness',
+        }),
+      ).toBeNull();
+    });
+    expect(getReadinessStatus).toHaveBeenCalledTimes(2);
   });
 
   test('opens the profile screen from the avatar action', async () => {

@@ -57,7 +57,7 @@ Mobile application
     -> Face Verification Service records the readiness result
 ```
 
-Future attendance verification remains coordinated by the Core Backend:
+Attendance verification is coordinated by the Core Backend:
 
 ```text
 Mobile application
@@ -85,14 +85,14 @@ a student On-time, Late, Present, or Absent.
 
 ## Public API Contract
 
-The proposed Core Backend endpoint is:
+The implemented Core Backend endpoint is:
 
 ```http
 POST /api/v1/attendance-sessions/{session_id}/face-verifications
 Authorization: Bearer <access-token>
 Content-Type: multipart/form-data
 
-capture: <JPEG image>
+image: <JPEG or PNG image>
 ```
 
 The authenticated access token determines the student identity. The request
@@ -102,24 +102,12 @@ The public response should preserve the statuses already supported by the
 mobile application:
 
 ```json
-{ "status": "success" }
+{ "status": "success", "attemptNumber": 1, "canRetry": false }
 ```
 
-```json
-{ "status": "face_not_detected" }
-```
-
-```json
-{ "status": "multiple_faces" }
-```
-
-```json
-{ "status": "liveness_failure" }
-```
-
-```json
-{ "status": "verification_failure" }
-```
+Failure statuses are `face_not_detected`, `multiple_faces`, and
+`verification_failure`. Each response includes `attemptNumber` and `canRetry`
+so the app can stop offering another capture after the configured limit.
 
 Transport, authentication, configuration, and unexpected server failures
 should use appropriate HTTP error responses. Raw exceptions, embeddings,
@@ -350,7 +338,8 @@ metric metadata should therefore be added before activation.
 
 ### `face_verification.face_validation_attempts`
 
-Stores the outcome and diagnostic metadata for each face-validation attempt:
+Stores the current attendance face-verification outcome and diagnostic
+metadata:
 
 - `verification_attempt_id`
 - `face_profile_id`
@@ -366,6 +355,12 @@ Stores the outcome and diagnostic metadata for each face-validation attempt:
 
 The parent `attendance_verification.verification_attempts` table connects the
 attempt to the attendance session and authenticated student.
+
+Attendance retries update the same face-validation row for that parent
+verification attempt. A successful result is retained immediately; otherwise
+the row contains the latest attempt and becomes the final failed result when
+the retry limit is reached. This avoids storing one row per capture for the
+same student and session.
 
 Do not store the raw capture, access token, or reference embedding in attempt
 logs.

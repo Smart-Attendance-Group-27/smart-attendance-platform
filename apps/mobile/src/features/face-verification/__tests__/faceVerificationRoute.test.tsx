@@ -46,7 +46,7 @@ jest.mock('../screens/FaceVerificationScreen', () => {
       sessionId: string;
     }) => (
       <Pressable
-        accessibilityLabel="Continue to QR scanner"
+        accessibilityLabel="Continue after face verification"
         accessibilityRole="button"
         onPress={() => onFaceVerified(sessionId)}
       >
@@ -69,7 +69,7 @@ describe('FaceVerificationRoute', () => {
     };
   });
 
-  test('opens QR scanner with the normalized session ID after face verification when the session requires QR', async () => {
+  test('opens QR scanner with the normalized session ID when QR is required', async () => {
     mockSearchParams = {
       sessionId: [' attendance-session-active ', 'ignored-session'],
       requiresQr: '1',
@@ -78,21 +78,20 @@ describe('FaceVerificationRoute', () => {
 
     await fireEvent.press(
       getByRole('button', {
-        name: 'Continue to QR scanner',
+        name: 'Continue after face verification',
       }),
     );
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledWith({
-      pathname:
-        '/(student)/attendance/[sessionId]/qr-scanner',
+      pathname: '/(student)/attendance/[sessionId]/qr-scanner',
       params: {
         sessionId: 'attendance-session-active',
       },
     });
   });
 
-  test('skips the QR scanner and goes straight to check-in success when the session does not require QR', async () => {
+  test('goes directly to check-in success when QR is not required', async () => {
     mockSearchParams = {
       sessionId: 'attendance-session-active',
       requiresQr: '0',
@@ -101,14 +100,13 @@ describe('FaceVerificationRoute', () => {
 
     await fireEvent.press(
       getByRole('button', {
-        name: 'Continue to QR scanner',
+        name: 'Continue after face verification',
       }),
     );
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledWith({
-      pathname:
-        '/(student)/attendance/[sessionId]/check-in-success',
+      pathname: '/(student)/attendance/[sessionId]/check-in-success',
       params: {
         sessionId: 'attendance-session-active',
       },
@@ -128,7 +126,7 @@ describe('FaceVerificationRoute', () => {
     ).toBeTruthy();
     expect(
       queryByRole('button', {
-        name: 'Continue to QR scanner',
+        name: 'Continue after face verification',
       }),
     ).toBeNull();
     expect(mockPush).not.toHaveBeenCalled();

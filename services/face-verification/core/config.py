@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     face_detection_size: int = Field(default=640, ge=1)
     face_minimum_detection_confidence: float = Field(default=0.60, ge=0,le=1,)
     face_max_concurrent_inferences: int = Field(default=1, ge=1)
+    face_max_attempts: int = Field(default=3, ge=1)
 
     # The Core Backend owns Keycloak validation and student-profile lookup.
     core_api_url: str = "http://localhost:8000"
