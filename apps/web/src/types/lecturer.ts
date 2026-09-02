@@ -76,6 +76,13 @@ export type TimetableEntry = {
   source: string;
 };
 
+// One of the lecturer's own academic.timetable_entries rows — the source a
+// new session is instantiated from (see app/actions/sessions.ts).
+export type TimetableOption = {
+  id: string;
+  label: string;
+};
+
 export type SourceSyncItem = {
   id: string;
   time: string;
@@ -96,6 +103,7 @@ export type VerificationOutcome = "present" | "failed" | "late" | "not_required"
 export type SessionStudentRow = {
   studentId: string;
   studentIndex: string;
+  fullName: string;
   // Students verify their face once, at the start of the lecture — there is
   // no lecturer-triggered second/"additional" face check.
   initialFaceCheck: VerificationOutcome;
@@ -114,6 +122,7 @@ export type SessionDetail = {
   checkInWindow: string;
   lateThreshold: string;
   lecturerName: string;
+  requiresQr?: boolean;
   summary: {
     presentCount: number;
     presentPercent: number;

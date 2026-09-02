@@ -11,13 +11,21 @@ import { CoreApiClient } from '../../../../services/api/coreApiClient';
 export default function FaceVerificationRoute() {
   const router = useRouter();
   const { session } = useAuth();
-  const { sessionId: sessionIdParam } = useLocalSearchParams<{
+  const {
+    sessionId: sessionIdParam,
+    requiresQr: requiresQrParam,
+  } = useLocalSearchParams<{
     sessionId?: string | string[];
+    requiresQr?: string | string[];
   }>();
   const sessionIdValue = Array.isArray(sessionIdParam)
     ? sessionIdParam[0]
     : sessionIdParam;
   const sessionId = sessionIdValue?.trim();
+  const requiresQrValue = Array.isArray(requiresQrParam)
+    ? requiresQrParam[0]
+    : requiresQrParam;
+  const requiresQr = requiresQrValue === '1';
   const accessToken =
     session.status === 'authenticated' ? session.accessToken : undefined;
   const faceVerificationService = useMemo(
@@ -52,11 +60,19 @@ export default function FaceVerificationRoute() {
       key={sessionId}
       onBack={() => router.back()}
       onFaceVerified={(verifiedSessionId) =>
-        router.push({
-          pathname:
-            '/(student)/attendance/[sessionId]/qr-scanner',
-          params: { sessionId: verifiedSessionId },
-        })
+        router.push(
+          requiresQr
+            ? {
+                pathname:
+                  '/(student)/attendance/[sessionId]/qr-scanner',
+                params: { sessionId: verifiedSessionId },
+              }
+            : {
+                pathname:
+                  '/(student)/attendance/[sessionId]/check-in-success',
+                params: { sessionId: verifiedSessionId },
+              },
+        )
       }
       sessionId={sessionId}
     />

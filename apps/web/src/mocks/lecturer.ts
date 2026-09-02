@@ -229,11 +229,11 @@ export const MOCK_SESSION_DETAILS: Record<string, SessionDetail> = {
       notVerifiedPercent: 11.0,
     },
     students: [
-      { studentId: "stu-1", studentIndex: "230714A", initialFaceCheck: "present", qrVerification: "not_required", finalStatus: "pending_review", time: "10:12" },
-      { studentId: "stu-2", studentIndex: "230738B", initialFaceCheck: "present", qrVerification: "participated", finalStatus: "present", time: "10:28" },
-      { studentId: "stu-3", studentIndex: "230741C", initialFaceCheck: "late", qrVerification: "not_required", finalStatus: "late", time: "10:16" },
-      { studentId: "stu-4", studentIndex: "230756D", initialFaceCheck: "present", qrVerification: "not_required", finalStatus: "present", time: "09:58" },
-      { studentId: "stu-5", studentIndex: "230799F", initialFaceCheck: "not_submitted", qrVerification: "not_participated", finalStatus: "absent", time: "—" },
+      { studentId: "stu-1", studentIndex: "230714A", fullName: "Mock Student 230714A", initialFaceCheck: "present", qrVerification: "not_required", finalStatus: "pending_review", time: "10:12" },
+      { studentId: "stu-2", studentIndex: "230738B", fullName: "Mock Student 230738B", initialFaceCheck: "present", qrVerification: "participated", finalStatus: "present", time: "10:28" },
+      { studentId: "stu-3", studentIndex: "230741C", fullName: "Mock Student 230741C", initialFaceCheck: "late", qrVerification: "not_required", finalStatus: "late", time: "10:16" },
+      { studentId: "stu-4", studentIndex: "230756D", fullName: "Mock Student 230756D", initialFaceCheck: "present", qrVerification: "not_required", finalStatus: "present", time: "09:58" },
+      { studentId: "stu-5", studentIndex: "230799F", fullName: "Mock Student 230799F", initialFaceCheck: "not_submitted", qrVerification: "not_participated", finalStatus: "absent", time: "—" },
     ],
   },
   "sess-cs2101-today": {
@@ -256,8 +256,8 @@ export const MOCK_SESSION_DETAILS: Record<string, SessionDetail> = {
       notVerifiedPercent: 12.0,
     },
     students: [
-      { studentId: "stu-6", studentIndex: "230798P", initialFaceCheck: "present", qrVerification: "not_required", finalStatus: "pending_review", time: "09:58" },
-      { studentId: "stu-7", studentIndex: "230812M", initialFaceCheck: "present", qrVerification: "not_required", finalStatus: "present", time: "13:05" },
+      { studentId: "stu-6", studentIndex: "230798P", fullName: "Mock Student 230798P", initialFaceCheck: "present", qrVerification: "not_required", finalStatus: "pending_review", time: "09:58" },
+      { studentId: "stu-7", studentIndex: "230812M", fullName: "Mock Student 230812M", initialFaceCheck: "present", qrVerification: "not_required", finalStatus: "present", time: "13:05" },
     ],
   },
   "sess-cs4301-today": {
@@ -301,7 +301,7 @@ export const MOCK_SESSION_DETAILS: Record<string, SessionDetail> = {
       notVerifiedPercent: 5.5,
     },
     students: [
-      { studentId: "stu-20", studentIndex: "230601K", initialFaceCheck: "present", qrVerification: "not_required", finalStatus: "present", time: "10:52" },
+      { studentId: "stu-20", studentIndex: "230601K", fullName: "Mock Student 230601K", initialFaceCheck: "present", qrVerification: "not_required", finalStatus: "present", time: "10:52" },
     ],
   },
   "sess-cs3203-lastweek": {
@@ -324,7 +324,7 @@ export const MOCK_SESSION_DETAILS: Record<string, SessionDetail> = {
       notVerifiedPercent: 6.5,
     },
     students: [
-      { studentId: "stu-21", studentIndex: "230622L", initialFaceCheck: "present", qrVerification: "not_required", finalStatus: "present", time: "09:52" },
+      { studentId: "stu-21", studentIndex: "230622L", fullName: "Mock Student 230622L", initialFaceCheck: "present", qrVerification: "not_required", finalStatus: "present", time: "09:52" },
     ],
   },
 };

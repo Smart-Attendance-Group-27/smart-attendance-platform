@@ -131,8 +131,29 @@ export function getLecturerTimetable(): Promise<ApiLecturerTimetableEntry[]> {
   return coreBackendFetch("/api/v1/lecturers/me/timetable");
 }
 
+export type ApiCreateSessionRequest = {
+  timetableEntryId: string;
+  sessionTitle: string;
+  sessionType?: string;
+  scheduledStartAt: string;
+  scheduledEndAt: string;
+  checkInOpensAt?: string;
+  checkInClosesAt?: string;
+  lateAfterAt?: string;
+  requiresFaceVerification?: boolean;
+  requiresGeofence?: boolean;
+  requiresQr?: boolean;
+};
+
 export function getLecturerSessions(): Promise<ApiLecturerSession[]> {
   return coreBackendFetch("/api/v1/lecturers/me/attendance-sessions");
+}
+
+export function createLecturerSession(body: ApiCreateSessionRequest): Promise<ApiLecturerSession> {
+  return coreBackendFetch("/api/v1/lecturers/me/attendance-sessions", {
+    method: "POST",
+    body,
+  });
 }
 
 export function getLecturerSessionDetail(sessionId: string): Promise<ApiLecturerSession> {

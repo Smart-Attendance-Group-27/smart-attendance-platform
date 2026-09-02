@@ -6,13 +6,20 @@ import { FaceIntroductionScreen } from '../../../../features/face-verification/s
 
 export default function FaceIntroductionRoute() {
   const router = useRouter();
-  const { sessionId: sessionIdParam } = useLocalSearchParams<{
+  const {
+    sessionId: sessionIdParam,
+    requiresQr: requiresQrParam,
+  } = useLocalSearchParams<{
     sessionId?: string | string[];
+    requiresQr?: string | string[];
   }>();
   const sessionIdValue = Array.isArray(sessionIdParam)
     ? sessionIdParam[0]
     : sessionIdParam;
   const sessionId = sessionIdValue?.trim();
+  const requiresQr = Array.isArray(requiresQrParam)
+    ? requiresQrParam[0]
+    : requiresQrParam;
 
   if (!sessionId) {
     return (
@@ -32,7 +39,7 @@ export default function FaceIntroductionRoute() {
         router.push({
           pathname:
             '/(student)/attendance/[sessionId]/face-verification',
-          params: { sessionId: verifiedSessionId },
+          params: { sessionId: verifiedSessionId, requiresQr },
         })
       }
       sessionId={sessionId}

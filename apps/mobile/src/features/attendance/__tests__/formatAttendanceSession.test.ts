@@ -28,6 +28,7 @@ const session: AttendanceSession = {
   checkInClosesAt: '2026-07-20T10:20:00+05:30',
   lateThreshold: '2026-07-20T10:10:00+05:30',
   checkInStatus: 'open',
+  requiresQr: false,
 };
 
 describe('attendance session formatting', () => {

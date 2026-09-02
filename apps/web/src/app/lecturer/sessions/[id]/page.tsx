@@ -7,6 +7,7 @@ import { DataTable, CellPrimary } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { LinkButton } from "@/components/ui/LinkButton";
+import { SessionLifecycleControls } from "@/components/lecturer/SessionLifecycleControls";
 import { getSessionDetail } from "@/services/lecturerService";
 import { finalStatusDisplay, verificationOutcomeDisplay, verificationOutcomeLabel } from "@/lib/status";
 import { SessionStudentRow } from "@/types/lecturer";
@@ -32,13 +33,7 @@ export default async function SessionMonitorPage(props: PageProps<"/lecturer/ses
       <PageHeader
         title="Live session monitor"
         description={`${session.courseCode} · ${session.courseName} · ${session.room}`}
-        actions={
-          isActive ? (
-            <Button variant="danger">Close session</Button>
-          ) : (
-            <StatusBadge tone="neutral">Session closed</StatusBadge>
-          )
-        }
+        actions={<SessionLifecycleControls sessionId={session.sessionId} status={session.status} />}
       />
 
       <Card flush>
@@ -63,9 +58,13 @@ export default async function SessionMonitorPage(props: PageProps<"/lecturer/ses
         </div>
 
         <div className="flex flex-wrap gap-1.5 border-b border-[var(--line)] bg-[#fafbfc] p-2.5">
-          <Button disabled={!isActive} className="gap-2">
+          <LinkButton
+            aria-disabled={!isActive || session.requiresQr !== true}
+            className={!isActive || session.requiresQr !== true ? "pointer-events-none opacity-50" : "gap-2"}
+            href={`/lecturer/sessions/${session.sessionId}/qr`}
+          >
             Launch QR verification <StatusBadge tone="purple">Optional</StatusBadge>
-          </Button>
+          </LinkButton>
           <Button disabled={!isActive}>Pause check-in</Button>
           <Button>Session policy</Button>
         </div>
@@ -97,7 +96,7 @@ export default async function SessionMonitorPage(props: PageProps<"/lecturer/ses
               {
                 key: "student",
                 header: "Student",
-                render: (row) => <CellPrimary primary={`Student ${row.studentIndex}`} secondary={row.studentIndex} />,
+                render: (row) => <CellPrimary primary={row.fullName} secondary={row.studentIndex} />,
               },
               { key: "initial", header: "Face verification", render: (row) => <VerificationCell outcome={row.initialFaceCheck} /> },
               { key: "qr", header: "QR verification", render: (row) => <VerificationCell outcome={row.qrVerification} /> },

@@ -11,9 +11,19 @@ import type {
 const activeSessionsPath =
   '/api/v1/students/me/attendance-sessions/active';
 
+function completeCheckInPath(sessionId: string): string {
+  return `/api/v1/attendance-sessions/${encodeURIComponent(sessionId)}/complete-check-in`;
+}
+
 type ActiveAttendanceSessionResponse = Partial<
   Record<keyof ActiveAttendanceSession, unknown>
 >;
+
+type CompleteCheckInResponse = {
+  readonly status?: unknown;
+  readonly attendanceStatus?: unknown;
+  readonly checkedInAt?: unknown;
+};
 
 export class CoreApiAttendanceService implements AttendanceService {
   constructor(private readonly coreApiClient: CoreApiClient) {}
@@ -37,21 +47,22 @@ export class CoreApiAttendanceService implements AttendanceService {
   async getCheckInResult(
     sessionId: string,
   ): Promise<AttendanceCheckInResultLookupResult> {
-    const lookup = await this.getAttendanceSession(sessionId);
-    if (lookup.status !== 'available') {
+    // Asks the backend to finalize check-in: it re-checks, server-side, that
+    // every verification the session actually requires (geofence, face, QR)
+    // has genuinely passed, then writes the real attendance record. This
+    // used to be fabricated client-side from the phone's clock — the
+    // backend is now the sole source of truth for present/late.
+    const result = await this.coreApiClient.post<unknown>(
+      completeCheckInPath(sessionId),
+      {},
+    );
+
+    if (result.status !== 'ok') {
       return { status: 'unavailable' };
     }
 
-    const result: AttendanceCheckInResult = {
-      sessionId,
-      status:
-        Date.now() <= Date.parse(lookup.session.lateThreshold)
-          ? 'present'
-          : 'late',
-      checkInTime: new Date().toISOString(),
-    };
-
-    return { status: 'available', result };
+    const outcome = toCompleteCheckInOutcome(sessionId, result.data);
+    return outcome ? { status: 'available', result: outcome } : { status: 'unavailable' };
   }
 
   private async loadActiveSessions(): Promise<ActiveAttendanceSession[]> {
@@ -65,6 +76,31 @@ export class CoreApiAttendanceService implements AttendanceService {
       (session): session is ActiveAttendanceSession => session !== null,
     );
   }
+}
+
+function toCompleteCheckInOutcome(
+  sessionId: string,
+  value: unknown,
+): AttendanceCheckInResult | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const response = value as CompleteCheckInResponse;
+  if (
+    response.status !== 'completed' ||
+    (response.attendanceStatus !== 'present' && response.attendanceStatus !== 'late') ||
+    typeof response.checkedInAt !== 'string' ||
+    !response.checkedInAt.trim()
+  ) {
+    return null;
+  }
+
+  return {
+    sessionId,
+    status: response.attendanceStatus,
+    checkInTime: response.checkedInAt,
+  };
 }
 
 function toActiveAttendanceSession(
@@ -119,6 +155,7 @@ function toAttendanceSession(
     checkInClosesAt: session.checkInClosesAt,
     lateThreshold: session.lateAfterAt ?? session.checkInClosesAt,
     checkInStatus: 'open',
+    requiresQr: session.requiresQr,
   };
 }
 

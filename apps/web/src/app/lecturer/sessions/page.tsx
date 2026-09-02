@@ -3,16 +3,24 @@ import { Card } from "@/components/ui/Card";
 import { DataTable, CellPrimary } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LinkButton } from "@/components/ui/LinkButton";
-import { getSessionList } from "@/services/lecturerService";
+import { CreateSessionButton } from "@/components/lecturer/CreateSessionButton";
+import { getSessionCreationOptions, getSessionList } from "@/services/lecturerService";
 import { sessionStatusDisplay } from "@/lib/status";
 import { TodayLecture } from "@/types/lecturer";
 
 export default async function LecturerSessionsPage() {
-  const sessions = await getSessionList();
+  const [sessions, timetableOptions] = await Promise.all([
+    getSessionList(),
+    getSessionCreationOptions(),
+  ]);
 
   return (
     <div>
-      <PageHeader title="Attendance sessions" description="View and monitor your attendance sessions." />
+      <PageHeader
+        title="Attendance sessions"
+        description="View and monitor your attendance sessions."
+        actions={<CreateSessionButton timetableOptions={timetableOptions} />}
+      />
 
       <Card flush>
         <DataTable<TodayLecture>

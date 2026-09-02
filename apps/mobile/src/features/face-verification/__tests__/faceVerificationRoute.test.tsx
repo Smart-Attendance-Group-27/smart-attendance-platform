@@ -12,7 +12,15 @@ import FaceVerificationRoute from '../../../app/(student)/attendance/[sessionId]
 const mockPush = jest.fn();
 let mockSearchParams: {
   sessionId?: string | string[];
+  requiresQr?: string | string[];
 };
+let mockAuthSession:
+  | {
+      status: 'authenticated';
+      userId: string;
+      accessToken: string;
+    }
+  | { status: 'unauthenticated' };
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockSearchParams,
@@ -22,12 +30,7 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('../../auth/context/AuthContext', () => ({
-  useAuth: () => ({
-    session: {
-      status: 'authenticated',
-      accessToken: 'header.payload.signature',
-    },
-  }),
+  useAuth: () => ({ session: mockAuthSession }),
 }));
 
 jest.mock('../screens/FaceVerificationScreen', () => {
@@ -43,7 +46,7 @@ jest.mock('../screens/FaceVerificationScreen', () => {
       sessionId: string;
     }) => (
       <Pressable
-        accessibilityLabel="Continue to QR scanner"
+        accessibilityLabel="Continue after face verification"
         accessibilityRole="button"
         onPress={() => onFaceVerified(sessionId)}
       >
@@ -59,24 +62,51 @@ describe('FaceVerificationRoute', () => {
     mockSearchParams = {
       sessionId: 'attendance-session-active',
     };
+    mockAuthSession = {
+      status: 'authenticated',
+      userId: 'student-1',
+      accessToken: 'test-access-token',
+    };
   });
 
-  test('opens QR scanner with the normalized session ID after face verification', async () => {
+  test('opens QR scanner with the normalized session ID when QR is required', async () => {
     mockSearchParams = {
       sessionId: [' attendance-session-active ', 'ignored-session'],
+      requiresQr: '1',
     };
     const { getByRole } = await render(<FaceVerificationRoute />);
 
     await fireEvent.press(
       getByRole('button', {
-        name: 'Continue to QR scanner',
+        name: 'Continue after face verification',
       }),
     );
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     expect(mockPush).toHaveBeenCalledWith({
-      pathname:
-        '/(student)/attendance/[sessionId]/qr-scanner',
+      pathname: '/(student)/attendance/[sessionId]/qr-scanner',
+      params: {
+        sessionId: 'attendance-session-active',
+      },
+    });
+  });
+
+  test('goes directly to check-in success when QR is not required', async () => {
+    mockSearchParams = {
+      sessionId: 'attendance-session-active',
+      requiresQr: '0',
+    };
+    const { getByRole } = await render(<FaceVerificationRoute />);
+
+    await fireEvent.press(
+      getByRole('button', {
+        name: 'Continue after face verification',
+      }),
+    );
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/(student)/attendance/[sessionId]/check-in-success',
       params: {
         sessionId: 'attendance-session-active',
       },
@@ -96,7 +126,7 @@ describe('FaceVerificationRoute', () => {
     ).toBeTruthy();
     expect(
       queryByRole('button', {
-        name: 'Continue to QR scanner',
+        name: 'Continue after face verification',
       }),
     ).toBeNull();
     expect(mockPush).not.toHaveBeenCalled();

@@ -11,4 +11,3 @@ class AttendanceFaceVerificationResponse(BaseModel):
     status: AttendanceFaceVerificationStatus
     attempt_number: int = Field(alias="attemptNumber")
     can_retry: bool = Field(alias="canRetry")
-

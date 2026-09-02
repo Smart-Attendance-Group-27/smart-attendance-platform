@@ -5,13 +5,17 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
 from modules.attendance_sessions.lecturer_sessions.exception import (
+    ClassroomGeofenceNotConfiguredError,
+    InvalidSessionScheduleError,
     SessionAlreadyActiveError,
     SessionAlreadyClosedError,
     SessionCancelledError,
     SessionNotActiveError,
     SessionNotFoundError,
+    TimetableEntryNotFoundError,
 )
 from modules.attendance_sessions.lecturer_sessions.schemas import (
+    CreateSessionRequest,
     LecturerSessionResponse,
     SessionStudentResponse,
 )
@@ -72,6 +76,51 @@ async def get_my_attendance_session(
         raise HTTPException(status.HTTP_404_NOT_FOUND, _PROFILE_NOT_FOUND_DETAIL) from error
     except SessionNotFoundError as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, _SESSION_NOT_FOUND_DETAIL) from error
+
+    return LecturerSessionResponse.from_record(session)
+
+
+@router.post(
+    "",
+    response_model=LecturerSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_my_attendance_session(
+    body: CreateSessionRequest,
+    http_request: Request,
+    current_lecturer: CurrentLecturer,
+    session_service: Annotated[
+        LecturerSessionService,
+        Depends(get_lecturer_session_service),
+    ] = None,  # type: ignore[assignment]
+) -> LecturerSessionResponse:
+    try:
+        session = await session_service.create_for_user(
+            http_request.app.state.db_pool,
+            current_lecturer.user_id,
+            timetable_entry_id=body.timetable_entry_id,
+            session_title=body.session_title,
+            session_type=body.session_type,
+            scheduled_start_at=body.scheduled_start_at,
+            scheduled_end_at=body.scheduled_end_at,
+            check_in_opens_at=body.check_in_opens_at,
+            check_in_closes_at=body.check_in_closes_at,
+            late_after_at=body.late_after_at,
+            requires_face_verification=body.requires_face_verification,
+            requires_geofence=body.requires_geofence,
+            requires_qr=body.requires_qr,
+        )
+    except LecturerProfileNotFoundError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _PROFILE_NOT_FOUND_DETAIL) from error
+    except TimetableEntryNotFoundError as error:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "The timetable entry was not found for this lecturer.",
+        ) from error
+    except InvalidSessionScheduleError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+    except ClassroomGeofenceNotConfiguredError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
 
     return LecturerSessionResponse.from_record(session)
 
