@@ -116,6 +116,7 @@ class FakeRepository:
         self.completed_attempt_id: UUID | None = None
         self.checked_in_attempt_id: UUID | None = None
         self.checked_in_at: datetime | None = None
+        self.qr_status_lookups = 0
 
     async def lock_student_profile_for_user(self, connection, user_id):
         return self.student
@@ -133,6 +134,7 @@ class FakeRepository:
         return self.face_status
 
     async def latest_qr_status(self, connection, verification_attempt_id):
+        self.qr_status_lookups += 1
         return self.qr_status
 
     async def find_attendance_status(self, connection, session_id, student_id):
@@ -227,23 +229,38 @@ async def test_reports_incomplete_when_geofence_has_not_passed() -> None:
     assert repository.checked_in_attempt_id is None
 
 
-async def test_skips_qr_check_when_session_does_not_require_it() -> None:
+async def test_qr_is_never_required_for_initial_check_in() -> None:
+    """QR windows are opened by the lecturer DURING the lecture.
+
+    Requiring one to check in would make check-in impossible to complete,
+    so requires_qr must not gate this step even when it is set.
+    """
+    repository = FakeRepository(session=build_session(requires_qr=True), qr_status=None)
+    service = CompletionService(repository=repository)
+
+    result = await service.complete_for_user(FakePool(), USER_ID, SESSION_ID)
+
+    assert result.status is CompletionStatus.CHECKED_IN
+    assert result.missing_requirements == []
+    assert repository.checked_in_attempt_id == ATTEMPT_ID
+
+
+async def test_check_in_does_not_read_qr_evidence_at_all() -> None:
+    repository = FakeRepository(session=build_session(requires_qr=True), qr_status=None)
+    service = CompletionService(repository=repository)
+
+    await service.complete_for_user(FakePool(), USER_ID, SESSION_ID)
+
+    assert repository.qr_status_lookups == 0
+
+
+async def test_checks_in_when_session_does_not_require_qr() -> None:
     repository = FakeRepository(session=build_session(requires_qr=False), qr_status=None)
     service = CompletionService(repository=repository)
 
     result = await service.complete_for_user(FakePool(), USER_ID, SESSION_ID)
 
     assert result.status is CompletionStatus.CHECKED_IN
-
-
-async def test_reports_missing_qr_when_session_requires_it() -> None:
-    repository = FakeRepository(session=build_session(requires_qr=True), qr_status=None)
-    service = CompletionService(repository=repository)
-
-    result = await service.complete_for_user(FakePool(), USER_ID, SESSION_ID)
-
-    assert result.status is CompletionStatus.INCOMPLETE
-    assert result.missing_requirements == ["qr"]
 
 
 async def test_reports_failed_for_a_terminally_failed_attempt() -> None:

@@ -4,13 +4,21 @@ from uuid import UUID
 
 import asyncpg
 
-IN_PROGRESS_STATUS = "in_progress"
-FAILED_STATUS = "failed"
-# Provisional: the student passed the start-of-lecture checks (geofence and
-# face). This is NOT a final attendance status — see COMPLETED_STATUS.
-CHECKED_IN_STATUS = "checked_in"
-# Terminal: the session was finalized and a final attendance record exists.
-COMPLETED_STATUS = "completed"
+from modules.attendance_verification.attempt_status import (
+    CHECKED_IN_STATUS,
+    COMPLETED_STATUS,
+    FAILED_STATUS,
+    IN_PROGRESS_STATUS,
+)
+
+# Re-exported so existing importers of this module keep working.
+__all__ = [
+    "CHECKED_IN_STATUS",
+    "COMPLETED_STATUS",
+    "FAILED_STATUS",
+    "IN_PROGRESS_STATUS",
+    "CompletionRepository",
+]
 
 PRESENT_STATUS = "present"
 LATE_STATUS = "late"

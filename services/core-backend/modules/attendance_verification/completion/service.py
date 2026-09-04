@@ -24,7 +24,6 @@ ACTIVE_SESSION_STATUS = "active"
 
 GEOFENCE_PASSED_STATUS = "passed"
 FACE_PASSED_STATUS = "passed"
-QR_ACCEPTED_STATUS = "accepted"
 
 
 class CompletionStatus(StrEnum):
@@ -159,6 +158,15 @@ class CompletionService:
         session,
         verification_attempt_id: UUID,
     ) -> list[str]:
+        """The start-of-lecture checks this session still needs.
+
+        QR is deliberately absent. QR verification windows are opened by the
+        lecturer during the lecture, after check-in has already happened, so
+        requiring one here would make check-in impossible to complete. Which
+        QR windows a student must satisfy is decided at finalization, from
+        the windows the lecturer actually created — see
+        modules/attendance_verification/qr_evidence.
+        """
         missing: list[str] = []
 
         if session.requires_geofence:
@@ -174,13 +182,6 @@ class CompletionService:
             )
             if face_status != FACE_PASSED_STATUS:
                 missing.append("face_verification")
-
-        if session.requires_qr:
-            qr_status = await self._repository.latest_qr_status(
-                connection, verification_attempt_id
-            )
-            if qr_status != QR_ACCEPTED_STATUS:
-                missing.append("qr")
 
         return missing
 

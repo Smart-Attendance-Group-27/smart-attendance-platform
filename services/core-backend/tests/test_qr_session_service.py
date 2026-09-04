@@ -23,8 +23,12 @@ from modules.attendance_sessions.qr_session.repository import (
 )
 from modules.attendance_sessions.qr_session.metadata import QrBatchMetadata
 from modules.attendance_sessions.qr_session.service import QrSessionService
-from modules.attendance_verification.geofence.repository import (
+from modules.attendance_verification.attempt_status import (
+    CHECKED_IN_STATUS,
+    COMPLETED_STATUS,
     IN_PROGRESS_STATUS,
+)
+from modules.attendance_verification.geofence.repository import (
     StudentProfileRecord,
     VerificationAttemptRecord,
 )
@@ -191,6 +195,7 @@ class FakeRepository:
         qr_validation_attempt_id: UUID,
         verification_attempt_id: UUID,
         qr_token_id: UUID | None,
+        qr_batch_id: UUID,
         attempt_number: int,
         validation_status: str,
         failure_reason: str | None,
@@ -201,6 +206,7 @@ class FakeRepository:
                 qr_validation_attempt_id,
                 verification_attempt_id,
                 qr_token_id,
+                qr_batch_id,
                 attempt_number,
                 validation_status,
                 failure_reason,
@@ -245,6 +251,7 @@ class FakeVerificationRepository:
         qr_validation_attempt_id: UUID,
         verification_attempt_id: UUID,
         qr_token_id: UUID | None,
+        qr_batch_id: UUID,
         attempt_number: int,
         validation_status: str,
         failure_reason: str | None,
@@ -255,6 +262,7 @@ class FakeVerificationRepository:
                 qr_validation_attempt_id,
                 verification_attempt_id,
                 qr_token_id,
+                qr_batch_id,
                 attempt_number,
                 validation_status,
                 failure_reason,
@@ -1625,6 +1633,109 @@ async def test_verify_qr_session_returns_closed_when_attempt_already_terminal() 
 
 
 @pytest.mark.asyncio
+async def test_verify_qr_session_accepts_a_checked_in_student() -> None:
+    """A mid-lecture QR window is aimed at students who already checked in.
+
+    Treating checked_in as a closed attempt would reject every scan the
+    feature exists to accept.
+    """
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeVerificationRepository(
+        build_qr_verification_record(
+            qr_session_id=qr_session_id,
+            token_hash=sha256("raw-test-token".encode("utf-8")).hexdigest(),
+            token_valid_from=current_time - timedelta(minutes=1),
+            token_expires_at=current_time + timedelta(minutes=5),
+        )
+    )
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(
+            attempt=VerificationAttemptRecord(
+                id=UUID("70000000-0000-0000-0000-000000000001"),
+                status=CHECKED_IN_STATUS,
+                failure_reason=None,
+            ),
+        ),
+    )
+
+    result = await service.verify_qr_session(
+        FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID
+    )
+
+    assert result.status == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_verify_qr_session_returns_closed_for_a_finalized_attempt() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeVerificationRepository(
+        build_qr_verification_record(
+            qr_session_id=qr_session_id,
+            token_hash=sha256("raw-test-token".encode("utf-8")).hexdigest(),
+            token_valid_from=current_time - timedelta(minutes=1),
+            token_expires_at=current_time + timedelta(minutes=5),
+        )
+    )
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        verification_repository=FakeStudentVerificationRepository(
+            attempt=VerificationAttemptRecord(
+                id=UUID("70000000-0000-0000-0000-000000000001"),
+                status=COMPLETED_STATUS,
+                failure_reason=None,
+            ),
+        ),
+    )
+
+    result = await service.verify_qr_session(
+        FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID
+    )
+
+    assert result.status == "closed"
+
+
+@pytest.mark.asyncio
+async def test_verify_qr_session_records_the_window_for_dynamic_qr() -> None:
+    """Dynamic QR persists no token row, so qr_batch_id is the only link
+    back to the window a scan satisfied."""
+    current_time = datetime(2026, 8, 6, 10, 4, 20, tzinfo=UTC)
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    attempt_id = UUID("70000000-0000-0000-0000-000000000001")
+    repository = FakeRepository(None)
+    repository.metadata = build_qr_batch_metadata(qr_session_id=qr_session_id)
+    repository.verification_record = build_qr_verification_record(
+        qr_session_id=qr_session_id,
+        qr_mode="dynamic",
+    )
+    service = QrSessionService(
+        repository=repository,
+        clock=lambda: current_time,
+        uuid_factory=lambda: UUID("80000000-0000-0000-0000-000000000001"),
+        dynamic_qr_hmac_secret="test-secret",
+        verification_repository=FakeStudentVerificationRepository(
+            attempt=VerificationAttemptRecord(
+                id=attempt_id, status=CHECKED_IN_STATUS, failure_reason=None
+            ),
+        ),
+    )
+    qr_value = generate_dynamic_qr_value(qr_session_id, 17, "test-secret")
+
+    result = await service.verify_qr_session(
+        FakePool(), qr_session_id, qr_value, STUDENT_USER_ID
+    )
+
+    assert result.status == "accepted"
+    recorded = repository.inserted_qr_validation_attempts[0]
+    assert recorded[2] is None, "dynamic QR has no token row"
+    assert recorded[3] == qr_session_id, "the window must still be recorded"
+
+
+@pytest.mark.asyncio
 async def test_verify_qr_session_persists_a_qr_validation_attempt() -> None:
     current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
     qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
@@ -1656,6 +1767,9 @@ async def test_verify_qr_session_persists_a_qr_validation_attempt() -> None:
             UUID("80000000-0000-0000-0000-000000000001"),
             attempt_id,
             qr_token_id,
+            # The window this scan was made against, so final attendance can
+            # tell one lecturer QR window from another.
+            qr_session_id,
             3,
             "accepted",
             None,

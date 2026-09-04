@@ -35,10 +35,8 @@ from modules.attendance_sessions.qr_session.repository import (
     QrVerificationRecord,
     STATIC_QR_MODE,
 )
-from modules.attendance_verification.geofence.repository import (
-    IN_PROGRESS_STATUS,
-    GeofenceRepository,
-)
+from modules.attendance_verification.attempt_status import is_open_attempt_status
+from modules.attendance_verification.geofence.repository import GeofenceRepository
 from modules.audit.repository import write_audit_log
 
 
@@ -393,7 +391,10 @@ class QrSessionService:
                 current_time,
             )
 
-        if attempt.status != IN_PROGRESS_STATUS:
+        # A checked-in student is exactly who a mid-lecture QR window is for,
+        # so both open statuses record a real result. Only terminal attempts
+        # (already failed, or already finalized) stop accepting evidence.
+        if not is_open_attempt_status(attempt.status):
             verification_status = "closed"
 
         async with pool.acquire() as connection:
@@ -411,6 +412,10 @@ class QrSessionService:
                     self._uuid_factory(),
                     attempt.id,
                     qr_token_id,
+                    # The window this scan was made against. qr_token_id only
+                    # resolves for static QR, so without this a dynamic scan
+                    # could not be traced back to the window it satisfied.
+                    qr_session_id,
                     attempt_number,
                     verification_status,
                     None if verification_status == "accepted" else verification_status,

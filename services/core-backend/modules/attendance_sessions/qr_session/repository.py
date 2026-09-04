@@ -283,27 +283,36 @@ class QrSessionRepository:
         qr_validation_attempt_id: UUID,
         verification_attempt_id: UUID,
         qr_token_id: UUID | None,
+        qr_batch_id: UUID,
         attempt_number: int,
         validation_status: str,
         failure_reason: str | None,
         validated_at: datetime,
     ) -> None:
+        """Records one scan against one QR window.
+
+        qr_batch_id is what final attendance counts DISTINCT values of, so it
+        is required. qr_token_id stays optional because only static QR
+        persists a token row — dynamic values are recomputed from HMAC.
+        """
         await connection.execute(
             """
             INSERT INTO attendance_verification.qr_validation_attempts (
                 id,
                 verification_attempt_id,
                 qr_token_id,
+                qr_batch_id,
                 attempt_number,
                 validation_status,
                 failure_reason,
                 validated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             """,
             qr_validation_attempt_id,
             verification_attempt_id,
             qr_token_id,
+            qr_batch_id,
             attempt_number,
             validation_status,
             failure_reason,

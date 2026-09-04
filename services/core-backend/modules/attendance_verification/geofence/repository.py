@@ -5,10 +5,14 @@ from uuid import UUID
 
 import asyncpg
 
+from modules.attendance_verification.attempt_status import (
+    FAILED_STATUS,
+    IN_PROGRESS_STATUS,
+)
 from modules.attendance_verification.geofence.types import GeofenceValidationResult
 
-IN_PROGRESS_STATUS = "in_progress"
-FAILED_STATUS = "failed"
+# Re-exported so existing importers of this module keep working.
+__all__ = ["FAILED_STATUS", "IN_PROGRESS_STATUS", "GeofenceRepository"]
 
 
 @dataclass(frozen=True)
