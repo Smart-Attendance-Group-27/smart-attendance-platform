@@ -6,6 +6,7 @@ import pytest
 from modules.attendance_verification.completion.exception import (
     ActiveStudentProfileNotFoundError,
     AttendanceSessionNotFoundError,
+    AttendanceSessionNotOpenError,
     VerificationNotStartedError,
 )
 from modules.attendance_verification.completion.repository import (
@@ -79,7 +80,12 @@ def build_session(**overrides) -> AttendanceSessionRecord:
 
 
 def build_attempt(**overrides) -> VerificationAttemptRecord:
-    defaults = dict(id=ATTEMPT_ID, status="in_progress", started_at=CURRENT_TIME)
+    defaults = dict(
+        id=ATTEMPT_ID,
+        status="in_progress",
+        started_at=CURRENT_TIME,
+        checked_in_at=None,
+    )
     defaults.update(overrides)
     return VerificationAttemptRecord(**defaults)
 
@@ -108,6 +114,8 @@ class FakeRepository:
         self.existing_attendance_status = existing_attendance_status
         self.inserted_attendance: dict | None = None
         self.completed_attempt_id: UUID | None = None
+        self.checked_in_attempt_id: UUID | None = None
+        self.checked_in_at: datetime | None = None
 
     async def lock_student_profile_for_user(self, connection, user_id):
         return self.student
@@ -140,25 +148,49 @@ class FakeRepository:
     async def complete_verification_attempt(self, connection, verification_attempt_id, completed_at):
         self.completed_attempt_id = verification_attempt_id
 
+    async def mark_verification_attempt_checked_in(
+        self, connection, verification_attempt_id, checked_in_at
+    ):
+        self.checked_in_attempt_id = verification_attempt_id
+        self.checked_in_at = checked_in_at
 
-async def test_completes_and_marks_present_when_all_required_checks_passed() -> None:
+
+async def test_checks_in_when_all_required_checks_passed() -> None:
     repository = FakeRepository()
     service = CompletionService(repository=repository)
 
     result = await service.complete_for_user(FakePool(), USER_ID, SESSION_ID)
 
-    assert result.status is CompletionStatus.COMPLETED
-    assert result.attendance_status == "present"
+    assert result.status is CompletionStatus.CHECKED_IN
     assert result.missing_requirements == []
-    assert repository.inserted_attendance == {
-        "session_id": SESSION_ID,
-        "student_id": STUDENT_ID,
-        "attendance_status": "present",
-    }
-    assert repository.completed_attempt_id == ATTEMPT_ID
+    assert result.checked_in_at is not None
+    assert repository.checked_in_attempt_id == ATTEMPT_ID
+    assert repository.checked_in_at == result.checked_in_at
 
 
-async def test_marks_late_when_started_after_late_threshold() -> None:
+async def test_check_in_never_writes_a_final_attendance_record() -> None:
+    """attendance_records is the FINAL result and belongs to finalization.
+
+    Check-in must not pre-empt it, even for a student who is comfortably on
+    time and has passed every required check.
+    """
+    repository = FakeRepository()
+    service = CompletionService(repository=repository)
+
+    result = await service.complete_for_user(FakePool(), USER_ID, SESSION_ID)
+
+    assert result.status is CompletionStatus.CHECKED_IN
+    assert result.attendance_status is None
+    assert repository.inserted_attendance is None
+    assert repository.completed_attempt_id is None
+
+
+async def test_check_in_does_not_decide_late_even_past_the_late_threshold() -> None:
+    """Late is a final-attendance concept, decided at finalization.
+
+    A student who checks in after late_after_at is still CHECKED_IN here;
+    only their checked_in_at timestamp records when it happened.
+    """
     repository = FakeRepository(
         session=build_session(late_after_at=CURRENT_TIME - timedelta(minutes=1)),
     )
@@ -166,8 +198,9 @@ async def test_marks_late_when_started_after_late_threshold() -> None:
 
     result = await service.complete_for_user(FakePool(), USER_ID, SESSION_ID)
 
-    assert result.attendance_status == "late"
-    assert repository.inserted_attendance["attendance_status"] == "late"
+    assert result.status is CompletionStatus.CHECKED_IN
+    assert result.attendance_status is None
+    assert repository.inserted_attendance is None
 
 
 async def test_reports_incomplete_when_a_required_check_has_not_passed() -> None:
@@ -178,8 +211,20 @@ async def test_reports_incomplete_when_a_required_check_has_not_passed() -> None
 
     assert result.status is CompletionStatus.INCOMPLETE
     assert result.missing_requirements == ["face_verification"]
+    assert result.checked_in_at is None
+    assert repository.checked_in_attempt_id is None
     assert repository.inserted_attendance is None
-    assert repository.completed_attempt_id is None
+
+
+async def test_reports_incomplete_when_geofence_has_not_passed() -> None:
+    repository = FakeRepository(geofence_status="failed")
+    service = CompletionService(repository=repository)
+
+    result = await service.complete_for_user(FakePool(), USER_ID, SESSION_ID)
+
+    assert result.status is CompletionStatus.INCOMPLETE
+    assert result.missing_requirements == ["geofence"]
+    assert repository.checked_in_attempt_id is None
 
 
 async def test_skips_qr_check_when_session_does_not_require_it() -> None:
@@ -188,7 +233,7 @@ async def test_skips_qr_check_when_session_does_not_require_it() -> None:
 
     result = await service.complete_for_user(FakePool(), USER_ID, SESSION_ID)
 
-    assert result.status is CompletionStatus.COMPLETED
+    assert result.status is CompletionStatus.CHECKED_IN
 
 
 async def test_reports_missing_qr_when_session_requires_it() -> None:
@@ -211,9 +256,30 @@ async def test_reports_failed_for_a_terminally_failed_attempt() -> None:
     assert repository.inserted_attendance is None
 
 
-async def test_is_idempotent_for_an_already_completed_attempt() -> None:
+async def test_is_idempotent_for_an_already_checked_in_attempt() -> None:
+    """Repeating the call must not move checked_in_at.
+
+    QR applicability is anchored to that timestamp, so re-stamping it would
+    silently change which QR windows a student is judged against.
+    """
+    original_checked_in_at = CURRENT_TIME - timedelta(minutes=5)
     repository = FakeRepository(
-        attempt=build_attempt(status="completed"),
+        attempt=build_attempt(status="checked_in", checked_in_at=original_checked_in_at),
+    )
+    service = CompletionService(repository=repository)
+
+    result = await service.complete_for_user(FakePool(), USER_ID, SESSION_ID)
+
+    assert result.status is CompletionStatus.CHECKED_IN
+    assert result.checked_in_at == original_checked_in_at
+    assert result.attendance_status is None
+    assert repository.checked_in_attempt_id is None
+    assert repository.inserted_attendance is None
+
+
+async def test_reports_the_final_result_for_an_already_finalized_attempt() -> None:
+    repository = FakeRepository(
+        attempt=build_attempt(status="completed", checked_in_at=CURRENT_TIME),
         existing_attendance_status="present",
     )
     service = CompletionService(repository=repository)
@@ -223,7 +289,33 @@ async def test_is_idempotent_for_an_already_completed_attempt() -> None:
     assert result.status is CompletionStatus.COMPLETED
     assert result.attendance_status == "present"
     assert repository.inserted_attendance is None
-    assert repository.completed_attempt_id is None
+    assert repository.checked_in_attempt_id is None
+
+
+async def test_rejects_a_closed_session() -> None:
+    repository = FakeRepository(session=build_session(closed_at=CURRENT_TIME))
+    service = CompletionService(repository=repository)
+
+    with pytest.raises(AttendanceSessionNotOpenError):
+        await service.complete_for_user(FakePool(), USER_ID, SESSION_ID)
+
+    assert repository.checked_in_attempt_id is None
+
+
+async def test_rejects_a_cancelled_session() -> None:
+    repository = FakeRepository(session=build_session(cancelled_at=CURRENT_TIME))
+    service = CompletionService(repository=repository)
+
+    with pytest.raises(AttendanceSessionNotOpenError):
+        await service.complete_for_user(FakePool(), USER_ID, SESSION_ID)
+
+
+async def test_rejects_a_session_that_is_not_active() -> None:
+    repository = FakeRepository(session=build_session(status="scheduled"))
+    service = CompletionService(repository=repository)
+
+    with pytest.raises(AttendanceSessionNotOpenError):
+        await service.complete_for_user(FakePool(), USER_ID, SESSION_ID)
 
 
 async def test_rejects_missing_student_profile() -> None:

@@ -16,6 +16,7 @@ from main import create_app
 from modules.attendance_verification.completion.exception import (
     ActiveStudentProfileNotFoundError,
     AttendanceSessionNotFoundError,
+    AttendanceSessionNotOpenError,
     VerificationNotStartedError,
 )
 from modules.attendance_verification.completion.route import get_completion_service
@@ -41,9 +42,9 @@ def student_token(make_access_token) -> str:
 class StubCompletionService:
     def __init__(self, *, result: CompletionResult | None = None, error: Exception | None = None) -> None:
         self.result = result or CompletionResult(
-            status=CompletionStatus.COMPLETED,
+            status=CompletionStatus.CHECKED_IN,
             verification_attempt_id=ATTEMPT_ID,
-            attendance_status="present",
+            attendance_status=None,
             missing_requirements=[],
             checked_in_at=datetime(2026, 8, 13, 5, 30, tzinfo=UTC),
         )
@@ -79,16 +80,38 @@ def client(jwks_document, service: StubCompletionService):
         yield test_client
 
 
-def test_completed_returns_camel_case_contract(client: TestClient, make_access_token) -> None:
+def test_checked_in_returns_camel_case_contract(client: TestClient, make_access_token) -> None:
+    """Success reports provisional check-in, not a final attendance status."""
     response = client.post(COMPLETE_URL, headers=authorize(student_token(make_access_token)))
 
     assert response.status_code == 200
     assert response.json() == {
-        "status": "completed",
-        "attendanceStatus": "present",
+        "status": "checked_in",
+        "attendanceStatus": None,
         "missingRequirements": [],
         "checkedInAt": "2026-08-13T05:30:00Z",
     }
+
+
+def test_already_finalized_attempt_reports_the_final_status(
+    jwks_document, make_access_token
+) -> None:
+    service = StubCompletionService(
+        result=CompletionResult(
+            status=CompletionStatus.COMPLETED,
+            verification_attempt_id=ATTEMPT_ID,
+            attendance_status="present",
+            missing_requirements=[],
+            checked_in_at=datetime(2026, 8, 13, 5, 30, tzinfo=UTC),
+        )
+    )
+    with build_client(jwks_document, service) as client:
+        response = client.post(COMPLETE_URL, headers=authorize(student_token(make_access_token)))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "completed"
+    assert body["attendanceStatus"] == "present"
 
 
 def test_incomplete_reports_missing_requirements(jwks_document, make_access_token) -> None:
@@ -142,6 +165,17 @@ def test_verification_not_started_returns_409(jwks_document, make_access_token) 
         response = client.post(COMPLETE_URL, headers=authorize(student_token(make_access_token)))
 
     assert response.status_code == 409
+
+
+def test_closed_session_returns_409(jwks_document, make_access_token) -> None:
+    service = StubCompletionService(
+        error=AttendanceSessionNotOpenError("The attendance session is already closed."),
+    )
+    with build_client(jwks_document, service) as client:
+        response = client.post(COMPLETE_URL, headers=authorize(student_token(make_access_token)))
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "The attendance session is already closed."
 
 
 def test_requires_bearer_token(client: TestClient) -> None:

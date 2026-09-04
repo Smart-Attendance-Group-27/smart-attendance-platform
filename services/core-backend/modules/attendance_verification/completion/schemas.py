@@ -6,6 +6,14 @@ from modules.attendance_verification.completion.service import CompletionResult
 
 
 class CompleteCheckInResponse(BaseModel):
+    """Result of the start-of-lecture check-in.
+
+    `status` is "checked_in" on success — provisional presence, not a final
+    attendance status. `attendanceStatus` stays null until the lecturer
+    finalizes the session; it is populated only when this call finds an
+    attempt that was already finalized.
+    """
+
     model_config = ConfigDict(populate_by_name=True)
 
     status: str

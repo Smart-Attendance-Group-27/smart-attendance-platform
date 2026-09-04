@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from modules.attendance_verification.completion.exception import (
     ActiveStudentProfileNotFoundError,
     AttendanceSessionNotFoundError,
+    AttendanceSessionNotOpenError,
     VerificationNotStartedError,
 )
 from modules.attendance_verification.completion.schemas import CompleteCheckInResponse
@@ -32,6 +33,13 @@ async def complete_check_in(
         Depends(get_completion_service),
     ] = None,  # type: ignore[assignment]
 ) -> CompleteCheckInResponse:
+    """Completes the start-of-lecture check-in for the calling student.
+
+    Success means the student passed the checks this session requires at the
+    start of the lecture and is now provisionally CHECKED_IN. It does not
+    decide final attendance — that happens once, when the session is
+    finalized.
+    """
     try:
         result = await completion_service.complete_for_user(
             http_request.app.state.db_pool,
@@ -42,7 +50,7 @@ async def complete_check_in(
         raise HTTPException(status.HTTP_404_NOT_FOUND, error.message) from error
     except AttendanceSessionNotFoundError as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, error.message) from error
-    except VerificationNotStartedError as error:
+    except (AttendanceSessionNotOpenError, VerificationNotStartedError) as error:
         raise HTTPException(status.HTTP_409_CONFLICT, error.message) from error
 
     return CompleteCheckInResponse.from_result(result)

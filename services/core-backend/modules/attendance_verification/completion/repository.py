@@ -6,6 +6,10 @@ import asyncpg
 
 IN_PROGRESS_STATUS = "in_progress"
 FAILED_STATUS = "failed"
+# Provisional: the student passed the start-of-lecture checks (geofence and
+# face). This is NOT a final attendance status — see COMPLETED_STATUS.
+CHECKED_IN_STATUS = "checked_in"
+# Terminal: the session was finalized and a final attendance record exists.
 COMPLETED_STATUS = "completed"
 
 PRESENT_STATUS = "present"
@@ -36,6 +40,10 @@ class VerificationAttemptRecord:
     id: UUID
     status: str | None
     started_at: datetime | None
+    # When initial check-in completed. NULL until the student passes it.
+    # Distinct from started_at, which is when the geofence step began: QR
+    # applicability is measured from when check-in *finished*.
+    checked_in_at: datetime | None = None
 
 
 class CompletionRepository:
@@ -94,7 +102,7 @@ class CompletionRepository:
     ) -> VerificationAttemptRecord | None:
         row = await connection.fetchrow(
             """
-            SELECT id, status, started_at
+            SELECT id, status, started_at, checked_in_at
             FROM attendance_verification.verification_attempts
             WHERE session_id = $1 AND student_id = $2
             FOR UPDATE
@@ -105,7 +113,10 @@ class CompletionRepository:
         if row is None:
             return None
         return VerificationAttemptRecord(
-            id=row["id"], status=row["status"], started_at=row["started_at"]
+            id=row["id"],
+            status=row["status"],
+            started_at=row["started_at"],
+            checked_in_at=row["checked_in_at"],
         )
 
     async def latest_geofence_status(
@@ -198,6 +209,29 @@ class CompletionRepository:
             student_id,
             attendance_status,
             RECORD_SOURCE_AUTOMATIC,
+        )
+
+    async def mark_verification_attempt_checked_in(
+        self,
+        connection: asyncpg.Connection,
+        verification_attempt_id: UUID,
+        checked_in_at: datetime,
+    ) -> None:
+        """Records the provisional CHECKED_IN state for one attempt.
+
+        completed_at is deliberately left NULL: the attempt is not finished,
+        it is only past the start-of-lecture checks. Session finalization is
+        what sets completed_at and writes the final attendance record.
+        """
+        await connection.execute(
+            """
+            UPDATE attendance_verification.verification_attempts
+            SET status = $2, checked_in_at = $3
+            WHERE id = $1
+            """,
+            verification_attempt_id,
+            CHECKED_IN_STATUS,
+            checked_in_at,
         )
 
     async def complete_verification_attempt(
