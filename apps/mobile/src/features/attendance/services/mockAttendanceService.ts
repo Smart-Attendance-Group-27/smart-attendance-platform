@@ -44,8 +44,17 @@ const attendanceSessions: Readonly<Record<string, AttendanceSession>> = {
 };
 
 const checkInResults: Readonly<Record<string, AttendanceCheckInResult>> = {
+  // The normal outcome of the start-of-lecture flow: provisionally present,
+  // final attendance still undecided.
   'attendance-session-active': {
     sessionId: 'attendance-session-active',
+    status: 'checked_in',
+    checkInTime: '2026-07-20T10:02:00+05:30',
+  },
+  // Sessions the lecturer already finalized, so the backend answers with a
+  // final status instead of a fresh check-in.
+  'attendance-session-present': {
+    sessionId: 'attendance-session-present',
     status: 'present',
     checkInTime: '2026-07-20T10:02:00+05:30',
   },

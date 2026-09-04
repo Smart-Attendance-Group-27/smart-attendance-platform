@@ -47,11 +47,14 @@ export class CoreApiAttendanceService implements AttendanceService {
   async getCheckInResult(
     sessionId: string,
   ): Promise<AttendanceCheckInResultLookupResult> {
-    // Asks the backend to finalize check-in: it re-checks, server-side, that
-    // every verification the session actually requires (geofence, face, QR)
-    // has genuinely passed, then writes the real attendance record. This
-    // used to be fabricated client-side from the phone's clock — the
-    // backend is now the sole source of truth for present/late.
+    // Completes the START-OF-LECTURE check-in. The backend re-checks,
+    // server-side, that the checks this session requires at the start have
+    // genuinely passed, then records the provisional CHECKED_IN state.
+    //
+    // It deliberately does NOT decide final attendance: the lecturer may
+    // still run QR verifications, and present/late is settled once, when the
+    // session is finalized. A `present`/`late` answer here only happens when
+    // the session was already finalized before this call.
     const result = await this.coreApiClient.post<unknown>(
       completeCheckInPath(sessionId),
       {},
@@ -87,20 +90,35 @@ function toCompleteCheckInOutcome(
   }
 
   const response = value as CompleteCheckInResponse;
-  if (
-    response.status !== 'completed' ||
-    (response.attendanceStatus !== 'present' && response.attendanceStatus !== 'late') ||
-    typeof response.checkedInAt !== 'string' ||
-    !response.checkedInAt.trim()
-  ) {
+
+  if (typeof response.checkedInAt !== 'string' || !response.checkedInAt.trim()) {
+    // Every successful outcome carries the moment check-in completed.
+    // "incomplete" and "failed" do not, and are reported as unavailable.
     return null;
   }
 
-  return {
-    sessionId,
-    status: response.attendanceStatus,
-    checkInTime: response.checkedInAt,
-  };
+  if (response.status === 'checked_in') {
+    return {
+      sessionId,
+      status: 'checked_in',
+      checkInTime: response.checkedInAt,
+    };
+  }
+
+  // The session was already finalized, so report the real final status
+  // rather than a check-in that has since been superseded.
+  if (
+    response.status === 'completed' &&
+    (response.attendanceStatus === 'present' || response.attendanceStatus === 'late')
+  ) {
+    return {
+      sessionId,
+      status: response.attendanceStatus,
+      checkInTime: response.checkedInAt,
+    };
+  }
+
+  return null;
 }
 
 function toActiveAttendanceSession(

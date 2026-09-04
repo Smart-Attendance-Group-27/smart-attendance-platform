@@ -36,11 +36,11 @@ describe('CoreApiAttendanceService.getCheckInResult', () => {
     jest.restoreAllMocks();
   });
 
-  test('asks the backend to finalize check-in and reports the real outcome', async () => {
+  test('reports the provisional checked-in state the backend returns', async () => {
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(
       jsonResponse(200, {
-        status: 'completed',
-        attendanceStatus: 'present',
+        status: 'checked_in',
+        attendanceStatus: null,
         missingRequirements: [],
         checkedInAt: '2026-08-19T12:45:34.235Z',
       }),
@@ -52,7 +52,7 @@ describe('CoreApiAttendanceService.getCheckInResult', () => {
       status: 'available',
       result: {
         sessionId: 'session-1',
-        status: 'present',
+        status: 'checked_in',
         checkInTime: '2026-08-19T12:45:34.235Z',
       },
     });
@@ -68,7 +68,39 @@ describe('CoreApiAttendanceService.getCheckInResult', () => {
     );
   });
 
-  test('reports late when the backend says late', async () => {
+  test('never invents a final attendance status from a check-in', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      jsonResponse(200, {
+        status: 'checked_in',
+        attendanceStatus: null,
+        missingRequirements: [],
+        checkedInAt: '2026-08-19T12:45:34.235Z',
+      }),
+    );
+
+    const lookup = await buildService().getCheckInResult('session-1');
+
+    expect(lookup.status === 'available' && lookup.result.status).not.toBe('present');
+    expect(lookup.status === 'available' && lookup.result.status).not.toBe('late');
+  });
+
+  test('reports the final status when the session was already finalized', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      jsonResponse(200, {
+        status: 'completed',
+        attendanceStatus: 'present',
+        missingRequirements: [],
+        checkedInAt: '2026-08-19T12:45:34.235Z',
+      }),
+    );
+
+    const lookup = await buildService().getCheckInResult('session-1');
+
+    expect(lookup.status).toBe('available');
+    expect(lookup.status === 'available' && lookup.result.status).toBe('present');
+  });
+
+  test('reports late when a finalized session settled on late', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue(
       jsonResponse(200, {
         status: 'completed',
@@ -82,6 +114,21 @@ describe('CoreApiAttendanceService.getCheckInResult', () => {
 
     expect(lookup.status).toBe('available');
     expect(lookup.status === 'available' && lookup.result.status).toBe('late');
+  });
+
+  test('reports unavailable when checked_in arrives without a timestamp', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      jsonResponse(200, {
+        status: 'checked_in',
+        attendanceStatus: null,
+        missingRequirements: [],
+        checkedInAt: null,
+      }),
+    );
+
+    await expect(buildService().getCheckInResult('session-1')).resolves.toEqual({
+      status: 'unavailable',
+    });
   });
 
   test('reports unavailable when a required step has not passed yet', async () => {

@@ -33,8 +33,10 @@ type CheckInResultScreenState =
 
 type ResultPresentation = {
   icon: SymbolViewProps['name'];
-  label: 'On-time' | 'Late';
+  label: 'Checked In' | 'On-time' | 'Late';
+  caption: string;
   message: string;
+  note: string;
   foreground: string;
   background: string;
 };
@@ -43,6 +45,23 @@ const resultPresentations: Record<
   AttendanceCheckInResult['status'],
   ResultPresentation
 > = {
+  // The normal outcome. Deliberately does NOT claim final attendance: the
+  // lecturer may still run QR verifications, and present/late is only
+  // decided when the session is closed.
+  checked_in: {
+    icon: {
+      ios: 'checkmark.circle.fill',
+      android: 'check_circle',
+      web: 'check_circle',
+    },
+    label: 'Checked In',
+    caption: 'Check-in Status',
+    message:
+      'You are checked in for the start of this lecture. Your final attendance is confirmed when your lecturer closes the session.',
+    note: 'Keep the app handy — your lecturer may run a QR check during the lecture.',
+    foreground: lightColors.success,
+    background: lightColors.successBackground,
+  },
   present: {
     icon: {
       ios: 'checkmark.circle.fill',
@@ -50,7 +69,9 @@ const resultPresentations: Record<
       web: 'check_circle',
     },
     label: 'On-time',
+    caption: 'Final Attendance',
     message: 'Your attendance has been recorded successfully.',
+    note: 'This session is finalised. No further action is needed.',
     foreground: lightColors.success,
     background: lightColors.successBackground,
   },
@@ -61,7 +82,9 @@ const resultPresentations: Record<
       web: 'schedule',
     },
     label: 'Late',
+    caption: 'Final Attendance',
     message: 'Your attendance has been recorded as late.',
+    note: 'This session is finalised. No further action is needed.',
     foreground: lightColors.warning,
     background: lightColors.warningBackground,
   },
@@ -73,7 +96,7 @@ function isSupportedResult(
 ) {
   return (
     result.sessionId === sessionId &&
-    (result.status === 'present' || result.status === 'late') &&
+    result.status in resultPresentations &&
     result.checkInTime.trim().length > 0
   );
 }
@@ -224,7 +247,7 @@ export function CheckInResultScreen({
             tintColor={presentation.foreground}
           />
           <View style={styles.statusCopy}>
-            <Text style={styles.statusCaption}>Check-in Status</Text>
+            <Text style={styles.statusCaption}>{presentation.caption}</Text>
             <Text
               style={[
                 styles.statusLabel,
@@ -264,9 +287,7 @@ export function CheckInResultScreen({
             size={20}
             tintColor={lightColors.success}
           />
-          <Text style={styles.noteText}>
-            You&apos;re all checked in for this session.
-          </Text>
+          <Text style={styles.noteText}>{presentation.note}</Text>
         </View>
 
         <View style={styles.action}>

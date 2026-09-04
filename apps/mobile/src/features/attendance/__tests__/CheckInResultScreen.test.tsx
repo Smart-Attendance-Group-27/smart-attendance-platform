@@ -7,10 +7,10 @@ import {
 
 import { CheckInResultScreen } from '../screens/CheckInResultScreen';
 
-type SuccessfulAttendanceOutcome = 'present' | 'late';
+type SuccessfulCheckInOutcome = 'checked_in' | 'present' | 'late';
 
 function createAttendanceService(
-  status: SuccessfulAttendanceOutcome,
+  status: SuccessfulCheckInOutcome,
   checkInTime: string,
 ) {
   return {
@@ -29,7 +29,7 @@ function createAttendanceService(
 }
 
 async function renderResult(
-  status: SuccessfulAttendanceOutcome = 'present',
+  status: SuccessfulCheckInOutcome = 'checked_in',
   checkInTime = '2026-07-20T10:02:00+05:30',
   onOpenQrScanner?: () => void,
 ) {
@@ -53,7 +53,7 @@ async function renderResult(
 }
 
 describe('CheckInResultScreen', () => {
-  test('shows a successful On-time result with its check-in time and return action', async () => {
+  test('shows a provisional Checked In result with its time and return action', async () => {
     const {
       findByText,
       getAllByText,
@@ -67,10 +67,7 @@ describe('CheckInResultScreen', () => {
     expect(getByRole('button', {
       name: 'Return to student home',
     })).toBeTruthy();
-    expect(await findByText('On-time')).toBeTruthy();
-    expect(
-      await findByText('Your attendance has been recorded successfully.'),
-    ).toBeTruthy();
+    expect(await findByText('Checked In')).toBeTruthy();
     expect(await findByText('Checked in at')).toBeTruthy();
     expect(await findByText('10:02')).toBeTruthy();
     expect(
@@ -83,6 +80,35 @@ describe('CheckInResultScreen', () => {
     ).toBeTruthy();
     expect(getAllByText('Verified')).toHaveLength(2);
     expect(queryByText('Late')).toBeNull();
+  });
+
+  test('does not claim a final attendance status after initial check-in', async () => {
+    const { findByText, queryByText } = await renderResult();
+
+    await findByText('Check-in Confirmed');
+
+    // The final present/late decision belongs to session finalization.
+    expect(queryByText('On-time')).toBeNull();
+    expect(queryByText('Final Attendance')).toBeNull();
+    expect(
+      queryByText('Your attendance has been recorded successfully.'),
+    ).toBeNull();
+    expect(
+      await findByText(/final attendance is confirmed when your lecturer closes/i),
+    ).toBeTruthy();
+  });
+
+  test('shows a final On-time result when the session was already finalized', async () => {
+    const { findByText } = await renderResult(
+      'present',
+      '2026-07-20T10:02:00+05:30',
+    );
+
+    expect(await findByText('On-time')).toBeTruthy();
+    expect(await findByText('Final Attendance')).toBeTruthy();
+    expect(
+      await findByText('Your attendance has been recorded successfully.'),
+    ).toBeTruthy();
   });
 
   test('shows Late as a successful result rather than a failure', async () => {
@@ -172,7 +198,7 @@ describe('CheckInResultScreen', () => {
           status: 'available';
           result: {
             sessionId: string;
-            status: 'present';
+            status: 'checked_in';
             checkInTime: string;
           };
         }) => void)
@@ -181,7 +207,7 @@ describe('CheckInResultScreen', () => {
       status: 'available';
       result: {
         sessionId: string;
-        status: 'present';
+        status: 'checked_in';
         checkInTime: string;
       };
     }>((resolve) => {
@@ -214,7 +240,7 @@ describe('CheckInResultScreen', () => {
         status: 'available',
         result: {
           sessionId: 'attendance-session-active',
-          status: 'present',
+          status: 'checked_in',
           checkInTime: '2026-07-20T10:02:00+05:30',
         },
       });

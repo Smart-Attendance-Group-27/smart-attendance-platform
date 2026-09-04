@@ -51,17 +51,29 @@ describe('CheckInSuccessRoute', () => {
     };
   });
 
-  test('loads the On-time result using the normalized session ID', async () => {
+  test('loads the provisional Checked In result using the normalized session ID', async () => {
     mockSearchParams = {
       sessionId: [' attendance-session-active ', 'ignored-session'],
     };
     const screen = await render(<CheckInSuccessRoute />);
 
     expect(await screen.findByText('Check-in Confirmed')).toBeTruthy();
-    expect(await screen.findByText('On-time')).toBeTruthy();
+    expect(await screen.findByText('Checked In')).toBeTruthy();
     expect(await screen.findByText('10:02')).toBeTruthy();
+    expect(screen.queryByText('On-time')).toBeNull();
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  test('loads a finalized On-time result when the session is already closed', async () => {
+    mockSearchParams = {
+      sessionId: 'attendance-session-present',
+    };
+    const screen = await render(<CheckInSuccessRoute />);
+
+    expect(await screen.findByText('Check-in Confirmed')).toBeTruthy();
+    expect(await screen.findByText('On-time')).toBeTruthy();
+    expect(await screen.findByText('Final Attendance')).toBeTruthy();
   });
 
   test('loads the deterministic Late result as a successful check-in', async () => {
