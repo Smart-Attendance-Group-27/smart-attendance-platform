@@ -65,7 +65,9 @@ class Settings(BaseSettings):
     keycloak_jwks_cache_seconds: float = Field(default=300, gt=0)
     keycloak_jwks_min_refresh_seconds: float = Field(default=30, ge=0)
     keycloak_jwks_timeout_seconds: float = Field(default=5, gt=0)
-    keycloak_leeway_seconds: float = Field(default=0, ge=0)
+    # Allow small clock differences between Keycloak and API hosts when
+    # validating time-based JWT claims such as iat, nbf, and exp.
+    keycloak_leeway_seconds: float = Field(default=5, ge=0)
 
     # Required by dynamic QR generation and verification. Static QR sessions
     # do not use this secret.
@@ -73,6 +75,7 @@ class Settings(BaseSettings):
 
     # Internal service URL for the separately deployed face-verification API.
     face_verification_service_url: str | None = "http://localhost:8001"
+    face_verification_timeout_seconds: float = Field(default=30, gt=0)
 
     # General geofence safeguards. Session-specific radius, accuracy buffer and
     # maximum accuracy values are loaded from the session geofence snapshot.

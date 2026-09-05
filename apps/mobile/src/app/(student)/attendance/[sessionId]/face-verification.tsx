@@ -5,20 +5,12 @@ import { Text } from 'react-native';
 import { ScreenContainer } from '../../../../components/ui';
 import { useAuth } from '../../../../features/auth/context/AuthContext';
 import { FaceVerificationScreen } from '../../../../features/face-verification/screens/FaceVerificationScreen';
-import { FaceVerificationApiService } from '../../../../features/face-verification/services/faceVerificationApiService';
+import { CoreApiAttendanceFaceVerificationService } from '../../../../features/face-verification/services/coreApiAttendanceFaceVerificationService';
+import { CoreApiClient } from '../../../../services/api/coreApiClient';
 
 export default function FaceVerificationRoute() {
   const router = useRouter();
   const { session } = useAuth();
-  const accessToken =
-    session.status === 'authenticated' ? session.accessToken : undefined;
-  const faceVerificationService = useMemo(
-    () =>
-      new FaceVerificationApiService({
-        getAccessToken: () => accessToken,
-      }),
-    [accessToken],
-  );
   const {
     sessionId: sessionIdParam,
     requiresQr: requiresQrParam,
@@ -34,6 +26,18 @@ export default function FaceVerificationRoute() {
     ? requiresQrParam[0]
     : requiresQrParam;
   const requiresQr = requiresQrValue === '1';
+  const accessToken =
+    session.status === 'authenticated' ? session.accessToken : undefined;
+  const faceVerificationService = useMemo(
+    () =>
+      new CoreApiAttendanceFaceVerificationService(
+        new CoreApiClient({
+          getAccessToken: () => accessToken,
+          timeoutMs: 30_000,
+        }),
+      ),
+    [accessToken],
+  );
 
   if (session.status !== 'authenticated') {
     return null;

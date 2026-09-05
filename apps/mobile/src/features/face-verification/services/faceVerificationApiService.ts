@@ -9,20 +9,16 @@ import type {
   FaceReadinessResult,
   FaceReadinessStatus,
 } from '../types/readinessStatus';
-import type {
-  FaceVerificationRequest,
-  FaceVerificationResult,
-} from '../types/faceVerification';
-import type { FaceVerificationService } from './faceVerificationService';
+import type { FaceVerificationResult } from '../types/faceVerification';
 
 const defaultFaceVerificationApiBaseUrl = 'http://10.0.2.2:8001';
 const defaultFaceVerificationRequestTimeoutMs = 5_000;
+// Local CPU inference can take longer than an ordinary status request. Keep
+// the upload request alive after capture so the app receives the result that
+// the service records.
+const defaultFaceVerificationProcessingTimeoutMs = 30_000;
 const readinessStatusPath = '/api/v1/face-verification/readiness/status';
 const readinessVerificationPath = '/api/v1/face-verification/readiness';
-
-function attendanceVerificationPath(sessionId: string): string {
-  return `/api/v1/face-verification/attendance-sessions/${encodeURIComponent(sessionId)}/verify`;
-}
 
 const readinessStatuses = new Set<FaceReadinessStatus>([
   'not_checked',
@@ -46,6 +42,7 @@ export type FaceVerificationApiServiceOptions = {
   readonly getAccessToken: AccessTokenProvider;
   readonly baseUrl?: string;
   readonly timeoutMs?: number;
+  readonly verificationTimeoutMs?: number;
 };
 
 export function resolveFaceVerificationApiBaseUrl(): string {
@@ -61,20 +58,29 @@ export function resolveFaceVerificationApiBaseUrl(): string {
  * Authenticated client for the separately deployed face-verification service.
  * The current access token is requested immediately before every API call.
  */
-export class FaceVerificationApiService implements FaceVerificationService {
+export class FaceVerificationApiService {
   private readonly apiClient: CoreApiClient;
+  private readonly verificationApiClient: CoreApiClient;
 
   constructor({
     getAccessToken,
     baseUrl,
     timeoutMs = defaultFaceVerificationRequestTimeoutMs,
+    verificationTimeoutMs = defaultFaceVerificationProcessingTimeoutMs,
   }: FaceVerificationApiServiceOptions) {
+    const resolvedBaseUrl = baseUrl
+      ? stripTrailingSlash(baseUrl)
+      : resolveFaceVerificationApiBaseUrl();
+
     this.apiClient = new CoreApiClient({
-      baseUrl: baseUrl
-        ? stripTrailingSlash(baseUrl)
-        : resolveFaceVerificationApiBaseUrl(),
+      baseUrl: resolvedBaseUrl,
       getAccessToken,
       timeoutMs,
+    });
+    this.verificationApiClient = new CoreApiClient({
+      baseUrl: resolvedBaseUrl,
+      getAccessToken,
+      timeoutMs: verificationTimeoutMs,
     });
   }
 
@@ -96,32 +102,8 @@ export class FaceVerificationApiService implements FaceVerificationService {
     const captureFile = new File(captureUri);
     formData.append('image', captureFile);
 
-    const result = await this.apiClient.postFormData<unknown>(
+    const result = await this.verificationApiClient.postFormData<unknown>(
       readinessVerificationPath,
-      formData,
-    );
-
-    if (result.status !== 'ok') {
-      return { status: 'verification_failure' };
-    }
-
-    return toFaceVerificationResult(result.data);
-  }
-
-  /** Verifies a live capture against a specific attendance session's
-   * verification attempt (created by the geofence step) — distinct from
-   * verifyReadiness, which checks profile enrolment in isolation and never
-   * touches a session or an attendance record. */
-  async verifyFace({
-    sessionId,
-    capture,
-  }: FaceVerificationRequest): Promise<FaceVerificationResult> {
-    const formData = new FormData();
-    const captureFile = new File(capture.uri);
-    formData.append('image', captureFile);
-
-    const result = await this.apiClient.postFormData<unknown>(
-      attendanceVerificationPath(sessionId),
       formData,
     );
 

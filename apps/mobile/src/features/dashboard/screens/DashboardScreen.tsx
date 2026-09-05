@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
   Pressable,
@@ -66,6 +66,7 @@ export function DashboardScreen({
   const [courseCards, setCourseCards] = useState<CourseSummary[]>([]);
   const [requiresReadinessCheck, setRequiresReadinessCheck] = useState(false);
   const [userName, setUserName] = useState<string>('');
+  const hasFocusedDashboard = useRef(false);
 
   const today = useMemo(() => new Date(), []);
   const dateString = useMemo(
@@ -162,6 +163,40 @@ export function DashboardScreen({
       mounted = false;
     };
   }, [activeSessionService, courseService, faceVerificationApiService, profileServiceInstance, service]);
+
+  // The dashboard remains mounted while the readiness route is open. Refresh
+  // only the readiness state when it receives focus again so a successful
+  // check removes the action immediately without flashing the whole dashboard
+  // through another loading state.
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedDashboard.current) {
+        hasFocusedDashboard.current = true;
+        return undefined;
+      }
+
+      if (!faceVerificationApiService) {
+        return undefined;
+      }
+
+      let active = true;
+
+      void (async () => {
+        const result =
+          await faceVerificationApiService.getReadinessStatus();
+
+        if (active && result.status === 'loaded') {
+          setRequiresReadinessCheck(
+            result.readiness.requiresReadinessCheck,
+          );
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [faceVerificationApiService]),
+  );
 
   const handleStart = (sessionId?: string) => {
     if (!sessionId) return;

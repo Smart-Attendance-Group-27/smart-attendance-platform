@@ -13,7 +13,7 @@ from adapters.core_api_student_profile_client import (
 )
 
 
-bearer_scheme = HTTPBearer(auto_error=False)
+bearer_scheme = HTTPBearer(auto_error=False) #reads a bearer token from the request header
 BEARER_CHALLENGE = {"WWW-Authenticate": "Bearer"}
 
 
