@@ -47,6 +47,7 @@ def build_session() -> ActiveAttendanceSessionRecord:
         requires_face_verification=True,
         requires_geofence=True,
         requires_qr=False,
+        check_in_completed=False,
     )
 
 
@@ -119,6 +120,7 @@ def test_returns_privacy_safe_camel_case_sessions(
             "requiresFaceVerification": True,
             "requiresGeofence": True,
             "requiresQr": False,
+            "checkInCompleted": False,
         }
     ]
 
