@@ -361,5 +361,6 @@ function buildActiveSession(id: string, sessionTitle: string) {
     requiresFaceVerification: true,
     requiresGeofence: true,
     requiresQr: false,
+    checkInCompleted: false,
   };
 }
