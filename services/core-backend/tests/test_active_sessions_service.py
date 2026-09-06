@@ -100,6 +100,7 @@ def build_session() -> ActiveAttendanceSessionRecord:
         course_name="Software Engineering Project",
         session_title="Geofence Demo - Near Centre",
         session_type="lecture",
+        lecturer_names="Dr. N. Perera",
         scheduled_start_at=CURRENT_TIME - timedelta(minutes=5),
         scheduled_end_at=CURRENT_TIME + timedelta(hours=1),
         check_in_opens_at=CURRENT_TIME - timedelta(minutes=2),
@@ -109,6 +110,7 @@ def build_session() -> ActiveAttendanceSessionRecord:
         requires_face_verification=True,
         requires_geofence=True,
         requires_qr=False,
+        check_in_completed=False,
     )
 
 
@@ -176,6 +178,7 @@ async def test_repository_maps_rows_and_enforces_discovery_filters() -> None:
                 "course_name": session.course_name,
                 "session_title": session.session_title,
                 "session_type": session.session_type,
+                "lecturer_names": session.lecturer_names,
                 "scheduled_start_at": session.scheduled_start_at,
                 "scheduled_end_at": session.scheduled_end_at,
                 "check_in_opens_at": session.check_in_opens_at,
@@ -185,6 +188,7 @@ async def test_repository_maps_rows_and_enforces_discovery_filters() -> None:
                 "requires_face_verification": True,
                 "requires_geofence": True,
                 "requires_qr": False,
+                "check_in_completed": False,
             }
         ],
     )
@@ -205,6 +209,7 @@ async def test_repository_maps_rows_and_enforces_discovery_filters() -> None:
     assert "session.requires_geofence IS TRUE" in connection.query
     assert "session.check_in_opens_at <= $2" in connection.query
     assert "session.check_in_closes_at > $2" in connection.query
+    assert "attendance_verification.attendance_records" in connection.query
     assert "ORDER BY session.scheduled_start_at ASC, session.id ASC" in connection.query
     assert "centre_latitude" not in connection.query
     assert "centre_longitude" not in connection.query
