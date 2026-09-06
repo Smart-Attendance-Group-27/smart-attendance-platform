@@ -5,12 +5,16 @@ import {
   jest,
   test,
 } from '@jest/globals';
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import LocationCheckRoute from '../../../app/(student)/attendance/[sessionId]/location-check';
 
 const mockBack = jest.fn();
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
+let mockLocationResult:
+  | { status: 'inside_geofence' }
+  | { status: 'already_checked_in' };
 let mockSearchParams: {
   sessionId?: string | string[];
 };
@@ -27,6 +31,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({
     back: mockBack,
     push: mockPush,
+    replace: mockReplace,
   }),
 }));
 
@@ -37,7 +42,7 @@ jest.mock('../../auth/context/AuthContext', () => ({
 jest.mock('../services/liveLocationService', () => ({
   LiveLocationService: class {
     async validateLocation() {
-      return { status: 'inside_geofence' as const };
+      return mockLocationResult;
     }
   },
 }));
@@ -46,6 +51,8 @@ describe('LocationCheckRoute', () => {
   beforeEach(() => {
     mockBack.mockClear();
     mockPush.mockClear();
+    mockReplace.mockClear();
+    mockLocationResult = { status: 'inside_geofence' };
     mockSearchParams = {
       sessionId: 'attendance-session-active',
     };
@@ -100,6 +107,26 @@ describe('LocationCheckRoute', () => {
     );
 
     expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  test('replaces location verification with the existing check-in result', async () => {
+    mockLocationResult = { status: 'already_checked_in' };
+    const screen = await render(<LocationCheckRoute />);
+
+    await fireEvent.press(
+      screen.getByRole('button', {
+        name: 'Allow location access and check classroom location',
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith({
+        pathname:
+          '/(student)/attendance/[sessionId]/check-in-success',
+        params: { sessionId: 'attendance-session-active' },
+      });
+    });
     expect(mockPush).not.toHaveBeenCalled();
   });
 

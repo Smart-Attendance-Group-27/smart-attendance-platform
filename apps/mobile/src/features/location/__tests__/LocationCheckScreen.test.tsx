@@ -20,6 +20,7 @@ type ScreenTestProps = {
   sessionId: string;
   locationService: LocationService;
   onBack: () => void;
+  onAlreadyCheckedIn: (sessionId: string) => void;
   onLocationValidated: (sessionId: string) => void;
 };
 
@@ -161,6 +162,7 @@ function createScreenProps(
     sessionId: 'attendance-session-active',
     locationService,
     onBack: jest.fn(),
+    onAlreadyCheckedIn: jest.fn(),
     onLocationValidated: jest.fn(),
   };
 }
@@ -274,6 +276,26 @@ describe('LocationCheckScreen', () => {
     expect(props.onLocationValidated).toHaveBeenCalledWith(
       'attendance-session-active',
     );
+  });
+
+  test('redirects an already-completed student without showing an error', async () => {
+    const { service } = createService({ status: 'already_checked_in' });
+    const props = createScreenProps(service);
+    const screen = await renderScreen(props);
+
+    await fireEvent.press(
+      screen.getByRole('button', {
+        name: 'Allow location access and check classroom location',
+      }),
+    );
+
+    await waitFor(() => {
+      expect(props.onAlreadyCheckedIn).toHaveBeenCalledWith(
+        'attendance-session-active',
+      );
+    });
+    expect(screen.queryByText('Attendance session unavailable')).toBeNull();
+    expect(props.onLocationValidated).not.toHaveBeenCalled();
   });
 
   test.each(retryableOutcomes)(
