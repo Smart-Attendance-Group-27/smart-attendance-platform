@@ -18,3 +18,6 @@ class AttendanceFaceVerificationResponse(BaseModel):
     attempt_number: int = Field(alias="attemptNumber")
     can_retry: bool = Field(alias="canRetry")
 
+
+class AttendanceFaceProgressResponse(BaseModel):
+    status: Literal["passed", "required"]

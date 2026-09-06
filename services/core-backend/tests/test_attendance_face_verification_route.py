@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from conftest import (
     FakePool,
+    STUDENT_USER_ID,
     build_authentication_service_for_tests,
     build_settings,
     default_connection,
@@ -14,6 +15,7 @@ from modules.attendance_verification.face.client import (
 )
 from modules.attendance_verification.face.route import (
     get_face_verification_service_client,
+    get_face_progress_repository,
 )
 from modules.identity.auth.dependencies import get_authentication_service
 
@@ -32,6 +34,16 @@ class StubFaceVerificationClient:
         return self.result
 
 
+class StubFaceProgressRepository:
+    def __init__(self, passed: bool) -> None:
+        self.passed = passed
+        self.calls: list[dict[str, object]] = []
+
+    async def has_passed(self, _pool, **kwargs):
+        self.calls.append(kwargs)
+        return self.passed
+
+
 def build_client(jwks_document, service: StubFaceVerificationClient) -> TestClient:
     app = create_app(enable_database=False)
     app.state.settings = build_settings()
@@ -43,6 +55,39 @@ def build_client(jwks_document, service: StubFaceVerificationClient) -> TestClie
         lambda: service
     )
     return TestClient(app, raise_server_exceptions=False)
+
+
+def test_reports_that_face_verification_already_passed(
+    jwks_document,
+    make_access_token,
+) -> None:
+    service = StubFaceVerificationClient(
+        InternalFaceVerificationResult(
+            status="failed",
+            attempt_number=1,
+            can_retry=True,
+        )
+    )
+    repository = StubFaceProgressRepository(passed=True)
+    app_client = build_client(jwks_document, service)
+    app_client.app.dependency_overrides[get_face_progress_repository] = (
+        lambda: repository
+    )
+
+    with app_client as client:
+        response = client.get(
+            URL,
+            headers={"Authorization": f"Bearer {make_access_token()}"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "passed"}
+    assert repository.calls == [
+        {
+            "user_id": STUDENT_USER_ID,
+            "session_id": SESSION_ID,
+        }
+    ]
 
 
 def test_maps_internal_pass_and_forwards_authenticated_capture(
@@ -106,4 +151,3 @@ def test_maps_last_internal_failure_as_non_retryable(
         "attemptNumber": 3,
         "canRetry": False,
     }
-

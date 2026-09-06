@@ -11,8 +11,12 @@ from modules.attendance_verification.face.client import (
     InternalFaceVerificationResult,
 )
 from modules.attendance_verification.face.schemas import (
+    AttendanceFaceProgressResponse,
     AttendanceFaceVerificationResponse,
     PublicFaceStatus,
+)
+from modules.attendance_verification.face.repository import (
+    AttendanceFaceProgressRepository,
 )
 from modules.identity.auth.dependencies import CurrentStudent
 
@@ -24,6 +28,30 @@ router = APIRouter(
     prefix="/attendance-sessions/{session_id}/face-verifications",
     tags=["attendance-face-verification"],
 )
+
+
+def get_face_progress_repository() -> AttendanceFaceProgressRepository:
+    return AttendanceFaceProgressRepository()
+
+
+@router.get("", response_model=AttendanceFaceProgressResponse)
+async def get_attendance_face_progress(
+    session_id: UUID,
+    request: Request,
+    current_student: CurrentStudent,
+    repository: Annotated[
+        AttendanceFaceProgressRepository,
+        Depends(get_face_progress_repository),
+    ],
+) -> AttendanceFaceProgressResponse:
+    passed = await repository.has_passed(
+        request.app.state.db_pool,
+        user_id=current_student.user_id,
+        session_id=session_id,
+    )
+    return AttendanceFaceProgressResponse(
+        status="passed" if passed else "required"
+    )
 
 
 def get_face_verification_service_client(
