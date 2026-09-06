@@ -47,6 +47,13 @@ export default function AttendanceSessionDetailsRoute() {
     <AttendanceSessionDetailsScreen
       attendanceService={attendanceService}
       onBack={() => router.back()}
+      onCheckInCompleted={(completedSessionId) =>
+        router.replace({
+          pathname:
+            '/(student)/attendance/[sessionId]/check-in-success',
+          params: { sessionId: completedSessionId },
+        })
+      }
       onStartCheckIn={(requiresQr) =>
         router.push({
           pathname:
