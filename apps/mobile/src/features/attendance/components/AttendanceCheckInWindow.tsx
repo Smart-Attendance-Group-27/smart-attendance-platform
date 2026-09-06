@@ -29,6 +29,16 @@ const statusContent = {
     backgroundColor: lightColors.neutralBackground,
     icon: { ios: 'lock', android: 'lock', web: 'lock' },
   },
+  completed: {
+    label: 'Completed',
+    color: lightColors.success,
+    backgroundColor: lightColors.successBackground,
+    icon: {
+      ios: 'checkmark.circle.fill',
+      android: 'check_circle',
+      web: 'check_circle',
+    },
+  },
 } as const;
 
 export function AttendanceCheckInWindow({

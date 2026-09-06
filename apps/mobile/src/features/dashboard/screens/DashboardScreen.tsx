@@ -443,7 +443,7 @@ function toDashboardSession(
     startTime: session.scheduledStartAt,
     endTime: session.checkInClosesAt,
     lateThreshold: session.lateAfterAt ?? session.checkInClosesAt,
-    checkInStatus: 'open',
+    checkInStatus: session.checkInCompleted ? 'completed' : 'open',
     sessionTitle: session.sessionTitle,
     venue: session.venue ?? undefined,
   };

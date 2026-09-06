@@ -155,7 +155,7 @@ function toAttendanceSession(
     checkInOpensAt: session.checkInOpensAt,
     checkInClosesAt: session.checkInClosesAt,
     lateThreshold: session.lateAfterAt ?? session.checkInClosesAt,
-    checkInStatus: 'open',
+    checkInStatus: session.checkInCompleted ? 'completed' : 'open',
     requiresQr: session.requiresQr,
   };
 }

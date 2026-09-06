@@ -16,7 +16,7 @@ export type AttendanceSession = {
   startTime: string;
   endTime: string;
   lateThreshold: string;
-  checkInStatus: 'not_started' | 'open' | 'closed';
+  checkInStatus: 'not_started' | 'open' | 'closed' | 'completed';
   // Optional UI-friendly fields used by the mobile app
   sessionTitle?: string;
   venue?: string;
