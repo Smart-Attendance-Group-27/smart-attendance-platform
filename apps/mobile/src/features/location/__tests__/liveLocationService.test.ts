@@ -218,4 +218,15 @@ describe('LiveLocationService', () => {
       ).resolves.toEqual({ status: expectedStatus });
     },
   );
+
+  test('preserves an already-completed check-in outcome', async () => {
+    const { service } = buildService(
+      { status: 'captured', reading },
+      { status: 'already-checked-in' },
+    );
+
+    await expect(
+      service.validateLocation('attendance-session-active'),
+    ).resolves.toEqual({ status: 'already_checked_in' });
+  });
 });

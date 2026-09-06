@@ -22,3 +22,4 @@ class ActiveAttendanceSessionResponse(BaseModel):
     requires_face_verification: bool = Field(alias="requiresFaceVerification")
     requires_geofence: bool = Field(alias="requiresGeofence")
     requires_qr: bool = Field(alias="requiresQr")
+    check_in_completed: bool = Field(alias="checkInCompleted")

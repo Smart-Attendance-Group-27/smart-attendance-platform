@@ -35,7 +35,7 @@ export default function FaceVerificationRoute() {
           getAccessToken: () => accessToken,
           timeoutMs: 30_000,
         }),
-      ),
+    ),
     [accessToken],
   );
 

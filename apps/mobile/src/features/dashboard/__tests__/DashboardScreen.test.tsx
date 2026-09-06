@@ -173,6 +173,93 @@ describe('DashboardScreen', () => {
     expect(getActiveAttendanceSession).not.toHaveBeenCalled();
   });
 
+  test('opens the existing check-in result for a completed student', async () => {
+    const activeSessionService: ActiveAttendanceSessionService = {
+      async listMyActiveSessions() {
+        return {
+          status: 'loaded',
+          sessions: [
+            {
+              ...buildActiveSession(
+                '40000000-0000-0000-0000-000000000001',
+                'Completed attendance',
+              ),
+              checkInCompleted: true,
+            },
+          ],
+        };
+      },
+    };
+
+    const screen = await render(
+      <DashboardScreen
+        activeSessionService={activeSessionService}
+        dashboardService={createEmptyDashboardService()}
+      />,
+    );
+
+    fireEvent.press(
+      await screen.findByRole('button', { name: 'Check-in result' }),
+    );
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname:
+        '/(student)/attendance/[sessionId]/check-in-success',
+      params: {
+        sessionId: '40000000-0000-0000-0000-000000000001',
+      },
+    });
+    expect(
+      screen.queryByRole('button', { name: 'Start attendance' }),
+    ).toBeNull();
+  });
+
+  test('refreshes a completed check-in when the dashboard regains focus', async () => {
+    const listMyActiveSessions =
+      jest.fn<ActiveAttendanceSessionService['listMyActiveSessions']>();
+    listMyActiveSessions
+      .mockResolvedValueOnce({
+        status: 'loaded',
+        sessions: [
+          buildActiveSession(
+            '40000000-0000-0000-0000-000000000001',
+            'Attendance in progress',
+          ),
+        ],
+      })
+      .mockResolvedValueOnce({
+        status: 'loaded',
+        sessions: [
+          {
+            ...buildActiveSession(
+              '40000000-0000-0000-0000-000000000001',
+              'Attendance in progress',
+            ),
+            checkInCompleted: true,
+          },
+        ],
+      });
+    const screen = await render(
+      <DashboardScreen
+        activeSessionService={{ listMyActiveSessions }}
+        dashboardService={createEmptyDashboardService()}
+      />,
+    );
+
+    expect(
+      await screen.findByRole('button', { name: 'Start attendance' }),
+    ).toBeTruthy();
+
+    await act(async () => {
+      mockFocusCallback?.();
+    });
+
+    expect(
+      await screen.findByRole('button', { name: 'Check-in result' }),
+    ).toBeTruthy();
+    expect(listMyActiveSessions).toHaveBeenCalledTimes(2);
+  });
+
   test('shows an error instead of mock active-session data after an API failure', async () => {
     const dashboardService: DashboardService = {
       async getUpcomingLectures() {
@@ -361,5 +448,6 @@ function buildActiveSession(id: string, sessionTitle: string) {
     requiresFaceVerification: true,
     requiresGeofence: true,
     requiresQr: false,
+    checkInCompleted: false,
   };
 }

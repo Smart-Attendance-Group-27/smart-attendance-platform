@@ -14,6 +14,15 @@ type AttendanceFaceVerificationResponse = {
   readonly canRetry?: unknown;
 };
 
+type AttendanceFaceProgressResponse = {
+  readonly status?: unknown;
+};
+
+export type AttendanceFaceProgress =
+  | 'passed'
+  | 'required'
+  | 'unavailable';
+
 const supportedStatuses = new Set([
   'success',
   'face_not_detected',
@@ -25,6 +34,23 @@ export class CoreApiAttendanceFaceVerificationService
   implements FaceVerificationService
 {
   constructor(private readonly coreApiClient: CoreApiClient) {}
+
+  async getProgress(sessionId: string): Promise<AttendanceFaceProgress> {
+    const result = await this.coreApiClient.get<unknown>(
+      `/api/v1/attendance-sessions/${encodeURIComponent(
+        sessionId,
+      )}/face-verifications`,
+    );
+
+    if (result.status !== 'ok' || !result.data || typeof result.data !== 'object') {
+      return 'unavailable';
+    }
+
+    const response = result.data as AttendanceFaceProgressResponse;
+    return response.status === 'passed' || response.status === 'required'
+      ? response.status
+      : 'unavailable';
+  }
 
   async verifyFace(
     request: FaceVerificationRequest,

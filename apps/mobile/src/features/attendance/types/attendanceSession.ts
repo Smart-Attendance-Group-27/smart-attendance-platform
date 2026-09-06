@@ -6,7 +6,8 @@ export type AttendanceSessionType =
 export type AttendanceCheckInStatus =
   | 'not_started'
   | 'open'
-  | 'closed';
+  | 'closed'
+  | 'completed';
 
 export type AttendanceSession = {
   id: string;

@@ -59,6 +59,13 @@ export default function LocationCheckRoute() {
     <LocationCheckScreen
       locationService={locationService}
       onBack={() => router.back()}
+      onAlreadyCheckedIn={(completedSessionId) =>
+        router.replace({
+          pathname:
+            '/(student)/attendance/[sessionId]/check-in-success',
+          params: { sessionId: completedSessionId },
+        })
+      }
       onLocationValidated={(validatedSessionId) =>
         router.push({
           pathname:

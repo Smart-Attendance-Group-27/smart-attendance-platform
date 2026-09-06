@@ -5,8 +5,10 @@ from uuid import UUID, uuid4
 
 import asyncpg
 
+from modules.attendance_verification.completion.repository import CompletionRepository
 from modules.attendance_verification.geofence.exception import (
     ActiveStudentProfileNotFoundError,
+    AttendanceAlreadyCompletedError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
     CheckInClosedError,
@@ -50,6 +52,7 @@ class GeofenceValidationService:
         policy: GeofenceValidationPolicy,
         max_attempts: int,
         repository: GeofenceRepository | None = None,
+        completion_repository: CompletionRepository | None = None,
         clock: Callable[[], datetime] | None = None,
         uuid_factory: Callable[[], UUID] | None = None,
     ) -> None:
@@ -59,6 +62,7 @@ class GeofenceValidationService:
         self._policy = policy
         self._max_attempts = max_attempts
         self._repository = repository or GeofenceRepository()
+        self._completion_repository = completion_repository or CompletionRepository()
         self._clock = clock or self._utc_now
         self._uuid_factory = uuid_factory or uuid4
 
@@ -84,6 +88,18 @@ class GeofenceValidationService:
                     connection,
                     session_id,
                 )
+                if session is not None:
+                    attendance_status = (
+                        await self._completion_repository.find_attendance_status(
+                            connection,
+                            session_id,
+                            student.id,
+                        )
+                    )
+                    if attendance_status is not None:
+                        raise AttendanceAlreadyCompletedError(
+                            "Attendance has already been recorded for this session.",
+                        )
                 self._validate_session(session, validated_at)
                 assert session is not None
 

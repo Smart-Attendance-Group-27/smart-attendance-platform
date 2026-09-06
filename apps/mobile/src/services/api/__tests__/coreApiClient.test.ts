@@ -107,6 +107,23 @@ describe('CoreApiClient', () => {
     expect(result).toEqual({ status: 'network-error' });
   });
 
+  test('returns a structured backend error code without exposing its message', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      jsonResponse(409, {
+        detail: {
+          code: 'ATTENDANCE_ALREADY_COMPLETED',
+          message: 'Attendance has already been recorded for this session.',
+        },
+      }),
+    );
+
+    await expect(buildClient().post('/api/v1/geofence-attempts', {}))
+      .resolves.toEqual({
+        status: 'conflict',
+        errorCode: 'ATTENDANCE_ALREADY_COMPLETED',
+      });
+  });
+
   test('posts authenticated JSON without logging the request body', async () => {
     const warnMock = jest
       .spyOn(console, 'warn')

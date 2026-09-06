@@ -26,13 +26,14 @@ type LocationCheckScreenProps = {
   sessionId: string;
   locationService: LocationService;
   onBack: () => void;
+  onAlreadyCheckedIn: (sessionId: string) => void;
   onLocationValidated: (sessionId: string) => void;
 };
 
 type LocationCheckUiState =
   | { status: 'permission_required' }
   | { status: 'checking' }
-  | LocationValidationResult
+  | Exclude<LocationValidationResult, { status: 'already_checked_in' }>
   | { status: 'unexpected_error' };
 
 type LocationStatusContent = {
@@ -354,6 +355,7 @@ export function LocationCheckScreen({
   sessionId,
   locationService,
   onBack,
+  onAlreadyCheckedIn,
   onLocationValidated,
 }: LocationCheckScreenProps) {
   const [state, setState] = useState<LocationCheckUiState>(
@@ -390,6 +392,10 @@ export function LocationCheckScreen({
       const result = await locationService.validateLocation(sessionId);
 
       if (requestSequence.current === currentRequest) {
+        if (result.status === 'already_checked_in') {
+          onAlreadyCheckedIn(sessionId);
+          return;
+        }
         setState(result);
       }
     } catch {
@@ -401,7 +407,7 @@ export function LocationCheckScreen({
         isChecking.current = false;
       }
     }
-  }, [locationService, sessionId]);
+  }, [locationService, onAlreadyCheckedIn, sessionId]);
 
   const content = statusContent[state.status];
 

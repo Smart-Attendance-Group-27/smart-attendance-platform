@@ -16,6 +16,7 @@ export type ActiveAttendanceSession = {
   readonly requiresFaceVerification: boolean;
   readonly requiresGeofence: boolean;
   readonly requiresQr: boolean;
+  readonly checkInCompleted: boolean;
 };
 
 export type ActiveAttendanceSessionsResult =

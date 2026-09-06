@@ -73,7 +73,8 @@ function isResponse(value: unknown): value is ActiveAttendanceSession {
     (response.venue === null || typeof response.venue === 'string') &&
     typeof response.requiresFaceVerification === 'boolean' &&
     typeof response.requiresGeofence === 'boolean' &&
-    typeof response.requiresQr === 'boolean'
+    typeof response.requiresQr === 'boolean' &&
+    typeof response.checkInCompleted === 'boolean'
   );
 }
 

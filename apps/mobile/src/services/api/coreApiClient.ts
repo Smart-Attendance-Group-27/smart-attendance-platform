@@ -16,7 +16,10 @@ export type CoreApiFailureStatus =
 
 export type CoreApiResult<TData> =
   | { readonly status: 'ok'; readonly data: TData }
-  | { readonly status: CoreApiFailureStatus };
+  | {
+      readonly status: CoreApiFailureStatus;
+      readonly errorCode?: string;
+    };
 
 export type AccessTokenProvider = () =>
   | string
@@ -124,7 +127,10 @@ export class CoreApiClient {
       if (!response.ok) {
         const failureStatus = mapHttpStatus(response.status);
         logCoreApiFailure(method, path, failureStatus, response.status);
-        return { status: failureStatus };
+        const errorCode = await readErrorCode(response);
+        return errorCode
+          ? { status: failureStatus, errorCode }
+          : { status: failureStatus };
       }
 
       return { status: 'ok', data: (await response.json()) as TData };
@@ -145,6 +151,22 @@ export class CoreApiClient {
     } catch {
       return undefined;
     }
+  }
+}
+
+async function readErrorCode(response: Response): Promise<string | undefined> {
+  try {
+    const body = (await response.json()) as {
+      readonly detail?: unknown;
+    };
+    if (!body.detail || typeof body.detail !== 'object') {
+      return undefined;
+    }
+
+    const code = (body.detail as { readonly code?: unknown }).code;
+    return typeof code === 'string' && code.trim() ? code : undefined;
+  } catch {
+    return undefined;
   }
 }
 

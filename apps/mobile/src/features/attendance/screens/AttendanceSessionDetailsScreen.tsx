@@ -23,6 +23,7 @@ type AttendanceSessionDetailsScreenProps = {
   sessionId: string;
   attendanceService: AttendanceService;
   onBack: () => void;
+  onCheckInCompleted?: (sessionId: string) => void;
   onStartCheckIn: (requiresQr: boolean) => void;
 };
 
@@ -97,6 +98,7 @@ export function AttendanceSessionDetailsScreen({
   sessionId,
   attendanceService,
   onBack,
+  onCheckInCompleted,
   onStartCheckIn,
 }: AttendanceSessionDetailsScreenProps) {
   const [state, setState] = useState<AttendanceSessionDetailsState>({
@@ -115,6 +117,13 @@ export function AttendanceSessionDetailsScreen({
         }
 
         if (result.status === 'available') {
+          if (
+            result.session.checkInStatus === 'completed' &&
+            onCheckInCompleted
+          ) {
+            onCheckInCompleted(sessionId);
+            return;
+          }
           setState({ status: 'ready', session: result.session });
           return;
         }
@@ -130,7 +139,7 @@ export function AttendanceSessionDetailsScreen({
     return () => {
       isMounted = false;
     };
-  }, [attendanceService, requestNumber, sessionId]);
+  }, [attendanceService, onCheckInCompleted, requestNumber, sessionId]);
 
   const retry = useCallback(() => {
     setState({ status: 'loading' });

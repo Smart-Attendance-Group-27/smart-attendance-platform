@@ -7,6 +7,7 @@ import pytest
 
 from modules.attendance_verification.geofence.exception import (
     ActiveStudentProfileNotFoundError,
+    AttendanceAlreadyCompletedError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
     CheckInClosedError,
@@ -196,6 +197,21 @@ class FakeRepository:
         self.verification_failure_reason = failure_reason
 
 
+class FakeCompletionRepository:
+    def __init__(self, attendance_status: str | None = None) -> None:
+        self.attendance_status = attendance_status
+        self.request: tuple[UUID, UUID] | None = None
+
+    async def find_attendance_status(
+        self,
+        connection: FakeConnection,
+        session_id: UUID,
+        student_id: UUID,
+    ) -> str | None:
+        self.request = (session_id, student_id)
+        return self.attendance_status
+
+
 def build_student(**overrides: Any) -> StudentProfileRecord:
     values = {"id": STUDENT_ID, "profile_status": "active"}
     values.update(overrides)
@@ -245,6 +261,7 @@ def build_service(
     repository: FakeRepository,
     *,
     max_attempts: int = 3,
+    attendance_status: str | None = None,
 ) -> GeofenceValidationService:
     next_uuid = 100
 
@@ -260,6 +277,7 @@ def build_service(
         ),
         max_attempts=max_attempts,
         repository=repository,
+        completion_repository=FakeCompletionRepository(attendance_status),
         clock=lambda: CURRENT_TIME,
         uuid_factory=uuid_factory,
     )
@@ -482,6 +500,25 @@ async def test_session_that_does_not_require_geofence_is_rejected() -> None:
         )
 
 
+async def test_completed_verification_redirects_to_existing_attendance() -> None:
+    repository = FakeRepository(
+        session=build_session(status="closed", closed_at=CURRENT_TIME),
+        verification_status="completed",
+    )
+
+    with pytest.raises(AttendanceAlreadyCompletedError):
+        await build_service(repository, attendance_status="present").validate_attempt(
+            FakePool(),
+            USER_ID,
+            SESSION_ID,
+            build_reading(),
+        )
+
+    assert repository.calls == ["student", "session"]
+    assert "number" not in repository.calls
+    assert "insert" not in repository.calls
+
+
 async def test_student_not_in_session_snapshot_is_rejected() -> None:
     repository = FakeRepository(eligible=False)
 
@@ -542,6 +579,7 @@ async def test_naive_service_clock_is_rejected() -> None:
         policy=GeofenceValidationPolicy(30, 5),
         max_attempts=3,
         repository=repository,
+        completion_repository=FakeCompletionRepository(),
         clock=lambda: CURRENT_TIME.replace(tzinfo=None),
     )
 
