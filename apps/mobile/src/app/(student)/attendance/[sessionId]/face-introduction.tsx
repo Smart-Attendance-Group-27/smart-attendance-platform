@@ -39,7 +39,6 @@ export default function FaceIntroductionRoute() {
 
   useEffect(() => {
     if (session.status !== 'authenticated' || !sessionId) {
-      setCheckingProgress(false);
       return;
     }
 
