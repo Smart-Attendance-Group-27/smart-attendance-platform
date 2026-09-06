@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from core.config import Settings, get_settings
 from modules.attendance_verification.geofence.exception import (
     ActiveStudentProfileNotFoundError,
+    AttendanceAlreadyCompletedError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
     CheckInClosedError,
@@ -90,6 +91,14 @@ async def create_geofence_attempt(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_error_detail(error),
+        ) from error
+    except AttendanceAlreadyCompletedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ATTENDANCE_ALREADY_COMPLETED",
+                "message": error.message,
+            },
         ) from error
     except (
         AttendanceSessionNotActiveError,

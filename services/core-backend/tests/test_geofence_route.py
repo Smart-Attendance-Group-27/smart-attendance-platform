@@ -15,6 +15,7 @@ from conftest import (
 from main import create_app
 from modules.attendance_verification.geofence.exception import (
     ActiveStudentProfileNotFoundError,
+    AttendanceAlreadyCompletedError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
     CheckInClosedError,
@@ -407,6 +408,31 @@ def test_maps_ineligible_student_to_forbidden(
 
     assert response.status_code == 403
     assert response.json()["detail"] == "STUDENT_NOT_ELIGIBLE"
+
+
+def test_identifies_an_already_completed_attendance_attempt(
+    jwks_document,
+    make_access_token,
+) -> None:
+    error = AttendanceAlreadyCompletedError(
+        "Attendance has already been recorded for this session.",
+    )
+
+    with build_client(
+        jwks_document,
+        StubGeofenceService(error=error),
+    ) as client:
+        response = client.post(
+            ATTEMPT_URL,
+            json=valid_payload(),
+            headers=authorize(make_access_token()),
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "ATTENDANCE_ALREADY_COMPLETED",
+        "message": "Attendance has already been recorded for this session.",
+    }
 
 
 @pytest.mark.parametrize(
