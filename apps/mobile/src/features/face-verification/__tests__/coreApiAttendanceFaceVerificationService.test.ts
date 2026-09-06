@@ -26,6 +26,19 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+test('loads whether face verification already passed', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue(
+    response({ status: 'passed' }),
+  );
+  const service = new CoreApiAttendanceFaceVerificationService(
+    new CoreApiClient({ baseUrl, getAccessToken: () => token }),
+  );
+
+  await expect(service.getProgress('attendance-session')).resolves.toBe(
+    'passed',
+  );
+});
+
 test('uploads an attendance face capture to the Core API', async () => {
   const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(
     response({
