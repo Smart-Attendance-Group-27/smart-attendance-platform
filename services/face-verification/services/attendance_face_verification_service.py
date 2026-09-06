@@ -113,15 +113,8 @@ class AttendanceFaceVerificationService:
             context.verification_attempt_id
         )
         if existing is not None and existing.validation_status == "passed":
-            return AttendanceFaceVerificationResult(
-                status=AttendanceFaceVerificationStatus.PASSED,
-                attempt_number=existing.attempt_number,
-                can_retry=False,
-                similarity_score=(
-                    float(existing.similarity_score)
-                    if existing.similarity_score is not None
-                    else None
-                ),
+            raise VerificationClosedError(
+                "Face verification already passed for this attendance attempt."
             )
 
         previous_attempt_number = existing.attempt_number if existing else 0

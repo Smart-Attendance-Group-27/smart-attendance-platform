@@ -5,6 +5,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import UUID
 
+import pytest
+
 from repositories.attendance_face_verification_repository import (
     AttendanceVerificationContext,
 )
@@ -12,6 +14,7 @@ from repositories.face_profile_repository import StoredFaceEmbedding
 from services.attendance_face_verification_service import (
     AttendanceFaceVerificationService,
     AttendanceFaceVerificationStatus,
+    VerificationClosedError,
 )
 from services.face_comparison_service import (
     FaceComparisonResult,
@@ -211,7 +214,7 @@ def test_last_failed_retry_updates_same_row_and_closes_parent_attempt() -> None:
     )
 
 
-def test_existing_pass_is_idempotent_and_does_not_compare_again() -> None:
+def test_existing_pass_rejects_a_new_capture_without_comparing_again() -> None:
     existing = SimpleNamespace(
         attempt_number=2,
         validation_status="passed",
@@ -222,16 +225,18 @@ def test_existing_pass_is_idempotent_and_does_not_compare_again() -> None:
         comparison=FaceComparisonResult(status=FaceComparisonStatus.MATCHED),
     )
 
-    result = asyncio.run(
-        service.verify(
-            session_id=SESSION_ID,
-            student_id=STUDENT_ID,
-            captured_image=b"capture",
+    with pytest.raises(
+        VerificationClosedError,
+        match="already passed",
+    ):
+        asyncio.run(
+            service.verify(
+                session_id=SESSION_ID,
+                student_id=STUDENT_ID,
+                captured_image=b"capture",
+            )
         )
-    )
 
-    assert result.status is AttendanceFaceVerificationStatus.PASSED
-    assert result.attempt_number == 2
     comparison_service.compare.assert_not_awaited()
     repository.save_latest_face_attempt.assert_not_awaited()
     session.commit.assert_not_awaited()
