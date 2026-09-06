@@ -49,6 +49,9 @@ export class LiveLocationService implements LocationService {
     });
 
     if (attemptResult.status !== 'completed') {
+      if (attemptResult.status === 'already-checked-in') {
+        return { status: 'already_checked_in' };
+      }
       return { status: apiFailureStates[attemptResult.status] };
     }
 
