@@ -67,3 +67,7 @@ class GeofenceAttemptLimitReachedError(GeofenceServiceError):
 
 class VerificationAttemptClosedError(GeofenceServiceError):
     """Raised when the overall verification attempt is already terminal."""
+
+
+class AttendanceAlreadyCompletedError(GeofenceServiceError):
+    """Raised when attendance has already been recorded for this attempt."""
