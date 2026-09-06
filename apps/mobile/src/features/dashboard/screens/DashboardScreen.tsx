@@ -164,10 +164,10 @@ export function DashboardScreen({
     };
   }, [activeSessionService, courseService, faceVerificationApiService, profileServiceInstance, service]);
 
-  // The dashboard remains mounted while the readiness route is open. Refresh
-  // only the readiness state when it receives focus again so a successful
-  // check removes the action immediately without flashing the whole dashboard
-  // through another loading state.
+  // The dashboard remains mounted while attendance routes are open. Refresh
+  // the student-specific session state when focus returns so a completed
+  // check-in immediately changes the card action without flashing the whole
+  // dashboard through another loading state.
   useFocusEffect(
     useCallback(() => {
       if (!hasFocusedDashboard.current) {
@@ -175,19 +175,30 @@ export function DashboardScreen({
         return undefined;
       }
 
-      if (!faceVerificationApiService) {
+      if (!faceVerificationApiService && !activeSessionService) {
         return undefined;
       }
 
       let active = true;
 
       void (async () => {
-        const result =
-          await faceVerificationApiService.getReadinessStatus();
+        const [readinessResult, refreshedSessions] = await Promise.all([
+          faceVerificationApiService?.getReadinessStatus(),
+          activeSessionService?.listMyActiveSessions(),
+        ]);
 
-        if (active && result.status === 'loaded') {
+        if (!active) {
+          return;
+        }
+
+        if (readinessResult?.status === 'loaded') {
           setRequiresReadinessCheck(
-            result.readiness.requiresReadinessCheck,
+            readinessResult.readiness.requiresReadinessCheck,
+          );
+        }
+        if (refreshedSessions?.status === 'loaded') {
+          setActiveSessions(
+            refreshedSessions.sessions.map(toDashboardSession),
           );
         }
       })();
@@ -195,15 +206,18 @@ export function DashboardScreen({
       return () => {
         active = false;
       };
-    }, [faceVerificationApiService]),
+    }, [activeSessionService, faceVerificationApiService]),
   );
 
-  const handleStart = (sessionId?: string) => {
-    if (!sessionId) return;
+  const handleSessionAction = (attendanceSession: AttendanceSession) => {
+    if (!attendanceSession.id) return;
 
     router.push({
-      pathname: '/(student)/attendance/[sessionId]',
-      params: { sessionId },
+      pathname:
+        attendanceSession.checkInStatus === 'completed'
+          ? '/(student)/attendance/[sessionId]/check-in-success'
+          : '/(student)/attendance/[sessionId]',
+      params: { sessionId: attendanceSession.id },
     });
   };
 
@@ -261,7 +275,7 @@ export function DashboardScreen({
             {activeSessions.map((activeSession) => (
               <ActiveSessionCard
                 key={activeSession.id}
-                onStart={() => handleStart(activeSession.id)}
+                onStart={() => handleSessionAction(activeSession)}
                 session={activeSession}
               />
             ))}

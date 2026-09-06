@@ -35,6 +35,7 @@ export function ActiveSessionCard({ session, onStart }: ActiveSessionCardProps) 
   const timeRange = formatTimeRange((session as any)?.startTime ?? (session && (session as any).startTime), (session as any)?.endTime ?? (session && (session as any).endTime));
   const venue = (session as any)?.venue ?? '';
   const closingText = computeClosingText((session as any)?.endTime ?? (session && (session as any).endTime));
+  const isCheckedIn = session?.checkInStatus === 'completed';
 
   return (
     <View style={styles.card}>
@@ -78,7 +79,10 @@ export function ActiveSessionCard({ session, onStart }: ActiveSessionCardProps) 
       </View>
 
       <View style={styles.button}>
-        <AppButton title="Start attendance" onPress={onStart} />
+        <AppButton
+          title={isCheckedIn ? 'Check-in result' : 'Start attendance'}
+          onPress={onStart}
+        />
       </View>
       <Text style={styles.closingText}>{closingText}</Text>
     </View>
