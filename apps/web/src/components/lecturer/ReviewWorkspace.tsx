@@ -8,13 +8,14 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Dialog } from "@/components/ui/Dialog";
-import { ConfirmationDialog } from "@/components/ui/Dialog";
 import { Notice } from "@/components/ui/Notice";
 import { geofenceResultDisplay, reviewCaseStatusDisplay } from "@/lib/status";
-import { ReviewCase } from "@/types/lecturer";
-import { ReviewDecisionKind, submitReviewDecision } from "@/app/actions/review";
+import type { ReviewCase } from "@/types/lecturer";
+import { submitReviewDecision } from "@/app/actions/review";
+import type { ReviewDecisionKind, ReviewDecisionInput } from "@/app/actions/review";
 
 type DecisionKind = ReviewDecisionKind;
+type ApprovedStatus = "present" | "late";
 
 function initialsFor(name: string): string {
   return name
@@ -30,6 +31,7 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
   const [selectedId, setSelectedId] = useState<string | null>(initialCases[0]?.caseId ?? null);
   const [query, setQuery] = useState("");
   const [pendingDecision, setPendingDecision] = useState<DecisionKind | null>(null);
+  const [attendanceStatus, setAttendanceStatus] = useState<ApprovedStatus | null>(null);
   const [reason, setReason] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -45,12 +47,34 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
 
   const selected = cases.find((item) => item.caseId === selectedId) ?? null;
 
+  function openDecision(kind: DecisionKind) {
+    setPendingDecision(kind);
+    setAttendanceStatus(null);
+    setReason("");
+    setSubmitError(null);
+  }
+
   async function resolveSelected(kind: DecisionKind) {
     if (!selected) return;
+    const trimmedReason = reason.trim();
+    if (trimmedReason.length < 3 || trimmedReason.length > 500) {
+      setSubmitError("Enter a reason between 3 and 500 characters.");
+      return;
+    }
+    let input: ReviewDecisionInput;
+    if (kind === "approve") {
+      if (attendanceStatus === null) {
+        setSubmitError("Choose Present or Late before approving attendance.");
+        return;
+      }
+      input = { decision: "approve", attendanceStatus, reason: trimmedReason };
+    } else {
+      input = { decision: "reject", reason: trimmedReason };
+    }
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      await submitReviewDecision(selected.caseId, kind, reason.trim() || undefined);
+      await submitReviewDecision(selected.caseId, input);
       const remaining = cases.filter((item) => item.caseId !== selected.caseId);
       setCases(remaining);
       setSelectedId(remaining[0]?.caseId ?? null);
@@ -184,21 +208,19 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
               </Notice>
 
               <div className="mt-3.5 grid grid-cols-2 gap-1.5">
-                <Button variant="primary" onClick={() => setPendingDecision("approve")}>
+                <Button variant="primary" onClick={() => openDecision("approve")}>
                   Approve attendance
                 </Button>
-                <Button variant="danger" onClick={() => setPendingDecision("reject")}>
+                <Button variant="danger" onClick={() => openDecision("reject")}>
                   Reject
                 </Button>
-                <Button onClick={() => setPendingDecision("retry")}>Request retry</Button>
-                <Button onClick={() => setPendingDecision("escalate")}>Escalate</Button>
               </div>
             </>
           )}
         </aside>
       </div>
 
-      {(pendingDecision === "approve" || pendingDecision === "reject") && selected ? (
+      {pendingDecision && selected ? (
         <Dialog
           open
           title={pendingDecision === "approve" ? "Approve attendance" : "Reject attendance"}
@@ -206,21 +228,51 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
         >
           <p className="mb-3 text-xs text-[var(--muted)]">
             {pendingDecision === "approve"
-              ? `Mark ${selected.studentName} as present for ${selected.courseCode}.`
+              ? `Choose whether ${selected.studentName} should be Present or Late for ${selected.courseCode}.`
               : `Mark ${selected.studentName} as absent for ${selected.courseCode}.`}
           </p>
+          {pendingDecision === "approve" ? (
+            <fieldset className="mb-3">
+              <legend className="mb-1 text-xs font-semibold">Attendance status</legend>
+              <div className="flex gap-4 text-xs">
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="review-attendance-status"
+                    value="present"
+                    checked={attendanceStatus === "present"}
+                    onChange={() => setAttendanceStatus("present")}
+                  />
+                  Present
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="review-attendance-status"
+                    value="late"
+                    checked={attendanceStatus === "late"}
+                    onChange={() => setAttendanceStatus("late")}
+                  />
+                  Late
+                </label>
+              </div>
+            </fieldset>
+          ) : null}
           <label className="mb-1 block text-xs font-semibold" htmlFor="review-reason">
             Reason
           </label>
           <textarea
             id="review-reason"
             required
+            minLength={3}
+            maxLength={500}
             rows={3}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             className="mb-2 w-full border border-[#c7cfd6] p-2 text-xs"
             placeholder="Explain the decision for the audit log"
           />
+          <p className="mb-2 text-[11px] text-[var(--muted)]">3–500 characters.</p>
           {submitError ? <p className="mb-2 text-xs text-[var(--danger)]">{submitError}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="default" onClick={() => setPendingDecision(null)} disabled={isSubmitting}>
@@ -228,7 +280,7 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
             </Button>
             <Button
               variant={pendingDecision === "approve" ? "primary" : "danger"}
-              disabled={!reason.trim() || isSubmitting}
+              disabled={reason.trim().length < 3 || (pendingDecision === "approve" && attendanceStatus === null) || isSubmitting}
               onClick={() => resolveSelected(pendingDecision)}
             >
               {isSubmitting ? "Submitting..." : pendingDecision === "approve" ? "Approve" : "Reject"}
@@ -236,25 +288,6 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
           </div>
         </Dialog>
       ) : null}
-
-      <ConfirmationDialog
-        open={pendingDecision === "retry"}
-        title="Request retry"
-        description={selected ? `Ask ${selected.studentName} to resubmit verification for ${selected.courseCode}.` : ""}
-        confirmLabel={isSubmitting ? "Submitting..." : "Request retry"}
-        onConfirm={() => resolveSelected("retry")}
-        onCancel={() => setPendingDecision(null)}
-        busy={isSubmitting}
-      />
-      <ConfirmationDialog
-        open={pendingDecision === "escalate"}
-        title="Escalate case"
-        description={selected ? `Escalate ${selected.studentName}'s case to an administrator.` : ""}
-        confirmLabel={isSubmitting ? "Submitting..." : "Escalate"}
-        onConfirm={() => resolveSelected("escalate")}
-        onCancel={() => setPendingDecision(null)}
-        busy={isSubmitting}
-      />
     </Card>
   );
 }

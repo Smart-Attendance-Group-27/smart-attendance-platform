@@ -63,7 +63,9 @@ export type ApiSessionStudent = {
   checkedInAt: string | null;
 };
 
-export type ApiManualReviewDecision = "approve" | "reject" | "retry" | "escalate";
+export type ApiManualReviewDecisionRequest =
+  | { decision: "approve"; attendanceStatus: "present" | "late"; reason: string }
+  | { decision: "reject"; reason: string };
 
 export type ApiManualReviewQueueItem = {
   verificationAttemptId: string;
@@ -182,12 +184,11 @@ export function getManualReviewQueue(): Promise<ApiManualReviewQueueItem[]> {
 
 export function postManualReviewDecision(
   verificationAttemptId: string,
-  decision: ApiManualReviewDecision,
-  reason: string | undefined,
+  body: ApiManualReviewDecisionRequest,
 ): Promise<ApiManualReviewQueueItem> {
   return coreBackendFetch(`/api/v1/lecturers/me/manual-reviews/${verificationAttemptId}/decision`, {
     method: "POST",
-    body: { decision, reason },
+    body,
   });
 }
 
