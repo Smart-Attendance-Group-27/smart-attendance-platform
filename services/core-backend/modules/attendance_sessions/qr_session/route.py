@@ -10,13 +10,13 @@ from modules.attendance_sessions.qr_session.exception import (
     ActiveStudentProfileNotFoundError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
+    CheckInRequiredError,
     DynamicQrConfigurationError,
     DynamicQrSessionUnavailableError,
     LecturerSessionAccessError,
     QrNotRequiredError,
     QrSessionNotFoundError,
     StudentNotEligibleError,
-    VerificationNotStartedError,
 )
 from modules.attendance_sessions.qr_session.cache import QrBatchMetadataCache
 from modules.attendance_sessions.qr_session.schemas import (
@@ -183,12 +183,15 @@ async def verify_qr_session(
     except StudentNotEligibleError as error:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="The student is not eligible for this attendance session.",
+            detail={
+                "code": "STUDENT_NOT_ELIGIBLE",
+                "message": "The student is not eligible for this attendance session.",
+            },
         ) from error
-    except VerificationNotStartedError as error:
+    except CheckInRequiredError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Verification has not started for this session yet.",
+            detail={"code": "CHECK_IN_REQUIRED", "message": str(error)},
         ) from error
     except DynamicQrConfigurationError as error:
         raise HTTPException(
@@ -200,6 +203,9 @@ async def verify_qr_session(
         qr_session_id=verified_qr_session.qr_session_id,
         status=verified_qr_session.status,
         verified_at=verified_qr_session.verified_at,
+        batch_passed=verified_qr_session.batch_passed,
+        already_passed=verified_qr_session.already_passed,
+        required_for_student=verified_qr_session.required_for_student,
     )
 
 

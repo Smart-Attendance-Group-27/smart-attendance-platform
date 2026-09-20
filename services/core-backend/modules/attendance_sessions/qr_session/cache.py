@@ -102,6 +102,7 @@ class QrBatchMetadataCache:
                 if metadata.deactivated_at is not None
                 else None
             ),
+            "voidedAt": metadata.voided_at.isoformat() if metadata.voided_at is not None else None,
             "refreshIntervalSeconds": metadata.refresh_interval_seconds,
             "expiresAt": metadata.expires_at.isoformat(),
         }
@@ -135,6 +136,11 @@ class QrBatchMetadataCache:
             deactivated_at=(
                 _parse_datetime(value["deactivatedAt"])
                 if value["deactivatedAt"] is not None
+                else None
+            ),
+            voided_at=(
+                _parse_datetime(value["voidedAt"])
+                if value.get("voidedAt") is not None
                 else None
             ),
             refresh_interval_seconds=value["refreshIntervalSeconds"],

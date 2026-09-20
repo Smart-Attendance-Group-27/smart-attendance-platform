@@ -30,7 +30,9 @@ class QrVerificationRecord:
     qr_mode: str | None
     refresh_interval_seconds: int | None
     batch_status: str | None
+    batch_activated_at: datetime
     batch_deactivated_at: datetime | None
+    batch_voided_at: datetime | None
     attendance_session_id: UUID | None
     attendance_session_status: str | None
     attendance_session_scheduled_end_at: datetime | None
@@ -40,6 +42,13 @@ class QrVerificationRecord:
     token_valid_from: datetime | None
     token_expires_at: datetime | None
     token_revoked_at: datetime | None
+
+
+@dataclass(frozen=True)
+class StudentAttemptRecord:
+    id: UUID
+    status: str
+    checked_in_at: datetime | None
 
 
 class QrSessionRepository:
@@ -246,6 +255,71 @@ class QrSessionRepository:
         )
         return row is not None
 
+    async def find_student_attempt(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+        student_id: UUID,
+        *,
+        lock_for_update: bool = False,
+    ) -> StudentAttemptRecord | None:
+        lock_clause = "FOR UPDATE" if lock_for_update else ""
+        row = await connection.fetchrow(
+            f"""
+            SELECT id, status, checked_in_at
+            FROM attendance_verification.verification_attempts
+            WHERE session_id = $1 AND student_id = $2
+            {lock_clause}
+            """,
+            session_id,
+            student_id,
+        )
+        if row is None:
+            return None
+        return StudentAttemptRecord(
+            id=row["id"], status=row["status"], checked_in_at=row["checked_in_at"]
+        )
+
+    async def lock_session_for_qr_write(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+    ) -> AttendanceSessionRecord | None:
+        row = await connection.fetchrow(
+            """
+            SELECT id, status, scheduled_end_at, closed_at, cancelled_at, requires_qr
+            FROM attendance_session.sessions
+            WHERE id = $1
+            FOR SHARE
+            """,
+            session_id,
+        )
+        if row is None:
+            return None
+        return AttendanceSessionRecord(
+            id=row["id"], status=row["status"],
+            scheduled_end_at=row["scheduled_end_at"], closed_at=row["closed_at"],
+            cancelled_at=row["cancelled_at"], requires_qr=row["requires_qr"],
+        )
+
+    async def has_accepted_qr_attempt(
+        self,
+        connection: asyncpg.Connection,
+        verification_attempt_id: UUID,
+        qr_batch_id: UUID,
+    ) -> bool:
+        return bool(await connection.fetchval(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM attendance_verification.qr_validation_attempts
+                WHERE verification_attempt_id = $1 AND qr_batch_id = $2
+                  AND validation_status = 'accepted'
+            )
+            """,
+            verification_attempt_id,
+            qr_batch_id,
+        ))
+
     async def find_qr_token_id_for_batch(
         self,
         connection: asyncpg.Connection,
@@ -282,6 +356,7 @@ class QrSessionRepository:
         connection: asyncpg.Connection,
         qr_validation_attempt_id: UUID,
         verification_attempt_id: UUID,
+        qr_batch_id: UUID,
         qr_token_id: UUID | None,
         attempt_number: int,
         validation_status: str,
@@ -293,16 +368,18 @@ class QrSessionRepository:
             INSERT INTO attendance_verification.qr_validation_attempts (
                 id,
                 verification_attempt_id,
+                qr_batch_id,
                 qr_token_id,
                 attempt_number,
                 validation_status,
                 failure_reason,
                 validated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             """,
             qr_validation_attempt_id,
             verification_attempt_id,
+            qr_batch_id,
             qr_token_id,
             attempt_number,
             validation_status,
@@ -328,6 +405,7 @@ class QrSessionRepository:
                 batch.status,
                 batch.activated_at,
                 batch.deactivated_at,
+                batch.voided_at,
                 batch.refresh_interval_seconds,
                 batch.expires_at
             FROM attendance_session.qr_token_batches AS batch
@@ -354,6 +432,7 @@ class QrSessionRepository:
             status=row["status"],
             activated_at=row["activated_at"],
             deactivated_at=row["deactivated_at"],
+            voided_at=row["voided_at"],
             refresh_interval_seconds=row["refresh_interval_seconds"],
             expires_at=row["expires_at"],
         )
@@ -370,7 +449,9 @@ class QrSessionRepository:
                 batch.mode AS qr_mode,
                 batch.refresh_interval_seconds AS refresh_interval_seconds,
                 batch.status AS batch_status,
+                batch.activated_at AS batch_activated_at,
                 batch.deactivated_at AS batch_deactivated_at,
+                batch.voided_at AS batch_voided_at,
                 session.id AS attendance_session_id,
                 session.status AS attendance_session_status,
                 session.scheduled_end_at AS attendance_session_scheduled_end_at,
@@ -400,7 +481,9 @@ class QrSessionRepository:
             qr_mode=row["qr_mode"],
             refresh_interval_seconds=row["refresh_interval_seconds"],
             batch_status=row["batch_status"],
+            batch_activated_at=row["batch_activated_at"],
             batch_deactivated_at=row["batch_deactivated_at"],
+            batch_voided_at=row["batch_voided_at"],
             attendance_session_id=row["attendance_session_id"],
             attendance_session_status=row["attendance_session_status"],
             attendance_session_scheduled_end_at=row[

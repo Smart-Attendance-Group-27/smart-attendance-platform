@@ -50,10 +50,5 @@ class StudentNotEligibleError(QrSessionError):
     """Raised when the student is not in the session eligibility snapshot."""
 
 
-class VerificationNotStartedError(QrSessionError):
-    """Raised when QR is submitted before any verification attempt exists.
-
-    QR is an additional check on top of geofence/face verification, not a
-    replacement for it — a student must already have an in-progress
-    verification attempt for this session.
-    """
+class CheckInRequiredError(QrSessionError):
+    """Raised when a student scans QR before completing initial check-in."""

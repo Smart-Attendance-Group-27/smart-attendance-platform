@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -46,6 +47,21 @@ async def test_qr_batch_cache_stores_and_returns_metadata_with_ttl() -> None:
     assert result == metadata
     assert redis.set_calls[0][0] == f"qr:batch:{metadata.id}"
     assert redis.set_calls[0][2] == 120
+
+
+@pytest.mark.asyncio
+async def test_qr_batch_cache_preserves_voided_time_and_accepts_old_entries() -> None:
+    redis = FakeRedis()
+    cache = QrBatchMetadataCache(redis)
+    metadata = build_metadata()
+    voided = replace(metadata, voided_at=datetime(2026, 8, 6, 10, 5, tzinfo=UTC))
+    await cache.set_qr_batch_cache(metadata.id, voided, ttl_seconds=120)
+    assert await cache.get_qr_batch_cache(metadata.id) == voided
+
+    old_payload = json.loads(redis.values[f"qr:batch:{metadata.id}"])
+    old_payload.pop("voidedAt")
+    redis.values[f"qr:batch:{metadata.id}"] = json.dumps(old_payload)
+    assert (await cache.get_qr_batch_cache(metadata.id)).voided_at is None
 
 
 @pytest.mark.asyncio

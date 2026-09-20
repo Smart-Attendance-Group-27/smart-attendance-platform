@@ -17,13 +17,13 @@ from modules.attendance_sessions.qr_session.exception import (
     ActiveStudentProfileNotFoundError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
+    CheckInRequiredError,
     DynamicQrConfigurationError,
     DynamicQrSessionUnavailableError,
     LecturerSessionAccessError,
     QrNotRequiredError,
     QrSessionNotFoundError,
     StudentNotEligibleError,
-    VerificationNotStartedError,
 )
 from modules.attendance_sessions.qr_session.route import get_qr_session_service
 from modules.attendance_sessions.qr_session.service import (
@@ -98,6 +98,9 @@ class SuccessfulQrSessionService:
             qr_session_id=qr_session_id,
             status="accepted",
             verified_at=datetime(2026, 8, 6, 10, 3, tzinfo=UTC),
+            batch_passed=True,
+            already_passed=False,
+            required_for_student=True,
         )
 
     async def assert_lecturer_owns_qr_session(
@@ -256,7 +259,7 @@ class IneligibleStudentVerifyService(SuccessfulQrSessionService):
         raise StudentNotEligibleError()
 
 
-class VerificationNotStartedVerifyService(SuccessfulQrSessionService):
+class CheckInRequiredVerifyService(SuccessfulQrSessionService):
     async def verify_qr_session(
         self,
         pool: object,
@@ -264,7 +267,7 @@ class VerificationNotStartedVerifyService(SuccessfulQrSessionService):
         qr_value: str,
         student_user_id: UUID,
     ) -> VerifiedQrSession:
-        raise VerificationNotStartedError()
+        raise CheckInRequiredError("Complete initial check-in before scanning QR.")
 
 
 def build_client(jwks_document, service) -> TestClient:
@@ -454,6 +457,9 @@ def test_verify_qr_session_route_returns_camel_case_response(
         "qrSessionId": "50000000-0000-0000-0000-000000000001",
         "status": "accepted",
         "verifiedAt": "2026-08-06T10:03:00Z",
+        "batchPassed": True,
+        "alreadyPassed": False,
+        "requiredForStudent": True,
     }
 
 
@@ -552,13 +558,14 @@ def test_verify_qr_session_route_maps_ineligible_student_to_403(
         )
 
     assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "STUDENT_NOT_ELIGIBLE"
 
 
-def test_verify_qr_session_route_maps_verification_not_started_to_409(
+def test_verify_qr_session_route_maps_check_in_required_to_409(
     jwks_document,
     make_access_token,
 ) -> None:
-    with build_client(jwks_document, VerificationNotStartedVerifyService()) as client:
+    with build_client(jwks_document, CheckInRequiredVerifyService()) as client:
         response = client.post(
             f"/api/v1/qr-sessions/{QR_SESSION_ID}/verify",
             headers=authorize(student_token(make_access_token)),
@@ -566,6 +573,12 @@ def test_verify_qr_session_route_maps_verification_not_started_to_409(
         )
 
     assert response.status_code == 409
+    assert response.json() == {
+        "detail": {
+            "code": "CHECK_IN_REQUIRED",
+            "message": "Complete initial check-in before scanning QR.",
+        }
+    }
 
 
 def test_get_current_dynamic_qr_session_route_returns_camel_case_response(
