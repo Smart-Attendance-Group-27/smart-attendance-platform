@@ -33,7 +33,6 @@ export function CreateSessionButton({ timetableOptions }: { timetableOptions: Ti
   const [scheduledStartAt, setScheduledStartAt] = useState(defaultStartValue);
   const [scheduledEndAt, setScheduledEndAt] = useState(() => defaultEndValue(defaultStartValue()));
   const [requiresFaceVerification, setRequiresFaceVerification] = useState(true);
-  const [requiresGeofence, setRequiresGeofence] = useState(true);
   const [requiresQr, setRequiresQr] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -65,7 +64,6 @@ export function CreateSessionButton({ timetableOptions }: { timetableOptions: Ti
       scheduledStartAt: new Date(scheduledStartAt).toISOString(),
       scheduledEndAt: new Date(scheduledEndAt).toISOString(),
       requiresFaceVerification,
-      requiresGeofence,
       requiresQr,
     });
     setIsSubmitting(false);
@@ -155,21 +153,14 @@ export function CreateSessionButton({ timetableOptions }: { timetableOptions: Ti
                 />
                 Require face verification
               </label>
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={requiresGeofence}
-                  onChange={(event) => setRequiresGeofence(event.target.checked)}
-                />
-                Require geofence check
-              </label>
+              <p>Geofence check is required for every session.</p>
               <label className="flex items-center gap-1.5">
                 <input
                   type="checkbox"
                   checked={requiresQr}
                   onChange={(event) => setRequiresQr(event.target.checked)}
                 />
-                Require QR verification
+                Enable QR checks during the lecture
               </label>
             </div>
           </FormField>

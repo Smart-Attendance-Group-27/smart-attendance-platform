@@ -14,7 +14,6 @@ export type CreateSessionInput = {
   scheduledStartAt: string;
   scheduledEndAt: string;
   requiresFaceVerification: boolean;
-  requiresGeofence: boolean;
   requiresQr: boolean;
 };
 
@@ -34,7 +33,7 @@ export async function createSession(input: CreateSessionInput): Promise<CreateSe
       scheduledStartAt: startDate.toISOString(),
       scheduledEndAt: endDate.toISOString(),
       requiresFaceVerification: input.requiresFaceVerification,
-      requiresGeofence: input.requiresGeofence,
+      requiresGeofence: true,
       requiresQr: input.requiresQr,
     });
     revalidatePath("/lecturer/sessions");
