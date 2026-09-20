@@ -32,6 +32,10 @@ class FaceVerificationServiceRejectedError(FaceVerificationServiceError):
     pass
 
 
+class FaceVerificationServiceInvalidRequestError(FaceVerificationServiceError):
+    """The capture or its liveness evidence was not acceptable."""
+
+
 class FaceVerificationServiceClient:
     def __init__(self, *, base_url: str, timeout_seconds: float) -> None:
         self._base_url = base_url.rstrip("/")
@@ -44,7 +48,11 @@ class FaceVerificationServiceClient:
         access_token: str,
         image: bytes,
         content_type: str,
+        liveness: str | None = None,
     ) -> InternalFaceVerificationResult:
+        # Forwarded as-is; the face service owns its meaning.
+        data = {"liveness": liveness} if liveness is not None else None
+
         try:
             async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
                 response = await client.post(
@@ -52,6 +60,7 @@ class FaceVerificationServiceClient:
                     f"{session_id}/face-verifications",
                     headers={"Authorization": f"Bearer {access_token}"},
                     files={"image": ("capture.jpg", image, content_type)},
+                    data=data,
                 )
         except httpx.HTTPError as error:
             raise FaceVerificationServiceError(
@@ -61,6 +70,14 @@ class FaceVerificationServiceClient:
         if response.status_code in {404, 409}:
             raise FaceVerificationServiceRejectedError(
                 "Face verification cannot continue for this session."
+            )
+        if response.status_code == 422:
+            raise FaceVerificationServiceInvalidRequestError(
+                "The capture or its liveness evidence was rejected."
+            )
+        if response.status_code == 503:
+            raise FaceVerificationServiceError(
+                "The face-verification service is unavailable."
             )
         if response.status_code != 200:
             raise FaceVerificationServiceError(
@@ -119,6 +136,7 @@ class FaceVerificationServiceClient:
 __all__ = [
     "FaceVerificationServiceClient",
     "FaceVerificationServiceError",
+    "FaceVerificationServiceInvalidRequestError",
     "FaceVerificationServiceRejectedError",
     "InternalFaceVerificationResult",
 ]
