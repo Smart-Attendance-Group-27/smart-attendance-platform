@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "UniAttennd",
+    "name": "UniAttend",
     "slug": "uniattend",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -17,8 +17,16 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "googleServicesFile": "./google-services.json",
+      "versionCode": 1,
       "predictiveBackGestureEnabled": false,
-      "package": "com.group27.uniattend"
+      "package": "com.group27.uniattend",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "output": "static",
@@ -54,11 +62,27 @@
         }
       ],
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#208AEF",
+          "defaultChannel": "default",
+          "iosDisplayInForeground": true
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "af0d5307-9310-4cc5-a59a-507e96f7c403"
+      }
+    },
+    "owner": "techumeda55"
   }
 }

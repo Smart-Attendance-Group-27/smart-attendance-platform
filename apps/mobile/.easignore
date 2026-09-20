@@ -1,0 +1,9 @@
+# Local build artifacts
+android/app/build/
+android/.cxx/
+android/.gradle/
+ios/build/
+.expo/
+node_modules/
+dist/
+build/
