@@ -49,6 +49,10 @@ def build_session() -> ActiveAttendanceSessionRecord:
         requires_geofence=True,
         requires_qr=False,
         check_in_completed=False,
+        attempt_status=None,
+        initial_check_in_status=None,
+        checked_in_at=None,
+        final_attendance_status=None,
     )
 
 
@@ -123,6 +127,10 @@ def test_returns_privacy_safe_camel_case_sessions(
             "requiresGeofence": True,
             "requiresQr": False,
             "checkInCompleted": False,
+            "attemptStatus": None,
+            "initialCheckInStatus": None,
+            "checkedInAt": None,
+            "finalAttendanceStatus": None,
         }
     ]
 
