@@ -23,10 +23,14 @@ class ActiveAttendanceSessionRecord:
     requires_geofence: bool
     requires_qr: bool
     check_in_completed: bool
+    attempt_status: str | None
+    initial_check_in_status: str | None
+    checked_in_at: datetime | None
+    final_attendance_status: str | None
 
 
 class ActiveAttendanceSessionRepository:
-    async def list_open_geofence_sessions_for_student(
+    async def list_visible_sessions_for_student(
         self,
         connection: asyncpg.Connection,
         student_id: UUID,
@@ -66,7 +70,11 @@ class ActiveAttendanceSessionRepository:
                 session.requires_face_verification,
                 session.requires_geofence,
                 session.requires_qr,
-                bool_or(attendance_record.id IS NOT NULL) AS check_in_completed
+                bool_or(attendance_record.id IS NOT NULL) AS check_in_completed,
+                MAX(attempt.status) AS attempt_status,
+                MAX(attempt.initial_check_in_status) AS initial_check_in_status,
+                MAX(attempt.checked_in_at) AS checked_in_at,
+                MAX(attendance_record.attendance_status) AS final_attendance_status
             FROM attendance_session.session_students AS eligible_student
             JOIN attendance_session.sessions AS session
                 ON session.id = eligible_student.session_id
@@ -89,6 +97,9 @@ class ActiveAttendanceSessionRepository:
             LEFT JOIN attendance_verification.attendance_records AS attendance_record
                 ON attendance_record.session_id = session.id
                AND attendance_record.student_id = eligible_student.student_id
+            LEFT JOIN attendance_verification.verification_attempts AS attempt
+                ON attempt.session_id = session.id
+               AND attempt.student_id = eligible_student.student_id
             WHERE eligible_student.student_id = $1
               AND session.status = 'active'
               AND session.closed_at IS NULL
@@ -98,8 +109,10 @@ class ActiveAttendanceSessionRepository:
               AND session.scheduled_end_at IS NOT NULL
               AND session.check_in_opens_at IS NOT NULL
               AND session.check_in_closes_at IS NOT NULL
-              AND session.check_in_opens_at <= $2
-              AND session.check_in_closes_at > $2
+              AND (
+                (session.check_in_opens_at <= $2 AND session.check_in_closes_at > $2)
+                OR attempt.status = 'checked_in'
+              )
             GROUP BY
                 session.id,
                 course.course_code,
@@ -140,6 +153,10 @@ class ActiveAttendanceSessionRepository:
                 requires_geofence=bool(row["requires_geofence"]),
                 requires_qr=bool(row["requires_qr"]),
                 check_in_completed=bool(row["check_in_completed"]),
+                attempt_status=row["attempt_status"],
+                initial_check_in_status=row["initial_check_in_status"],
+                checked_in_at=row["checked_in_at"],
+                final_attendance_status=row["final_attendance_status"],
             )
             for row in rows
         ]
