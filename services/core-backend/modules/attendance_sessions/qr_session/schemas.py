@@ -4,6 +4,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from modules.attendance_sessions.qr_session.evidence import QrBatchParticipation, StudentQrBatch
+from modules.attendance_sessions.qr_session.service import StudentQrProgress
+
 
 DEFAULT_QR_VALIDITY_SECONDS = 300
 MIN_QR_VALIDITY_SECONDS = 30
@@ -88,3 +91,84 @@ class CurrentDynamicQrSessionResponse(BaseModel):
     sequence: int
     valid_from: datetime = Field(alias="validFrom")
     expires_at: datetime = Field(alias="expiresAt")
+
+
+class StudentQrActiveBatchResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    qr_session_id: UUID = Field(alias="qrSessionId")
+    mode: QrSessionMode
+    activated_at: datetime = Field(alias="activatedAt")
+    expires_at: datetime = Field(alias="expiresAt")
+    required: bool
+    passed: bool
+
+    @staticmethod
+    def from_domain(batch: StudentQrBatch) -> "StudentQrActiveBatchResponse":
+        return StudentQrActiveBatchResponse(
+            qr_session_id=batch.qr_session_id, mode=batch.mode,
+            activated_at=batch.activated_at, expires_at=batch.expires_at,
+            required=batch.required, passed=batch.passed,
+        )
+
+
+class StudentQrBatchResponse(StudentQrActiveBatchResponse):
+    deactivated_at: datetime | None = Field(alias="deactivatedAt")
+    voided: bool
+
+    @staticmethod
+    def from_domain(batch: StudentQrBatch) -> "StudentQrBatchResponse":
+        return StudentQrBatchResponse(
+            qr_session_id=batch.qr_session_id, mode=batch.mode,
+            activated_at=batch.activated_at, deactivated_at=batch.deactivated_at,
+            expires_at=batch.expires_at, voided=batch.voided,
+            required=batch.required, passed=batch.passed,
+        )
+
+
+class StudentQrProgressResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    session_id: UUID = Field(alias="sessionId")
+    qr_enabled: bool = Field(alias="qrEnabled")
+    checked_in_at: datetime | None = Field(alias="checkedInAt")
+    required_count: int = Field(alias="requiredCount")
+    passed_count: int = Field(alias="passedCount")
+    active_batch: StudentQrActiveBatchResponse | None = Field(alias="activeBatch")
+    batches: list[StudentQrBatchResponse]
+
+    @staticmethod
+    def from_domain(progress: StudentQrProgress) -> "StudentQrProgressResponse":
+        return StudentQrProgressResponse(
+            session_id=progress.session_id, qr_enabled=progress.qr_enabled,
+            checked_in_at=progress.checked_in_at,
+            required_count=progress.required_count, passed_count=progress.passed_count,
+            active_batch=(StudentQrActiveBatchResponse.from_domain(progress.active_batch)
+                          if progress.active_batch else None),
+            batches=[StudentQrBatchResponse.from_domain(batch) for batch in progress.batches],
+        )
+
+
+class LecturerQrBatchResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    qr_session_id: UUID = Field(alias="qrSessionId")
+    mode: QrSessionMode
+    status: str
+    activated_at: datetime = Field(alias="activatedAt")
+    deactivated_at: datetime | None = Field(alias="deactivatedAt")
+    expires_at: datetime = Field(alias="expiresAt")
+    voided: bool
+    void_reason: str | None = Field(alias="voidReason")
+    required_student_count: int = Field(alias="requiredStudentCount")
+    passed_student_count: int = Field(alias="passedStudentCount")
+
+    @staticmethod
+    def from_domain(batch: QrBatchParticipation) -> "LecturerQrBatchResponse":
+        return LecturerQrBatchResponse(
+            qr_session_id=batch.qr_session_id, mode=batch.mode, status=batch.status,
+            activated_at=batch.activated_at, deactivated_at=batch.deactivated_at,
+            expires_at=batch.expires_at, voided=batch.voided, void_reason=batch.void_reason,
+            required_student_count=batch.required_student_count,
+            passed_student_count=batch.passed_student_count,
+        )
