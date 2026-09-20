@@ -7,6 +7,7 @@ import { CreateSessionButton } from "@/components/lecturer/CreateSessionButton";
 import { getSessionCreationOptions, getSessionList } from "@/services/lecturerService";
 import { sessionStatusDisplay } from "@/lib/status";
 import { TodayLecture } from "@/types/lecturer";
+import { isWebMockMode } from "@/lib/api/mode";
 
 export default async function LecturerSessionsPage() {
   const [sessions, timetableOptions] = await Promise.all([
@@ -19,7 +20,9 @@ export default async function LecturerSessionsPage() {
       <PageHeader
         title="Attendance sessions"
         description="View and monitor your attendance sessions."
-        actions={<CreateSessionButton timetableOptions={timetableOptions} />}
+        actions={isWebMockMode()
+          ? <span className="text-xs text-[var(--muted)]">Mock preview · creation unavailable</span>
+          : <CreateSessionButton timetableOptions={timetableOptions} />}
       />
 
       <Card flush>
@@ -45,8 +48,8 @@ export default async function LecturerSessionsPage() {
             { key: "checkin", header: "Check-in", render: (row) => row.checkInWindow },
             {
               key: "attendance",
-              header: "Attendance",
-              render: (row) => `${row.presentCount} / ${row.enrolledCount}`,
+              header: "Initial check-in",
+              render: (row) => `${(row.checkedInCount ?? 0) + (row.lateCheckedInCount ?? 0)} / ${row.enrolledCount}`,
             },
             {
               key: "status",

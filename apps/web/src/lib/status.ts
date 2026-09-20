@@ -1,6 +1,30 @@
 import { StatusTone } from "@/components/ui/StatusBadge";
+import type { LiveSessionStudentRow, SessionStatus } from "@/types/lecturer";
 
 type StatusDisplay = { label: string; tone: StatusTone };
+
+export function initialCheckInDisplay(row: LiveSessionStudentRow): StatusDisplay {
+  if (row.initialCheckInStatus === "late_checked_in") return { label: "Checked in late", tone: "warning" };
+  if (row.initialCheckInStatus === "checked_in") return { label: "Checked in", tone: "success" };
+  if (row.attemptStatus === "failed") return { label: "Failed verification", tone: "danger" };
+  if (row.attemptStatus === "in_progress") return { label: "In progress", tone: "info" };
+  return { label: "Not started", tone: "neutral" };
+}
+
+export function liveFinalStatusDisplay(
+  row: LiveSessionStudentRow,
+  sessionStatus: SessionStatus,
+): StatusDisplay {
+  if (row.finalStatus) return finalStatusDisplay(row.finalStatus);
+  if (sessionStatus === "cancelled") return { label: "Cancelled", tone: "neutral" };
+  if (row.reviewStatus === "pending") return { label: "Pending review", tone: "warning" };
+  return { label: "Awaiting final result", tone: "neutral" };
+}
+
+export function qrProgressLabel(row: Pick<LiveSessionStudentRow, "qrRequiredCount" | "qrPassedCount">): string {
+  return row.qrRequiredCount === null || row.qrPassedCount === null
+    ? "—" : `${row.qrPassedCount}/${row.qrRequiredCount}`;
+}
 
 export function sessionStatusDisplay(status: "scheduled" | "in_progress" | "closed" | "cancelled"): StatusDisplay {
   switch (status) {
