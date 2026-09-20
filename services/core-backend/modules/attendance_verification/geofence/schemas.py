@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from modules.attendance_verification.check_in.schemas import InitialCheckInPayload
 from modules.attendance_verification.geofence.types import (
     GeofenceDecision,
     GeofenceNextStep,
@@ -41,3 +42,8 @@ class CreateGeofenceAttemptResponse(BaseModel):
     allowed_radius_m: float = Field(alias="allowedRadiusM", gt=0)
     next_step: GeofenceNextStep = Field(alias="nextStep")
     reason: GeofenceReason | None = None
+    # Populated when this pass was the last step the session required.
+    initial_check_in: InitialCheckInPayload | None = Field(
+        alias="initialCheckIn",
+        default=None,
+    )
