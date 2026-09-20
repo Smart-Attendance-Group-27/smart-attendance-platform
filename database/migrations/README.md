@@ -20,13 +20,33 @@ For an existing database: apply only the migrations that have not run yet.
 
 ## Naming
 
+New migrations use a dated prefix:
+
 ```text
-NNNN_short_description.sql
-NNNN_short_description_rollback.sql   (optional)
+YYYYMMDD_NN_short_description.sql
+YYYYMMDD_NN_short_description_rollback.sql   (optional)
 ```
 
-`NNNN` is a zero-padded sequence number. Never renumber or edit a migration
-that has already been applied to a shared database; add a new one instead.
+`YYYYMMDD` is the date the file is written and `NN` is a two-digit sequence that
+is unique within that date across the whole folder. Check the folder before
+picking `NN`, and give a migration a prefix that sorts after every migration it
+depends on.
+
+Older files use two earlier styles that are kept as they are: `0001`/`0002`
+(four-digit, application schema) and `001`-`006` (three-digit, face
+verification). A new four-digit number would be ambiguous next to the
+three-digit family, which is why dated prefixes took over from
+`20260814_add_qr_batch_mode.sql` onwards.
+
+**Apply order is plain filename order**, which keeps the families in the order
+they were written:
+
+```text
+0001 -> 0002 -> 001 ... 006 -> 20260814 -> 2026MMDD_NN ...
+```
+
+Never renumber or edit a migration that has already been applied to a shared
+database; add a new one instead.
 
 ## Rules
 
@@ -126,6 +146,7 @@ never substitute a real Supabase credential into these commands.
 | --- | --- | --- | --- |
 | `0001_add_keycloak_user_id` | Adds `identity.users.keycloak_user_id` plus a partial unique index, so a Keycloak `sub` claim resolves to an internal application user | Yes — see below | **Not applied.** Pending a manual run by someone with Supabase project access |
 | `0002_add_session_geofence_snapshot` | Adds frozen centre coordinates and radius plus snapshot and policy checks to `attendance_session.session_geofences` | Yes - PostgreSQL 16, see below | **Not applied.** Supabase access is blocked; do not apply remotely |
+| `20260920_01_attendance_lifecycle_columns` | Additive columns for the attendance lifecycle: initial check-in state on `verification_attempts`, `qr_batch_id` on `qr_validation_attempts` (backfilled for static batches), and void fields on `qr_token_batches`, plus their indexes and the void consistency check | Pending - see "Verifying A Migration Before It Reaches Supabase" | **Not applied.** Apply only after the O0 schema audit confirms `0001` and `0002` are in place |
 
 ### What The Local Verification Confirmed
 
