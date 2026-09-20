@@ -61,7 +61,7 @@ export class LiveLocationService implements LocationService {
 
 function mapAttempt(attempt: GeofenceAttempt): LocationValidationResult {
   if (attempt.decision === 'PASSED') {
-    return { status: 'inside_geofence' };
+    return { status: 'inside_geofence', initialCheckIn: attempt.initialCheckIn ?? null };
   }
 
   const reasonStatus = mapReason(attempt.reason);

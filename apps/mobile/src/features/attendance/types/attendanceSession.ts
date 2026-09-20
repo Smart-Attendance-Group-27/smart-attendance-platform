@@ -28,4 +28,6 @@ export type AttendanceSession = {
   // (attendance_session.sessions.requires_qr) — controls whether the
   // check-in wizard routes through the QR scanner after face verification.
   requiresQr: boolean;
+  attemptStatus?: 'in_progress' | 'checked_in' | 'failed' | null;
+  finalAttendanceStatus?: 'present' | 'late' | 'absent' | null;
 };

@@ -173,7 +173,7 @@ describe('DashboardScreen', () => {
     expect(getActiveAttendanceSession).not.toHaveBeenCalled();
   });
 
-  test('opens the existing check-in result for a completed student', async () => {
+  test('opens Progress for a checked-in student', async () => {
     const activeSessionService: ActiveAttendanceSessionService = {
       async listMyActiveSessions() {
         return {
@@ -184,7 +184,9 @@ describe('DashboardScreen', () => {
                 '40000000-0000-0000-0000-000000000001',
                 'Completed attendance',
               ),
-              checkInCompleted: true,
+              attemptStatus: 'checked_in' as const,
+              initialCheckInStatus: 'checked_in' as const,
+              checkedInAt: '2026-08-13T05:35:00Z',
             },
           ],
         };
@@ -199,12 +201,12 @@ describe('DashboardScreen', () => {
     );
 
     fireEvent.press(
-      await screen.findByRole('button', { name: 'Check-in result' }),
+      await screen.findByRole('button', { name: 'View progress' }),
     );
 
     expect(mockPush).toHaveBeenCalledWith({
       pathname:
-        '/(student)/attendance/[sessionId]/check-in-success',
+        '/(student)/attendance/[sessionId]/progress',
       params: {
         sessionId: '40000000-0000-0000-0000-000000000001',
       },
@@ -235,7 +237,9 @@ describe('DashboardScreen', () => {
               '40000000-0000-0000-0000-000000000001',
               'Attendance in progress',
             ),
-            checkInCompleted: true,
+            attemptStatus: 'checked_in' as const,
+            initialCheckInStatus: 'checked_in' as const,
+            checkedInAt: '2026-08-13T05:35:00Z',
           },
         ],
       });
@@ -255,7 +259,7 @@ describe('DashboardScreen', () => {
     });
 
     expect(
-      await screen.findByRole('button', { name: 'Check-in result' }),
+      await screen.findByRole('button', { name: 'View progress' }),
     ).toBeTruthy();
     expect(listMyActiveSessions).toHaveBeenCalledTimes(2);
   });
@@ -448,6 +452,9 @@ function buildActiveSession(id: string, sessionTitle: string) {
     requiresFaceVerification: true,
     requiresGeofence: true,
     requiresQr: false,
-    checkInCompleted: false,
+    attemptStatus: null,
+    initialCheckInStatus: null,
+    checkedInAt: null,
+    finalAttendanceStatus: null,
   };
 }

@@ -74,7 +74,18 @@ function isResponse(value: unknown): value is ActiveAttendanceSession {
     typeof response.requiresFaceVerification === 'boolean' &&
     typeof response.requiresGeofence === 'boolean' &&
     typeof response.requiresQr === 'boolean' &&
-    typeof response.checkInCompleted === 'boolean'
+    (response.attemptStatus === null ||
+      response.attemptStatus === 'in_progress' ||
+      response.attemptStatus === 'checked_in' ||
+      response.attemptStatus === 'failed') &&
+    (response.initialCheckInStatus === null ||
+      response.initialCheckInStatus === 'checked_in' ||
+      response.initialCheckInStatus === 'late_checked_in') &&
+    (response.checkedInAt === null || isDateTime(response.checkedInAt)) &&
+    (response.finalAttendanceStatus === null ||
+      response.finalAttendanceStatus === 'present' ||
+      response.finalAttendanceStatus === 'late' ||
+      response.finalAttendanceStatus === 'absent')
   );
 }
 

@@ -1,10 +1,10 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useMemo } from 'react';
 import { Text } from 'react-native';
 
 import { ScreenContainer } from '../../../../components/ui';
 import { AttendanceSessionDetailsScreen } from '../../../../features/attendance/screens/AttendanceSessionDetailsScreen';
-import { CoreApiAttendanceService } from '../../../../features/attendance/services/coreApiAttendanceService';
+import { createAttendanceServices } from '../../../../features/attendance/services/createAttendanceServices';
 import { useAuth } from '../../../../features/auth/context/AuthContext';
 import { CoreApiClient } from '../../../../services/api/coreApiClient';
 
@@ -15,7 +15,7 @@ export default function AttendanceSessionDetailsRoute() {
     session.status === 'authenticated' ? session.accessToken : undefined;
   const attendanceService = useMemo(
     () =>
-      new CoreApiAttendanceService(
+      createAttendanceServices(
         new CoreApiClient({ getAccessToken: () => accessToken }),
       ),
     [accessToken],
@@ -47,18 +47,18 @@ export default function AttendanceSessionDetailsRoute() {
     <AttendanceSessionDetailsScreen
       attendanceService={attendanceService}
       onBack={() => router.back()}
-      onCheckInCompleted={(completedSessionId) =>
+      onOpenProgress={(completedSessionId) =>
         router.replace({
           pathname:
-            '/(student)/attendance/[sessionId]/check-in-success',
+            '/(student)/attendance/[sessionId]/progress',
           params: { sessionId: completedSessionId },
-        })
+        } as unknown as Href)
       }
-      onStartCheckIn={(requiresQr) =>
+      onStartCheckIn={() =>
         router.push({
           pathname:
             '/(student)/attendance/[sessionId]/location-check',
-          params: { sessionId, requiresQr: requiresQr ? '1' : '0' },
+          params: { sessionId },
         })
       }
       sessionId={sessionId}

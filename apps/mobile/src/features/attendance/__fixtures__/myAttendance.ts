@@ -1,0 +1,76 @@
+import type { MyAttendance } from '../types/myAttendance';
+
+const base: MyAttendance = {
+  sessionId: 'attendance-session-active',
+  courseCode: 'CS3203',
+  courseName: 'Software Engineering Project',
+  sessionTitle: 'Architecture Review Lecture',
+  sessionType: 'lecture',
+  sessionState: 'active',
+  scheduledStartAt: '2026-07-20T10:00:00+05:30',
+  scheduledEndAt: '2026-07-20T12:00:00+05:30',
+  checkInOpensAt: '2026-07-20T09:50:00+05:30',
+  checkInClosesAt: '2026-07-20T10:20:00+05:30',
+  lateAfterAt: '2026-07-20T10:10:00+05:30',
+  requiresFaceVerification: true,
+  qrEnabled: true,
+  canStartCheckIn: true,
+  verification: {
+    attemptStatus: null,
+    failureReason: null,
+    geofenceStatus: null,
+    faceStatus: null,
+    livenessPassed: null,
+  },
+  initialCheckIn: null,
+  finalAttendance: null,
+};
+
+export const myAttendanceFixtures: Readonly<Record<string, MyAttendance>> = {
+  'attendance-session-active': base,
+  'attendance-session-geofence-only': {
+    ...base,
+    sessionId: 'attendance-session-geofence-only',
+    requiresFaceVerification: false,
+    qrEnabled: false,
+  },
+  'attendance-session-checked-in': {
+    ...base,
+    sessionId: 'attendance-session-checked-in',
+    canStartCheckIn: false,
+    verification: { ...base.verification, attemptStatus: 'checked_in', geofenceStatus: 'passed', faceStatus: 'passed' },
+    initialCheckIn: { status: 'checked_in', checkedInAt: '2026-07-20T10:02:00+05:30' },
+  },
+  'attendance-session-late': {
+    ...base,
+    sessionId: 'attendance-session-late',
+    canStartCheckIn: false,
+    verification: { ...base.verification, attemptStatus: 'checked_in', geofenceStatus: 'passed', faceStatus: 'passed' },
+    initialCheckIn: { status: 'late_checked_in', checkedInAt: '2026-07-20T10:18:00+05:30' },
+  },
+  'attendance-session-recovery': {
+    ...base,
+    sessionId: 'attendance-session-recovery',
+    verification: { ...base.verification, attemptStatus: 'in_progress', geofenceStatus: 'passed', faceStatus: 'passed' },
+  },
+  'attendance-session-closed': {
+    ...base,
+    sessionId: 'attendance-session-closed',
+    courseCode: 'CS3052',
+    courseName: 'Computer Security',
+    sessionTitle: 'Network Defence Lab',
+    sessionType: 'lab',
+    sessionState: 'closed',
+    canStartCheckIn: false,
+    verification: { ...base.verification, attemptStatus: 'checked_in', geofenceStatus: 'passed', faceStatus: 'passed' },
+    initialCheckIn: { status: 'checked_in', checkedInAt: '2026-07-14T08:02:00+05:30' },
+    finalAttendance: { status: 'present', source: 'automatic', decidedAt: '2026-07-14T10:00:00+05:30' },
+  },
+  'attendance-session-manual-absent': {
+    ...base,
+    sessionId: 'attendance-session-manual-absent',
+    sessionState: 'closed',
+    canStartCheckIn: false,
+    finalAttendance: { status: 'absent', source: 'manual', decidedAt: '2026-07-20T12:00:00+05:30' },
+  },
+};

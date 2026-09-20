@@ -1,93 +1,45 @@
-import type {
-  AttendanceCheckInResultLookupResult,
-  AttendanceService,
-  AttendanceSessionLookupResult,
-} from './attendanceService';
-import type { AttendanceCheckInResult } from '../types/attendanceCheckInResult';
+import { getMockAttendance, markMockFacePassed } from '../__fixtures__/mockAttendanceStore';
 import type { AttendanceSession } from '../types/attendanceSession';
-
-const attendanceSessions: Readonly<Record<string, AttendanceSession>> = {
-  'attendance-session-active': {
-    id: 'attendance-session-active',
-    lectureId: 'lecture-cs3203-architecture-review',
-    courseCode: 'CS3203',
-    courseName: 'Software Engineering Project',
-    sessionTitle: 'Architecture Review Lecture',
-    lecturerName: 'Dr. N. Perera',
-    sessionType: 'lecture',
-    startTime: '2026-07-20T10:00:00+05:30',
-    endTime: '2026-07-20T12:00:00+05:30',
-    venue: 'Level 3 Lab',
-    checkInOpensAt: '2026-07-20T09:50:00+05:30',
-    checkInClosesAt: '2026-07-20T10:20:00+05:30',
-    lateThreshold: '2026-07-20T10:10:00+05:30',
-    checkInStatus: 'open',
-    requiresQr: false,
-  },
-  'attendance-session-closed': {
-    id: 'attendance-session-closed',
-    lectureId: 'lecture-cs3052-network-defence',
-    courseCode: 'CS3052',
-    courseName: 'Computer Security',
-    sessionTitle: 'Network Defence Lab',
-    lecturerName: 'Dr. R. Silva',
-    sessionType: 'lab',
-    startTime: '2026-07-14T08:00:00+05:30',
-    endTime: '2026-07-14T10:00:00+05:30',
-    venue: 'Level 2 Security Lab',
-    checkInOpensAt: '2026-07-14T07:50:00+05:30',
-    checkInClosesAt: '2026-07-14T08:20:00+05:30',
-    lateThreshold: '2026-07-14T08:10:00+05:30',
-    checkInStatus: 'closed',
-    requiresQr: false,
-  },
-};
-
-const checkInResults: Readonly<Record<string, AttendanceCheckInResult>> = {
-  'attendance-session-active': {
-    sessionId: 'attendance-session-active',
-    status: 'present',
-    checkInTime: '2026-07-20T10:02:00+05:30',
-  },
-  'attendance-session-late': {
-    sessionId: 'attendance-session-late',
-    status: 'late',
-    checkInTime: '2026-07-20T10:18:00+05:30',
-  },
-};
+import type { CheckInResult, MyAttendanceResult } from '../types/myAttendance';
+import { toAttendanceSession } from './coreApiAttendanceService';
+import type { AttendanceService, AttendanceSessionLookupResult } from './attendanceService';
 
 export class MockAttendanceService implements AttendanceService {
-  async getAttendanceSession(
-    sessionId: string,
-  ): Promise<AttendanceSessionLookupResult> {
-    const session = attendanceSessions[sessionId];
-
-    if (!session) {
-      return {
-        status: 'unavailable',
-      };
-    }
-
-    return {
-      status: 'available',
-      session: { ...session },
-    };
+  async getAttendanceSession(sessionId: string): Promise<AttendanceSessionLookupResult> {
+    const state = getMockAttendance(sessionId);
+    if (!state) return { status: 'unavailable' };
+    const session: AttendanceSession = toAttendanceSession(state);
+    return { status: 'available', session };
   }
 
-  async getCheckInResult(
-    sessionId: string,
-  ): Promise<AttendanceCheckInResultLookupResult> {
-    const result = checkInResults[sessionId];
+  async getMyAttendance(sessionId: string): Promise<MyAttendanceResult> {
+    const attendance = getMockAttendance(sessionId);
+    return attendance
+      ? { status: 'loaded', attendance }
+      : { status: 'not-found' };
+  }
 
-    if (!result) {
+  async checkIn(sessionId: string): Promise<CheckInResult> {
+    const state = getMockAttendance(sessionId);
+    if (!state) return { status: 'not-found' };
+    if (state.initialCheckIn) return {
+      status: 'loaded', outcome: 'already_checked_in',
+      initialCheckIn: state.initialCheckIn, missingRequirements: [],
+    };
+    if (state.sessionState !== 'active') return { status: 'conflict', errorCode: 'SESSION_NOT_ACTIVE' };
+    if (state.verification.geofenceStatus !== 'passed' ||
+        (state.requiresFaceVerification && state.verification.faceStatus !== 'passed')) {
       return {
-        status: 'unavailable',
+        status: 'loaded', outcome: 'incomplete', initialCheckIn: null,
+        missingRequirements: state.verification.geofenceStatus !== 'passed'
+          ? ['geofence'] : ['face_verification'],
       };
     }
-
-    return {
-      status: 'available',
-      result: { ...result },
+    const initialCheckIn = {
+      status: 'checked_in' as const,
+      checkedInAt: '2026-07-20T10:04:00+05:30',
     };
+    markMockFacePassed(sessionId);
+    return { status: 'loaded', outcome: 'checked_in', initialCheckIn, missingRequirements: [] };
   }
 }

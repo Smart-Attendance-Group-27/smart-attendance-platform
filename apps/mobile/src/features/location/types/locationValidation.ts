@@ -1,5 +1,7 @@
+import type { InitialCheckIn } from '../../attendance/types/myAttendance';
+
 export type LocationValidationResult =
-  | { status: 'inside_geofence' }
+  | { status: 'inside_geofence'; initialCheckIn?: InitialCheckIn | null }
   | { status: 'outside_geofence' }
   | { status: 'permission_denied' }
   | { status: 'services_disabled' }
