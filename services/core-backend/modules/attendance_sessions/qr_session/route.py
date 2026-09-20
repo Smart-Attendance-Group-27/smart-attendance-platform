@@ -23,6 +23,8 @@ from modules.attendance_sessions.qr_session.schemas import (
     CreateQrSessionRequest,
     CreateQrSessionResponse,
     CurrentDynamicQrSessionResponse,
+    LecturerQrBatchResponse,
+    StudentQrProgressResponse,
     VerifyQrSessionRequest,
     VerifyQrSessionResponse,
 )
@@ -38,6 +40,10 @@ create_qr_session_router = APIRouter(
     prefix="/attendance-sessions/{session_id}/qr-sessions",
 )
 verify_qr_session_router = APIRouter(prefix="/qr-sessions/{qr_session_id}")
+student_qr_progress_router = APIRouter(prefix="/attendance-sessions/{session_id}/qr-progress")
+lecturer_qr_batches_router = APIRouter(
+    prefix="/lecturers/me/attendance-sessions/{session_id}/qr-batches",
+)
 
 _SESSION_NOT_FOUND_DETAIL = "The attendance session was not found, or does not belong to this lecturer."
 _QR_SESSION_NOT_FOUND_DETAIL = "The QR session was not found, or does not belong to this lecturer."
@@ -209,6 +215,44 @@ async def verify_qr_session(
     )
 
 
+@student_qr_progress_router.get("", response_model=StudentQrProgressResponse)
+async def get_student_qr_progress(
+    session_id: UUID,
+    http_request: Request,
+    current_student: CurrentStudent,
+    qr_session_service: QrSessionService = Depends(get_qr_session_service),
+) -> StudentQrProgressResponse:
+    try:
+        progress = await qr_session_service.get_qr_progress_for_student(
+            http_request.app.state.db_pool, session_id, current_student.user_id,
+        )
+    except AttendanceSessionNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "SESSION_NOT_FOUND", "message": "Attendance session was not found."},
+        ) from error
+    return StudentQrProgressResponse.from_domain(progress)
+
+
+@lecturer_qr_batches_router.get("", response_model=list[LecturerQrBatchResponse])
+async def list_lecturer_qr_batches(
+    session_id: UUID,
+    http_request: Request,
+    current_lecturer: CurrentLecturer,
+    qr_session_service: QrSessionService = Depends(get_qr_session_service),
+) -> list[LecturerQrBatchResponse]:
+    try:
+        batches = await qr_session_service.list_qr_batches_for_lecturer(
+            http_request.app.state.db_pool, session_id, current_lecturer.user_id,
+        )
+    except LecturerSessionAccessError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=_SESSION_NOT_FOUND_DETAIL,
+        ) from error
+    return [LecturerQrBatchResponse.from_domain(batch) for batch in batches]
+
+
 @verify_qr_session_router.get(
     "/current",
     response_model=CurrentDynamicQrSessionResponse,
@@ -264,3 +308,5 @@ async def stream_current_dynamic_qr_session(
 
 router.include_router(create_qr_session_router)
 router.include_router(verify_qr_session_router)
+router.include_router(student_qr_progress_router)
+router.include_router(lecturer_qr_batches_router)
