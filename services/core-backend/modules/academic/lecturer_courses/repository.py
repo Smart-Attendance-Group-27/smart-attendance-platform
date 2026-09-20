@@ -61,10 +61,13 @@ class LecturerCourseRepository:
                             1
                         )
                         END
-                    FROM attendance_verification.attendance_records AS record
-                    JOIN attendance_session.sessions AS session
-                        ON session.id = record.session_id
+                    FROM attendance_session.sessions AS session
+                    JOIN attendance_session.session_students AS roster
+                        ON roster.session_id = session.id
+                    LEFT JOIN attendance_verification.attendance_records AS record
+                        ON record.session_id = session.id AND record.student_id = roster.student_id
                     WHERE session.course_offering_id = offering.id
+                      AND session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
                 ) AS attendance_rate_percent
             FROM academic.course_lecturers AS assignment
             JOIN academic.course_offerings AS offering

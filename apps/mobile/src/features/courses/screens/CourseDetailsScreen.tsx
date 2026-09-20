@@ -25,8 +25,6 @@ export function CourseDetailsScreen({
   onBack,
 }: CourseDetailsScreenProps) {
   const [activeTab, setActiveTab] = useState<'sessions' | 'attendance'>('sessions');
-  // State to simulate identity verification flow (State 1: Active Now vs State 2: Waiting for QR check)
-  const [isIdentityVerified, setIsIdentityVerified] = useState(false);
 
   const course = courses.find((c) => c.id === courseId);
 
@@ -45,23 +43,6 @@ export function CourseDetailsScreen({
   const renderBadge = (status: Session['status']) => {
     switch (status) {
       case 'active':
-        if (isIdentityVerified) {
-          return (
-            <View style={[styles.badge, styles.badgeWaiting]}>
-              <SymbolView
-                name={{
-                  ios: 'face.smiling',
-                  android: 'face',
-                  web: 'face',
-                }}
-                size={14}
-                tintColor="#1D4ED8"
-                style={styles.badgeIcon}
-              />
-              <Text style={[styles.badgeText, styles.badgeTextWaiting]}>Waiting for QR check</Text>
-            </View>
-          );
-        }
         return (
           <View style={[styles.badge, styles.badgeActive]}>
             <SymbolView
@@ -106,41 +87,25 @@ export function CourseDetailsScreen({
               tintColor={lightColors.success}
               style={styles.badgeIcon}
             />
-            <Text style={[styles.badgeText, styles.badgeTextMarked]}>Attendance marked</Text>
+            <Text style={[styles.badgeText, styles.badgeTextMarked]}>Present</Text>
           </View>
         );
-      case 'missed':
-        return (
-          <View style={[styles.badge, styles.badgeMissed]}>
-            <SymbolView
-              name={{
-                ios: 'exclamationmark.triangle',
-                android: 'warning',
-                web: 'warning',
-              }}
-              size={14}
-              tintColor={lightColors.error}
-              style={styles.badgeIcon}
-            />
-            <Text style={[styles.badgeText, styles.badgeTextMissed]}>Missed</Text>
-          </View>
-        );
-      case 'closed':
-        return (
-          <View style={[styles.badge, styles.badgeClosed]}>
-            <SymbolView
-              name={{
-                ios: 'lock',
-                android: 'lock_outline',
-                web: 'lock_outline',
-              }}
-              size={14}
-              tintColor={lightColors.neutral}
-              style={styles.badgeIcon}
-            />
-            <Text style={[styles.badgeText, styles.badgeTextClosed]}>Session closed</Text>
-          </View>
-        );
+      case 'late':
+        return <View style={[styles.badge, styles.badgeWaiting]}>
+          <Text style={[styles.badgeText, styles.badgeTextWaiting]}>Late</Text>
+        </View>;
+      case 'absent':
+        return <View style={[styles.badge, styles.badgeMissed]}>
+          <Text style={[styles.badgeText, styles.badgeTextMissed]}>Absent</Text>
+        </View>;
+      case 'cancelled':
+        return <View style={[styles.badge, styles.badgeClosed]}>
+          <Text style={[styles.badgeText, styles.badgeTextClosed]}>Cancelled</Text>
+        </View>;
+      case 'awaiting':
+        return <View style={[styles.badge, styles.badgeWaiting]}>
+          <Text style={[styles.badgeText, styles.badgeTextWaiting]}>Awaiting result</Text>
+        </View>;
       default:
         return null;
     }
@@ -212,24 +177,12 @@ export function CourseDetailsScreen({
               </Text>
             </View>
 
-            {/* Simulated state toggle helper */}
-            <Pressable
-              onPress={() => setIsIdentityVerified(!isIdentityVerified)}
-              style={styles.simulationHelper}
-            >
-              <Text style={styles.simulationHelperText}>
-                {isIdentityVerified
-                  ? '🔄 Toggle to "Active now" (Start Attendance)'
-                  : '🔄 Toggle to "Waiting for QR Check"'}
-              </Text>
-            </Pressable>
-
             {/* Sessions grouped by week */}
             {Object.entries(groupedSessions).map(([week, sessions]) => (
               <View key={week} style={styles.weekGroup}>
                 <Text style={styles.weekHead}>{week}</Text>
                 {sessions.map((session) => {
-                  const isActiveNow = session.status === 'active' && !isIdentityVerified;
+                  const isActiveNow = session.status === 'active';
 
                   return (
                     <View
@@ -237,7 +190,7 @@ export function CourseDetailsScreen({
                       style={[
                         styles.sessionCard,
                         isActiveNow && styles.sessionCardActive,
-                        (session.status === 'closed') && styles.sessionCardClosed,
+                        (session.status === 'cancelled') && styles.sessionCardClosed,
                       ]}
                     >
                       <View style={styles.sessionCardHeader}>
@@ -252,19 +205,6 @@ export function CourseDetailsScreen({
                         <Text style={styles.sessionRecordedText}>{session.recordedTime}</Text>
                       )}
 
-                      {/* Render 'Start attendance' button only if session is active and not verified */}
-                      {isActiveNow && (
-                        <View style={styles.buttonContainer}>
-                          <Pressable
-                            style={({ pressed }) => [
-                              styles.btnStart,
-                              pressed && styles.btnStartPressed,
-                            ]}
-                          >
-                            <Text style={styles.btnStartLabel}>Start attendance</Text>
-                          </Pressable>
-                        </View>
-                      )}
                     </View>
                   );
                 })}
@@ -296,7 +236,7 @@ export function CourseDetailsScreen({
                 </View>
                 <View style={styles.statCol}>
                   <Text style={[styles.statValue, styles.statPresent]}>{course.attendedSessions}</Text>
-                  <Text style={styles.statLabel}>Present</Text>
+                  <Text style={styles.statLabel}>Attended</Text>
                 </View>
                 <View style={styles.statCol}>
                   <Text style={[styles.statValue, styles.statAbsent]}>
@@ -329,14 +269,15 @@ export function CourseDetailsScreen({
                     <View
                       style={[
                         styles.recordStatusBadge,
-                        record.status === 'Present'
-                          ? styles.recordStatusBadgePresent
-                          : styles.recordStatusBadgeAbsent,
+                        record.status === 'Present' ? styles.recordStatusBadgePresent
+                          : record.status === 'Late' ? styles.recordStatusBadgeLate
+                            : record.status === 'Absent' ? styles.recordStatusBadgeAbsent
+                              : styles.recordStatusBadgeNeutral,
                       ]}
                     >
                       <SymbolView
                         name={
-                          record.status === 'Present'
+                          record.status === 'Present' || record.status === 'Late'
                             ? {
                                 ios: 'checkmark.circle',
                                 android: 'check_circle',
@@ -350,18 +291,20 @@ export function CourseDetailsScreen({
                         }
                         size={14}
                         tintColor={
-                          record.status === 'Present'
-                            ? lightColors.success
-                            : lightColors.error
+                          record.status === 'Present' ? lightColors.success
+                            : record.status === 'Late' ? lightColors.warning
+                              : record.status === 'Absent' ? lightColors.error
+                                : lightColors.neutral
                         }
                         style={styles.recordStatusIcon}
                       />
                       <Text
                         style={[
                           styles.recordStatusText,
-                          record.status === 'Present'
-                            ? styles.recordStatusTextPresent
-                            : styles.recordStatusTextAbsent,
+                          record.status === 'Present' ? styles.recordStatusTextPresent
+                            : record.status === 'Late' ? styles.recordStatusTextLate
+                              : record.status === 'Absent' ? styles.recordStatusTextAbsent
+                                : styles.recordStatusTextNeutral,
                         ]}
                       >
                         {record.status}
@@ -475,20 +418,6 @@ const styles = StyleSheet.create({
     color: lightColors.textSecondary,
     marginTop: 4,
   },
-  simulationHelper: {
-    backgroundColor: lightColors.neutralBackground,
-    paddingVertical: 10,
-    borderRadius: radii.small,
-    alignItems: 'center',
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: lightColors.border,
-  },
-  simulationHelperText: {
-    ...typography.caption,
-    fontWeight: '700',
-    color: lightColors.primaryInteraction,
-  },
   weekGroup: {
     marginBottom: spacing.md,
   },
@@ -541,26 +470,6 @@ const styles = StyleSheet.create({
     ...typography.supporting,
     color: lightColors.textSecondary,
     marginTop: 8,
-  },
-  buttonContainer: {
-    marginTop: spacing.sm,
-    flexDirection: 'row',
-  },
-  btnStart: {
-    backgroundColor: lightColors.primaryInteraction,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: radii.button - 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnStartPressed: {
-    opacity: 0.8,
-  },
-  btnStartLabel: {
-    ...typography.caption,
-    fontWeight: '700',
-    color: lightColors.surface,
   },
   badge: {
     flexDirection: 'row',
@@ -745,6 +654,12 @@ const styles = StyleSheet.create({
   recordStatusBadgeAbsent: {
     backgroundColor: lightColors.errorBackground,
   },
+  recordStatusBadgeLate: {
+    backgroundColor: lightColors.warningBackground,
+  },
+  recordStatusBadgeNeutral: {
+    backgroundColor: lightColors.neutralBackground,
+  },
   recordStatusIcon: {
     marginRight: 4,
   },
@@ -757,6 +672,12 @@ const styles = StyleSheet.create({
   },
   recordStatusTextAbsent: {
     color: lightColors.error,
+  },
+  recordStatusTextLate: {
+    color: lightColors.warning,
+  },
+  recordStatusTextNeutral: {
+    color: lightColors.neutral,
   },
   rowDivider: {
     height: 1,
