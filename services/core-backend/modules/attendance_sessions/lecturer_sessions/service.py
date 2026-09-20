@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -23,6 +24,8 @@ from modules.attendance_sessions.lecturer_sessions.repository import (
     TimetableEntryForSessionRecord,
 )
 from modules.audit.repository import write_audit_log
+from modules.notification.push.notification_service import NotificationService
+from modules.notification.push.provider import PushProvider
 
 ACTIVE_PROFILE_STATUS = "active"
 ACTOR_TYPE_LECTURER = "lecturer"
@@ -40,11 +43,13 @@ class LecturerSessionService:
         self,
         repository: LecturerSessionRepository | None = None,
         lecturer_profile_repository: LecturerProfileRepository | None = None,
+        notification_service: NotificationService | None = None,
     ) -> None:
         self._repository = repository or LecturerSessionRepository()
         self._lecturer_profile_repository = (
             lecturer_profile_repository or LecturerProfileRepository()
         )
+        self._notification_service = notification_service
 
     async def list_for_user(
         self,
@@ -105,6 +110,18 @@ class LecturerSessionService:
                 entity_id=session_id,
                 old_values={"activatedAt": None},
                 new_values={"activatedAt": updated.activated_at.isoformat()},
+            )
+
+        # Fire push notifications to all enrolled students.
+        # This runs AFTER the transaction commits so the session row is visible.
+        if self._notification_service is not None:
+            asyncio.create_task(
+                _notify_enrolled_students(
+                    pool=pool,
+                    session_id=session_id,
+                    session_record=updated,
+                    notification_service=self._notification_service,
+                )
             )
 
         return updated
@@ -316,3 +333,80 @@ def _resolve_geofence_snapshot(
         return None
 
     return latitude, longitude, radius
+
+
+# ---------------------------------------------------------------------------
+# Notification helpers
+# ---------------------------------------------------------------------------
+
+
+async def _fetch_enrolled_user_ids(
+    pool: asyncpg.Pool,
+    session_id: UUID,
+) -> list[UUID]:
+    """Return identity.users.id for every student enrolled in this session."""
+    async with pool.acquire() as connection:
+        rows = await connection.fetch(
+            """
+            SELECT sp.user_id
+            FROM attendance_session.session_students AS ss
+            JOIN academic.student_profiles AS sp ON sp.id = ss.student_id
+            WHERE ss.session_id = $1
+            """,
+            session_id,
+        )
+    return [row["user_id"] for row in rows]
+
+
+async def _notify_enrolled_students(
+    *,
+    pool: asyncpg.Pool,
+    session_id: UUID,
+    session_record: LecturerSessionRecord,
+    notification_service: NotificationService,
+) -> None:
+    """Send ATTENDANCE_SESSION_OPENED push to every enrolled student.
+
+    Runs as a fire-and-forget background task after the activation
+    transaction commits.  Failures are logged but never re-raised so they
+    cannot affect the session activation response.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        user_ids = await _fetch_enrolled_user_ids(pool, session_id)
+    except Exception:
+        logger.exception(
+            "Failed to fetch enrolled students for session=%s; "
+            "push notifications will not be sent.",
+            session_id,
+        )
+        return
+
+    course_name = session_record.course_name or "your course"
+    title = "Attendance Session Open"
+    body = f"An attendance session for {course_name} is now open. Check in now."
+
+    for user_id in user_ids:
+        try:
+            await notification_service.send_notification(
+                pool,
+                recipient_user_id=user_id,
+                notification_type="ATTENDANCE_SESSION_OPENED",
+                title=title,
+                body=body,
+                priority="high",
+                related_entity_type="ATTENDANCE_SESSION",
+                related_entity_id=session_id,
+                in_app_visible=True,
+                extra_data={"sessionId": str(session_id)},
+            )
+        except Exception:
+            logger.exception(
+                "Failed to send session-opened notification to user=%s "
+                "for session=%s.",
+                user_id,
+                session_id,
+            )

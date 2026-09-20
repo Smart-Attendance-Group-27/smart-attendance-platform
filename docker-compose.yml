@@ -60,13 +60,13 @@ services:
       DYNAMIC_QR_HMAC_SECRET: ${DYNAMIC_QR_HMAC_SECRET:?Set DYNAMIC_QR_HMAC_SECRET in the root .env file}
       FACE_VERIFICATION_SERVICE_URL: ${FACE_VERIFICATION_SERVICE_URL:-http://face-verification:8001}
       FACE_VERIFICATION_TIMEOUT_SECONDS: ${FACE_VERIFICATION_TIMEOUT_SECONDS:-30}
+      EXPO_PUSH_TIMEOUT_SECONDS: ${EXPO_PUSH_TIMEOUT_SECONDS:-10}
+      EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
     ports:
       - "${CORE_API_PORT:-8000}:8000"
     depends_on:
       redis:
         condition: service_healthy
-      keycloak:
-        condition: service_started
       face-verification:
         condition: service_started
     healthcheck:
@@ -132,6 +132,7 @@ services:
   keycloak-db:
     image: postgres:16-alpine
     container_name: uniattend-keycloak-db
+    profiles: [local-keycloak]
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${KEYCLOAK_DB_NAME:-keycloak}
@@ -154,6 +155,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.7.0
     container_name: uniattend-keycloak
+    profiles: [local-keycloak]
     command: ["start-dev", "--import-realm"]
     restart: unless-stopped
     environment:

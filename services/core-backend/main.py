@@ -40,6 +40,8 @@ from modules.attendance_verification.manual_review.route import (
 from modules.audit.admin_log.route import router as admin_audit_log_router
 from modules.identity.admin_users.route import router as admin_users_router
 from modules.identity.auth.route import router as auth_router
+from modules.notification.device_tokens.route import router as device_tokens_router
+from modules.notification.push.expo_provider import ExpoPushProvider
 from modules.notification.student_notifications.route import (
     router as student_notifications_router,
 )
@@ -61,6 +63,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.db_pool = await create_database_pool(settings)
     app.state.redis_client = await create_redis_client(settings)
+    app.state.push_provider = ExpoPushProvider(
+        timeout_seconds=settings.expo_push_timeout_seconds,
+        access_token=(
+            settings.expo_access_token.get_secret_value()
+            if settings.expo_access_token
+            else None
+        ),
+    )
     # Deliberately no connection details here: the URI, user and password must
     # never reach the logs.
     logger.info(
@@ -87,6 +97,7 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
     app.include_router(student_profile_router, prefix="/api/v1")
     app.include_router(student_courses_router, prefix="/api/v1")
     app.include_router(student_notifications_router, prefix="/api/v1")
+    app.include_router(device_tokens_router, prefix="/api/v1")
     app.include_router(active_session_router, prefix="/api/v1")
     app.include_router(qr_session_router, prefix="/api/v1")
     app.include_router(geofence_router, prefix="/api/v1")
