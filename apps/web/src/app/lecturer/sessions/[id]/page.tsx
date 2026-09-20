@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { SessionLifecycleControls } from "@/components/lecturer/SessionLifecycleControls";
 import { SessionLiveRefresh } from "@/components/lecturer/SessionLiveRefresh";
+import { ManualAttendanceDialog } from "@/components/lecturer/ManualAttendanceDialog";
 import { getSessionDetail } from "@/services/lecturerService";
 import { formatDateTimeLabel } from "@/lib/api/format";
 import { initialCheckInDisplay, liveFinalStatusDisplay, qrProgressLabel, sessionStatusDisplay } from "@/lib/status";
@@ -94,10 +95,17 @@ export default async function SessionMonitorPage(props: PageProps<"/lecturer/ses
               return <StatusBadge tone={display.tone}>{display.label}</StatusBadge>;
             } },
             { key: "source", header: "Source", render: (row) => row.recordSource === "manual"
-              ? <StatusBadge tone="purple">Manual</StatusBadge>
+              ? <span><StatusBadge tone="purple">Manual</StatusBadge>
+                {row.manualReason ? <span className="mt-1 block text-[10px] text-[var(--muted)]">{row.manualReason}</span> : null}
+              </span>
               : row.recordSource === "automatic" ? "Automatic" : "—" },
-            { key: "action", header: "Action", align: "right", render: (row) =>
-              row.reviewStatus === "pending" ? <LinkButton href="/lecturer/review">Review</LinkButton> : "—" },
+            { key: "action", header: "Action", align: "right", render: (row) => (
+              <div className="flex justify-end gap-2">
+                {row.reviewStatus === "pending" ? <LinkButton href="/lecturer/review">Review</LinkButton> : null}
+                {!isWebMockMode() && (session.status === "in_progress" || session.status === "closed")
+                  ? <ManualAttendanceDialog sessionId={session.sessionId} student={row} /> : null}
+              </div>
+            ) },
           ]}
           rows={session.students}
           getRowKey={(row) => row.studentId}

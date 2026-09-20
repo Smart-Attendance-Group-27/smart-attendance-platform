@@ -86,6 +86,18 @@ export type ApiSessionStudent = {
   recordUpdatedAt: string | null;
 };
 
+export type ApiManualAttendanceStatus = "present" | "late" | "absent";
+
+export type ApiManualAttendanceResponse = {
+  sessionId: string;
+  studentId: string;
+  status: ApiManualAttendanceStatus;
+  source: "manual";
+  reason: string;
+  recordedBy: string;
+  updatedAt: string;
+};
+
 export type ApiManualReviewDecisionRequest =
   | { decision: "approve"; attendanceStatus: "present" | "late"; reason: string }
   | { decision: "reject"; reason: string };
@@ -194,6 +206,17 @@ export function getLecturerSessionDetail(sessionId: string): Promise<ApiLecturer
 export function getLecturerSessionStudents(sessionId: string): Promise<ApiSessionStudent[]> {
   if (isWebMockMode()) return Promise.resolve(mockLecturerStudents[sessionId] ?? []);
   return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${sessionId}/students`);
+}
+
+export function putManualAttendance(
+  sessionId: string,
+  studentId: string,
+  body: { status: ApiManualAttendanceStatus; reason: string },
+): Promise<ApiManualAttendanceResponse> {
+  return coreBackendFetch(
+    `/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/students/${encodeURIComponent(studentId)}/attendance`,
+    { method: "PUT", body },
+  );
 }
 
 export function getLecturerQrBatches(sessionId: string): Promise<LecturerQrBatch[]> {
