@@ -148,6 +148,7 @@ never substitute a real Supabase credential into these commands.
 | `0002_add_session_geofence_snapshot` | Adds frozen centre coordinates and radius plus snapshot and policy checks to `attendance_session.session_geofences` | Yes - PostgreSQL 16, see below | **Not applied.** Supabase access is blocked; do not apply remotely |
 | `20260920_01_attendance_lifecycle_columns` | Additive columns for the attendance lifecycle: initial check-in state on `verification_attempts`, `qr_batch_id` on `qr_validation_attempts` (backfilled for static batches), and void fields on `qr_token_batches`, plus their indexes and the void consistency check | Yes - PostgreSQL 16, see below | **Not applied.** Apply only after the O0 schema audit confirms `0001` and `0002` are in place |
 | `20260920_02_attendance_check_in_state` | Backfills the initial check-in of attempts that already completed, renames the `completed` status to `checked_in`, and adds CHECK constraints for the frozen status vocabulary | Yes - PostgreSQL 16, see below | **Not applied.** Not additive: apply it together with the release that replaces the completion endpoint, never ahead of it |
+| `20260920_03_final_attendance_constraints` | Renames the record source `manual_review` to `manual` and adds CHECK constraints for the final attendance status and source vocabularies, and for the recorder and reason a manual record must carry | Yes - PostgreSQL 16, see below | **Not applied.** Not additive: apply it together with the release that writes `manual`, never ahead of it |
 
 ### What The Local Verification Confirmed
 
@@ -202,6 +203,28 @@ NULL. The following all held:
   `completed`, after which the migration re-applies successfully. It leaves
   `checked_in_at` and `initial_check_in_status` populated on purpose; removing
   those columns is `20260920_01`'s rollback, which is a separate later step.
+
+### What The Final Attendance Local Verification Confirmed
+
+`20260920_03` was applied to PostgreSQL 16 loaded with the baseline, `0001`,
+`0002`, the QR batch migration, the seed and both earlier lifecycle migrations,
+without connecting to Supabase. The seed has no attendance records, so four were
+inserted first to mirror the real data: two automatic rows and two
+`manual_review` rows, each with a recorder and a reason. The following all held:
+
+- Both `manual_review` rows became `manual`. The automatic rows and every other
+  column were left alone.
+- The database now rejects an invented status (`excused`, or a verification word
+  like `checked_in`), an invented source (`system`, or the old `manual_review`),
+  and a manual record with no reason, a blank reason, or no recorder. An
+  automatic record with no recorder and no reason, and a complete manual record,
+  are accepted.
+- Re-running the migration is harmless.
+- An unrecognised status, or a manual record with no reason, makes it refuse to
+  run and name the problem. In both cases nothing was renamed and no constraint
+  was added, because the check runs inside the same transaction.
+- The rollback drops the three constraints and returns every `manual` record to
+  `manual_review`, after which the migration re-applies cleanly.
 
 ### What The 0002 Local Verification Confirmed
 

@@ -1,22 +1,37 @@
 from datetime import datetime
 from enum import Enum
+from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from modules.attendance_verification.manual_attendance.schemas import ManualReason
 from modules.attendance_verification.manual_review.repository import ManualReviewQueueItemRecord
 
 
 class ManualReviewDecision(str, Enum):
     APPROVE = "approve"
     REJECT = "reject"
-    RETRY = "retry"
-    ESCALATE = "escalate"
 
 
 class ManualReviewDecisionRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
     decision: ManualReviewDecision
-    reason: str | None = Field(default=None, max_length=1000)
+    attendance_status: Literal["present", "late"] | None = Field(
+        default=None,
+        alias="attendanceStatus",
+    )
+    reason: ManualReason
+
+    @model_validator(mode="after")
+    def check_status_matches_decision(self) -> Self:
+        # Lateness is the lecturer's call, never inferred from timestamps.
+        if self.decision is ManualReviewDecision.APPROVE and self.attendance_status is None:
+            raise ValueError("attendanceStatus is required when approving")
+        if self.decision is ManualReviewDecision.REJECT and self.attendance_status is not None:
+            raise ValueError("attendanceStatus is not allowed when rejecting")
+        return self
 
 
 class ManualReviewQueueItemResponse(BaseModel):

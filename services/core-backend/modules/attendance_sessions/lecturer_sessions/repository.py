@@ -5,6 +5,8 @@ from uuid import UUID
 
 import asyncpg
 
+from modules.attendance_verification.attendance_state import AttendanceRecordSource
+
 SESSION_SCHEDULED_STATUS = "scheduled"
 
 # Session status is derived from timestamps (activated_at/closed_at/cancelled_at),
@@ -14,10 +16,7 @@ SESSION_SCHEDULED_STATUS = "scheduled"
 # enum was deliberately not invented here.
 SESSION_ACTIVE_STATUS = "active"
 
-# attendance_state.AttendanceRecordSource.MANUAL is "manual", but the value
-# actually written to record_source today is "manual_review" (manual_review
-# repository). Matches the real data until that's reconciled.
-RECORD_SOURCE_MANUAL = "manual_review"
+RECORD_SOURCE_MANUAL = AttendanceRecordSource.MANUAL.value
 
 
 @dataclass(frozen=True)

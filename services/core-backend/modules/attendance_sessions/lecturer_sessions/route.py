@@ -20,12 +20,16 @@ from modules.attendance_sessions.lecturer_sessions.schemas import (
     SessionStudentResponse,
 )
 from modules.attendance_sessions.lecturer_sessions.service import LecturerSessionService
+from modules.attendance_verification.manual_attendance.route import (
+    router as manual_attendance_router,
+)
 from modules.contracts.providers import get_qr_evidence_provider
 from modules.identity.auth.dependencies import CurrentLecturer
 from modules.notification.push.expo_provider import ExpoPushProvider
 from modules.notification.push.notification_service import NotificationService
 
 router = APIRouter(prefix="/lecturers/me/attendance-sessions", tags=["lecturer-sessions"])
+router.include_router(manual_attendance_router)
 
 _PROFILE_NOT_FOUND_DETAIL = "An active lecturer profile was not found for this account."
 _SESSION_NOT_FOUND_DETAIL = "The attendance session was not found."
