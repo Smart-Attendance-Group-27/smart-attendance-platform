@@ -4,6 +4,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
+from modules.attendance_verification.manual_attendance.exception import (
+    ManualAttendanceError,
+    SessionCancelledError,
+)
 from modules.attendance_verification.manual_review.exception import (
     VerificationAttemptNotFailedError,
     VerificationAttemptNotFoundError,
@@ -68,6 +72,7 @@ async def decide_my_manual_review(
             current_lecturer.user_id,
             verification_attempt_id,
             body.decision,
+            body.attendance_status,
             body.reason,
         )
     except LecturerProfileNotFoundError as error:
@@ -78,6 +83,16 @@ async def decide_my_manual_review(
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             "Only failed verification attempts can be manually reviewed.",
+        ) from error
+    except SessionCancelledError as error:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "This session was cancelled, so attendance cannot be changed.",
+        ) from error
+    except ManualAttendanceError as error:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "The attendance decision could not be recorded for this session.",
         ) from error
 
     return ManualReviewQueueItemResponse.from_record(item)

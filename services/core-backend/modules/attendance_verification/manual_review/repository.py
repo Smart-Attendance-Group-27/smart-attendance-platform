@@ -5,11 +5,9 @@ from uuid import UUID
 
 import asyncpg
 
+from modules.attendance_verification.attendance_state import AttendanceRecordSource
+
 FAILED_ATTEMPT_STATUS = "failed"
-RECORD_SOURCE_MANUAL_REVIEW = "manual_review"
-PRESENT_STATUS = "present"
-LATE_STATUS = "late"
-ABSENT_STATUS = "absent"
 
 
 @dataclass(frozen=True)
@@ -43,8 +41,6 @@ class VerificationAttemptDetailRecord:
     session_id: UUID
     student_id: UUID
     status: str | None
-    started_at: datetime | None
-    late_after_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -179,6 +175,12 @@ class ManualReviewRepository:
             WHERE assignment.lecturer_id = $1
               AND va.status = '{FAILED_ATTEMPT_STATUS}'
               AND (review.review_status IS NULL OR review.review_status = 'pending')
+              AND NOT EXISTS (
+                SELECT 1 FROM attendance_verification.attendance_records AS manual_record
+                WHERE manual_record.session_id = va.session_id
+                  AND manual_record.student_id = va.student_id
+                  AND manual_record.record_source = '{AttendanceRecordSource.MANUAL.value}'
+              )
               {session_clause}
             ORDER BY va.completed_at DESC NULLS LAST, va.started_at DESC
             """,
@@ -216,7 +218,7 @@ class ManualReviewRepository:
         lock_clause = "FOR UPDATE OF va" if lock_for_update else ""
         row = await connection.fetchrow(
             f"""
-            SELECT va.id, va.session_id, va.student_id, va.status, va.started_at, session.late_after_at
+            SELECT va.id, va.session_id, va.student_id, va.status
             FROM attendance_verification.verification_attempts AS va
             JOIN attendance_session.sessions AS session
                 ON session.id = va.session_id
@@ -237,8 +239,6 @@ class ManualReviewRepository:
             session_id=row["session_id"],
             student_id=row["student_id"],
             status=row["status"],
-            started_at=row["started_at"],
-            late_after_at=row["late_after_at"],
         )
 
     async def find_attendance_record(
@@ -263,55 +263,6 @@ class ManualReviewRepository:
             attendance_status=row["attendance_status"],
             record_source=row["record_source"],
             manual_reason=row["manual_reason"],
-        )
-
-    async def upsert_attendance_record(
-        self,
-        connection: asyncpg.Connection,
-        *,
-        record_id: UUID,
-        session_id: UUID,
-        student_id: UUID,
-        recorded_by: UUID,
-        attendance_status: str,
-        manual_reason: str | None,
-    ) -> None:
-        await connection.execute(
-            """
-            INSERT INTO attendance_verification.attendance_records (
-                id, session_id, student_id, recorded_by,
-                attendance_status, record_source, manual_reason, created_at, updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
-            ON CONFLICT (session_id, student_id) DO UPDATE
-            SET recorded_by = EXCLUDED.recorded_by,
-                attendance_status = EXCLUDED.attendance_status,
-                record_source = EXCLUDED.record_source,
-                manual_reason = EXCLUDED.manual_reason,
-                updated_at = now()
-            """,
-            record_id,
-            session_id,
-            student_id,
-            recorded_by,
-            attendance_status,
-            RECORD_SOURCE_MANUAL_REVIEW,
-            manual_reason,
-        )
-
-    async def delete_attendance_record(
-        self,
-        connection: asyncpg.Connection,
-        session_id: UUID,
-        student_id: UUID,
-    ) -> None:
-        await connection.execute(
-            """
-            DELETE FROM attendance_verification.attendance_records
-            WHERE session_id = $1 AND student_id = $2
-            """,
-            session_id,
-            student_id,
         )
 
     async def find_manual_review(
@@ -362,22 +313,4 @@ class ManualReviewRepository:
             review_status,
             reviewed_by,
             decision_reason,
-        )
-
-    async def reset_attempt_for_retry(
-        self,
-        connection: asyncpg.Connection,
-        verification_attempt_id: UUID,
-    ) -> None:
-        await connection.execute(
-            """
-            UPDATE attendance_verification.verification_attempts
-            SET status = NULL,
-                failure_reason = NULL,
-                completed_at = NULL,
-                checked_in_at = NULL,
-                initial_check_in_status = NULL
-            WHERE id = $1
-            """,
-            verification_attempt_id,
         )
