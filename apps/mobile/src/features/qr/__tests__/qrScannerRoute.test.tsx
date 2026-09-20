@@ -8,7 +8,7 @@ import {
 import { act, render } from '@testing-library/react-native';
 
 import QrScannerRoute from '../../../app/(student)/attendance/[sessionId]/qr-scanner';
-import { mockQrSessionId, resetMockQrStore } from '../__fixtures__/mockQrStore';
+import { mockQrSessionId, passMockBatch, resetMockQrStore } from '../__fixtures__/mockQrStore';
 import { resetMockAttendanceStore } from '../../attendance/__fixtures__/mockAttendanceStore';
 
 const mockBack = jest.fn();
@@ -77,6 +77,25 @@ describe('QrScannerRoute', () => {
     process.env.EXPO_PUBLIC_API_MODE = 'mock';
     const sessionId = 'attendance-session-checked-in';
     const qrSessionId = mockQrSessionId(sessionId, 2);
+    mockParams = { sessionId, qrSessionId };
+    try {
+      await render(<QrScannerRoute />);
+      await act(async () => {
+        mockBarcodeHandler?.({ data: `mock-qr-value-${qrSessionId}` });
+      });
+      expect(mockDismissTo).toHaveBeenCalledWith({
+        pathname: '/(student)/attendance/[sessionId]/progress', params: { sessionId },
+      });
+    } finally {
+      delete process.env.EXPO_PUBLIC_API_MODE;
+    }
+  });
+
+  test('returns to Progress when the batch was already passed', async () => {
+    process.env.EXPO_PUBLIC_API_MODE = 'mock';
+    const sessionId = 'attendance-session-checked-in';
+    const qrSessionId = mockQrSessionId(sessionId, 2);
+    passMockBatch(qrSessionId);
     mockParams = { sessionId, qrSessionId };
     try {
       await render(<QrScannerRoute />);
