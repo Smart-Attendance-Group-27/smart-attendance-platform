@@ -174,10 +174,11 @@ async def close_my_attendance_session(
     ] = None,  # type: ignore[assignment]
 ) -> LecturerSessionResponse:
     try:
-        session = await session_service.close_for_user(
+        session, finalization = await session_service.close_for_user(
             http_request.app.state.db_pool,
             current_lecturer.user_id,
             session_id,
+            getattr(http_request.app.state, "redis_client", None),
         )
     except LecturerProfileNotFoundError as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, _PROFILE_NOT_FOUND_DETAIL) from error
@@ -189,7 +190,7 @@ async def close_my_attendance_session(
             "This session cannot be closed in its current state.",
         ) from error
 
-    return LecturerSessionResponse.from_record(session)
+    return LecturerSessionResponse.from_record(session, finalization)
 
 
 @router.get(

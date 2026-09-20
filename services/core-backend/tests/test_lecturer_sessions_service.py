@@ -52,6 +52,18 @@ class FakeConnection:
         self.executed_args.append(args)
 
 
+class FakeQrSessionRepository:
+    """Stands in for Manushan's QrSessionRepository (I-11, frozen)."""
+
+    def __init__(self, deactivated_batch_ids: list[UUID] | None = None) -> None:
+        self.deactivated_batch_ids = deactivated_batch_ids or []
+        self.calls: list[tuple[UUID, datetime]] = []
+
+    async def close_existing_active_qr_sessions(self, connection, session_id, deactivated_at):
+        self.calls.append((session_id, deactivated_at))
+        return self.deactivated_batch_ids
+
+
 class FakeAcquire:
     def __init__(self, connection: FakeConnection) -> None:
         self.connection = connection
@@ -205,15 +217,24 @@ async def test_close_writes_an_audit_log_entry() -> None:
     before = build_session(activated_at=CURRENT_TIME)
     after = build_session(activated_at=CURRENT_TIME, closed_at=CURRENT_TIME)
     repository = FakeLecturerSessionRepository(before, after)
+    qr_session_repository = FakeQrSessionRepository()
     service = LecturerSessionService(
         repository=repository,
         lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        qr_session_repository=qr_session_repository,
     )
     pool = FakePool()
 
-    await service.close_for_user(pool, ACTOR_ID, SESSION_ID)
+    session, finalization = await service.close_for_user(pool, ACTOR_ID, SESSION_ID)
 
-    audit_query, audit_args = pool.connection.executed_queries[0], pool.connection.executed_args[0]
+    assert session == after
+    # No QrEvidenceProvider bound, so finalization stays inactive: no
+    # attendance record is written and the summary is null, matching main
+    # today plus the status change and QR shutdown.
+    assert finalization is None
+    assert qr_session_repository.calls == [(SESSION_ID, CURRENT_TIME)]
+
+    audit_query, audit_args = pool.connection.executed_queries[-1], pool.connection.executed_args[-1]
     assert "audit.audit_logs" in audit_query
     assert audit_args[2] == "session.close"
 

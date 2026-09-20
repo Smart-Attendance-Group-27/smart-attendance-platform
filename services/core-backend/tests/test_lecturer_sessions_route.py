@@ -28,6 +28,11 @@ from modules.attendance_sessions.lecturer_sessions.repository import (
     SessionStudentRecord,
 )
 from modules.attendance_sessions.lecturer_sessions.route import get_lecturer_session_service
+from modules.attendance_verification.finalization.types import (
+    FinalizationResult,
+    FinalizationSummary,
+)
+from modules.attendance_verification.attendance_state import FinalAttendanceStatus
 from modules.identity.auth.dependencies import get_authentication_service
 
 SESSIONS_URL = "/api/v1/lecturers/me/attendance-sessions"
@@ -107,10 +112,12 @@ class StubLecturerSessionService:
         session: LecturerSessionRecord | None = None,
         students: list[SessionStudentRecord] | None = None,
         error: Exception | None = None,
+        finalization=None,
     ) -> None:
         self.session = session if session is not None else build_session()
         self.students = students if students is not None else [build_student()]
         self.error = error
+        self.finalization = finalization
         self.calls: list[str] = []
 
     async def list_for_user(self, pool, user_id):
@@ -137,11 +144,11 @@ class StubLecturerSessionService:
             raise self.error
         return self.session
 
-    async def close_for_user(self, pool, user_id, session_id):
+    async def close_for_user(self, pool, user_id, session_id, redis_client=None):
         self.calls.append("close")
         if self.error is not None:
             raise self.error
-        return self.session
+        return self.session, self.finalization
 
     async def list_students_for_user(self, pool, user_id, session_id):
         self.calls.append("students")
@@ -349,6 +356,45 @@ def test_close_session(client: TestClient, service: StubLecturerSessionService, 
 
     assert response.status_code == 200
     assert service.calls == ["close"]
+    # No provider bound behind the stub by default: finalization stays null.
+    assert response.json()["finalization"] is None
+
+
+def test_close_session_reports_the_finalization_summary(
+    jwks_document,
+    make_access_token,
+) -> None:
+    finalized_at = CURRENT_TIME
+    summary = FinalizationSummary(
+        enrolled=10,
+        present=6,
+        late=1,
+        absent=2,
+        kept_manual=1,
+        reconciled_student_ids=(STUDENT_ID,),
+        deactivated_qr_batch_ids=(STUDENT_ID,),
+        results=(FinalizationResult(student_id=STUDENT_ID, status=FinalAttendanceStatus.PRESENT),),
+        finalized_at=finalized_at,
+    )
+    service = StubLecturerSessionService(finalization=summary)
+
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            f"{SESSIONS_URL}/{SESSION_ID}/close",
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    body = response.json()
+    assert body["finalization"] == {
+        "enrolledCount": 10,
+        "presentCount": 6,
+        "lateCount": 1,
+        "absentCount": 2,
+        "keptManualCount": 1,
+        "reconciledCount": 1,
+        "deactivatedQrBatchCount": 1,
+        "finalizedAt": finalized_at.isoformat().replace("+00:00", "Z"),
+    }
 
 
 def test_close_inactive_session_returns_409(jwks_document, make_access_token) -> None:
