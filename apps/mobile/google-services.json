@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "326637284077",
+    "project_id": "uniattennd",
+    "storage_bucket": "uniattennd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:326637284077:android:f0d74be25673bf4e3e3ae4",
+        "android_client_info": {
+          "package_name": "com.group27.uniattend"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAc8d9pXg3P-3HV8YAecG2gz7YFzJy5vtk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

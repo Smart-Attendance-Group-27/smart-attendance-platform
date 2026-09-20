@@ -8,13 +8,16 @@ ENV NEXT_TELEMETRY_DISABLED=1
 FROM base AS dependencies
 COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/package.json
-COPY apps/mobile/package.json apps/mobile/package.json
+# Provide a stub for the mobile workspace so npm workspace resolution succeeds
+# without pulling in React Native native deps (@emnapi/*) that can't resolve on Linux.
+RUN mkdir -p apps/mobile && \
+    printf '{"name":"mobile","version":"1.0.0","private":true}' > apps/mobile/package.json
 RUN --mount=type=cache,target=/root/.npm \
     npm config set fetch-retries 5 \
     && npm config set fetch-retry-mintimeout 20000 \
     && npm config set fetch-retry-maxtimeout 120000 \
     && npm config set fetch-timeout 300000 \
-    && npm ci --workspace=apps/web --no-audit --no-fund
+    && npm install --workspace=apps/web --include-workspace-root --no-audit --no-fund
 
 FROM dependencies AS development
 COPY apps/web apps/web

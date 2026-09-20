@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     # Internal service URL for the separately deployed face-verification API.
     face_verification_service_url: str | None = "http://localhost:8001"
 
+    # Expo Push Notification Service.
+    # expo_push_timeout_seconds: how long to wait for a response from Expo.
+    # expo_access_token: required only when Expo Enhanced Push Security is
+    # enabled on the project. Leave blank for development / OSS projects.
+    expo_push_timeout_seconds: float = Field(default=10.0, gt=0)
+    expo_access_token: SecretStr | None = None
+
     # General geofence safeguards. Session-specific radius, accuracy buffer and
     # maximum accuracy values are loaded from the session geofence snapshot.
     geofence_max_reading_age_seconds: float = Field(default=30, gt=0)
@@ -100,6 +107,7 @@ class Settings(BaseSettings):
         "redis_url",
         "dynamic_qr_hmac_secret",
         "face_verification_service_url",
+        "expo_access_token",
         mode="before",
     )
     @classmethod
