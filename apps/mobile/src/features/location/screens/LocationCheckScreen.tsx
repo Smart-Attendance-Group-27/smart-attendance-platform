@@ -21,13 +21,14 @@ import {
 } from '../components/LocationStatusCard';
 import type { LocationService } from '../services/locationService';
 import type { LocationValidationResult } from '../types/locationValidation';
+import type { InitialCheckIn } from '../../attendance/types/myAttendance';
 
 type LocationCheckScreenProps = {
   sessionId: string;
   locationService: LocationService;
   onBack: () => void;
   onAlreadyCheckedIn: (sessionId: string) => void;
-  onLocationValidated: (sessionId: string) => void;
+  onLocationValidated: (sessionId: string, initialCheckIn: InitialCheckIn | null) => void;
 };
 
 type LocationCheckUiState =
@@ -299,7 +300,7 @@ function LocationStatusAction({
 }: {
   sessionId: string;
   state: Exclude<LocationCheckUiState, { status: 'checking' }>;
-  onLocationValidated: (sessionId: string) => void;
+  onLocationValidated: (sessionId: string, initialCheckIn: InitialCheckIn | null) => void;
   onValidateLocation: () => void;
 }) {
   if (state.status === 'permission_required') {
@@ -315,9 +316,10 @@ function LocationStatusAction({
   if (state.status === 'inside_geofence') {
     return (
       <AppButton
-        accessibilityLabel="Continue to face verification"
-        onPress={() => onLocationValidated(sessionId)}
-        title="Continue to Face Verification"
+        accessibilityLabel={state.initialCheckIn
+          ? 'View attendance progress' : 'Continue to face verification'}
+        onPress={() => onLocationValidated(sessionId, state.initialCheckIn ?? null)}
+        title={state.initialCheckIn ? 'View attendance progress' : 'Continue to Face Verification'}
       />
     );
   }

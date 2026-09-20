@@ -86,7 +86,7 @@ describe('LiveLocationService', () => {
 
     await expect(
       service.validateLocation('attendance-session-active'),
-    ).resolves.toEqual({ status: 'inside_geofence' });
+    ).resolves.toEqual({ status: 'inside_geofence', initialCheckIn: null });
     expect(submitAttempt).toHaveBeenCalledWith({
       sessionId: 'attendance-session-active',
       reading,

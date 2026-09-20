@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Text } from 'react-native';
 
@@ -13,19 +13,13 @@ export default function FaceIntroductionRoute() {
   const { session } = useAuth();
   const {
     sessionId: sessionIdParam,
-    requiresQr: requiresQrParam,
   } = useLocalSearchParams<{
     sessionId?: string | string[];
-    requiresQr?: string | string[];
   }>();
   const sessionIdValue = Array.isArray(sessionIdParam)
     ? sessionIdParam[0]
     : sessionIdParam;
   const sessionId = sessionIdValue?.trim();
-  const requiresQr = Array.isArray(requiresQrParam)
-    ? requiresQrParam[0]
-    : requiresQrParam;
-  const requiresQrVerification = requiresQr === '1';
   const accessToken =
     session.status === 'authenticated' ? session.accessToken : undefined;
   const faceVerificationService = useMemo(
@@ -43,25 +37,18 @@ export default function FaceIntroductionRoute() {
     }
 
     let active = true;
-    void faceVerificationService.getProgress(sessionId).then((progress) => {
+    void (process.env.EXPO_PUBLIC_API_MODE === 'mock'
+      ? Promise.resolve('required' as const)
+      : faceVerificationService.getProgress(sessionId)).then((progress) => {
       if (!active) {
         return;
       }
 
       if (progress === 'passed') {
-        router.replace(
-          requiresQrVerification
-            ? {
-                pathname:
-                  '/(student)/attendance/[sessionId]/qr-scanner',
-                params: { sessionId },
-              }
-            : {
-                pathname:
-                  '/(student)/attendance/[sessionId]/check-in-success',
-                params: { sessionId },
-              },
-        );
+        router.replace({
+          pathname: '/(student)/attendance/[sessionId]/progress',
+          params: { sessionId },
+        } as unknown as Href);
         return;
       }
 
@@ -73,7 +60,6 @@ export default function FaceIntroductionRoute() {
     };
   }, [
     faceVerificationService,
-    requiresQrVerification,
     router,
     session.status,
     sessionId,
@@ -110,7 +96,7 @@ export default function FaceIntroductionRoute() {
         router.push({
           pathname:
             '/(student)/attendance/[sessionId]/face-verification',
-          params: { sessionId: verifiedSessionId, requiresQr },
+          params: { sessionId: verifiedSessionId },
         })
       }
       sessionId={sessionId}

@@ -1,9 +1,10 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useMemo } from 'react';
 import { Text } from 'react-native';
 
 import { ScreenContainer } from '../../../../components/ui';
 import { useAuth } from '../../../../features/auth/context/AuthContext';
+import { getMockAttendance, markMockFacePassed, markMockGeofencePassed } from '../../../../features/attendance/__fixtures__/mockAttendanceStore';
 import { LocationCheckScreen } from '../../../../features/location/screens/LocationCheckScreen';
 import { CoreApiGeofenceValidationService } from '../../../../features/location/services/coreApiGeofenceValidationService';
 import { ExpoLocationProvider } from '../../../../features/location/services/expoLocationProvider';
@@ -15,14 +16,26 @@ export default function LocationCheckRoute() {
   const { session } = useAuth();
   const {
     sessionId: sessionIdParam,
-    requiresQr: requiresQrParam,
   } = useLocalSearchParams<{
     sessionId?: string | string[];
-    requiresQr?: string | string[];
   }>();
   const accessToken =
     session.status === 'authenticated' ? session.accessToken : undefined;
   const locationService = useMemo(() => {
+    if (process.env.EXPO_PUBLIC_API_MODE === 'mock') {
+      return {
+        async validateLocation(sessionId: string) {
+          const state = markMockGeofencePassed(sessionId);
+          if (!state) return { status: 'session_unavailable' as const };
+          if (!state.requiresFaceVerification) {
+            markMockFacePassed(sessionId);
+            return { status: 'inside_geofence' as const,
+              initialCheckIn: getMockAttendance(sessionId)?.initialCheckIn };
+          }
+          return { status: 'inside_geofence' as const, initialCheckIn: null };
+        },
+      };
+    }
     const coreApiClient = new CoreApiClient({
       getAccessToken: () => accessToken,
     });
@@ -36,9 +49,6 @@ export default function LocationCheckRoute() {
     ? sessionIdParam[0]
     : sessionIdParam;
   const sessionId = sessionIdValue?.trim();
-  const requiresQr = Array.isArray(requiresQrParam)
-    ? requiresQrParam[0]
-    : requiresQrParam;
 
   if (session.status !== 'authenticated') {
     return null;
@@ -62,16 +72,17 @@ export default function LocationCheckRoute() {
       onAlreadyCheckedIn={(completedSessionId) =>
         router.replace({
           pathname:
-            '/(student)/attendance/[sessionId]/check-in-success',
+            '/(student)/attendance/[sessionId]/progress',
           params: { sessionId: completedSessionId },
-        })
+        } as unknown as Href)
       }
-      onLocationValidated={(validatedSessionId) =>
-        router.push({
-          pathname:
-            '/(student)/attendance/[sessionId]/face-introduction',
-          params: { sessionId: validatedSessionId, requiresQr },
-        })
+      onLocationValidated={(validatedSessionId, initialCheckIn) =>
+        router[initialCheckIn ? 'replace' : 'push']({
+          pathname: initialCheckIn
+            ? '/(student)/attendance/[sessionId]/progress'
+            : '/(student)/attendance/[sessionId]/face-introduction',
+          params: { sessionId: validatedSessionId },
+        } as unknown as Href)
       }
       sessionId={sessionId}
     />

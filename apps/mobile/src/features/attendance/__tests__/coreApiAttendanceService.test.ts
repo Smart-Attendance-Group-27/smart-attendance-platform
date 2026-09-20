@@ -1,124 +1,86 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  jest,
-  test,
-} from '@jest/globals';
+import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
 import { CoreApiClient } from '../../../services/api/coreApiClient';
+import { myAttendanceFixtures } from '../__fixtures__/myAttendance';
 import { CoreApiAttendanceService } from '../services/coreApiAttendanceService';
 
-const accessToken = 'header.payload.signature';
 const baseUrl = 'http://10.0.2.2:8000';
+const sessionId = 'attendance-session-checked-in';
 
-function jsonResponse(status: number, body: unknown): Response {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as Response;
+function response(status: number, body: unknown): Response {
+  return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;
 }
 
-function buildService() {
-  return new CoreApiAttendanceService(
-    new CoreApiClient({ baseUrl, getAccessToken: () => accessToken }),
-  );
+function service() {
+  return new CoreApiAttendanceService(new CoreApiClient({
+    baseUrl, getAccessToken: () => 'token',
+  }));
 }
 
-describe('CoreApiAttendanceService.getCheckInResult', () => {
-  beforeEach(() => {
-    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  });
+afterEach(() => { jest.restoreAllMocks(); });
 
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
-  test('asks the backend to finalize check-in and reports the real outcome', async () => {
+describe('CoreApiAttendanceService', () => {
+  test('reads C02 initial state without calling completion', async () => {
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(
-      jsonResponse(200, {
-        status: 'completed',
-        attendanceStatus: 'present',
-        missingRequirements: [],
-        checkedInAt: '2026-08-19T12:45:34.235Z',
-      }),
+      response(200, myAttendanceFixtures[sessionId]),
     );
 
-    const lookup = await buildService().getCheckInResult('session-1');
-
-    expect(lookup).toEqual({
-      status: 'available',
-      result: {
-        sessionId: 'session-1',
-        status: 'present',
-        checkInTime: '2026-08-19T12:45:34.235Z',
-      },
+    await expect(service().getMyAttendance(sessionId)).resolves.toEqual({
+      status: 'loaded', attendance: myAttendanceFixtures[sessionId],
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      `${baseUrl}/api/v1/attendance-sessions/session-1/complete-check-in`,
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        }),
-      }),
+      `${baseUrl}/api/v1/students/me/attendance-sessions/${sessionId}/attendance`,
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('reads final attendance separately from the initial check-in', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      response(200, myAttendanceFixtures['attendance-session-closed']),
+    );
+    const result = await service().getMyAttendance('attendance-session-closed');
+    expect(result.status).toBe('loaded');
+    if (result.status === 'loaded') {
+      expect(result.attendance.initialCheckIn?.status).toBe('checked_in');
+      expect(result.attendance.finalAttendance?.status).toBe('present');
+    }
+  });
+
+  test('posts C01 and parses initial check-in', async () => {
+    const initialCheckIn = { status: 'late_checked_in', checkedInAt: '2026-07-20T10:18:00+05:30' };
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(response(200, {
+      status: 'checked_in', verificationAttemptId: 'attempt-1',
+      initialCheckIn, missingRequirements: [],
+    }));
+    await expect(service().checkIn(sessionId)).resolves.toEqual({
+      status: 'loaded', outcome: 'checked_in', initialCheckIn, missingRequirements: [],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${baseUrl}/api/v1/attendance-sessions/${sessionId}/check-in`,
+      expect.objectContaining({ method: 'POST', body: '{}' }),
     );
   });
 
-  test('reports late when the backend says late', async () => {
-    jest.spyOn(global, 'fetch').mockResolvedValue(
-      jsonResponse(200, {
-        status: 'completed',
-        attendanceStatus: 'late',
-        missingRequirements: [],
-        checkedInAt: '2026-08-19T12:45:34.235Z',
-      }),
-    );
-
-    const lookup = await buildService().getCheckInResult('session-1');
-
-    expect(lookup.status).toBe('available');
-    expect(lookup.status === 'available' && lookup.result.status).toBe('late');
-  });
-
-  test('reports unavailable when a required step has not passed yet', async () => {
-    jest.spyOn(global, 'fetch').mockResolvedValue(
-      jsonResponse(200, {
-        status: 'incomplete',
-        attendanceStatus: null,
-        missingRequirements: ['face_verification'],
-        checkedInAt: null,
-      }),
-    );
-
-    await expect(buildService().getCheckInResult('session-1')).resolves.toEqual({
-      status: 'unavailable',
+  test('reports incomplete C01 response without fabricating attendance', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(response(200, {
+      status: 'incomplete', initialCheckIn: null,
+      missingRequirements: ['face_verification'],
+    }));
+    await expect(service().checkIn(sessionId)).resolves.toEqual({
+      status: 'loaded', outcome: 'incomplete', initialCheckIn: null,
+      missingRequirements: ['face_verification'],
     });
   });
 
-  test('reports unavailable when the verification attempt failed', async () => {
-    jest.spyOn(global, 'fetch').mockResolvedValue(
-      jsonResponse(200, {
-        status: 'failed',
-        attendanceStatus: null,
-        missingRequirements: [],
-        checkedInAt: null,
-      }),
-    );
-
-    await expect(buildService().getCheckInResult('session-1')).resolves.toEqual({
-      status: 'unavailable',
-    });
-  });
-
-  test('reports unavailable when the backend request fails outright', async () => {
-    jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse(409, { detail: 'not started' }));
-
-    await expect(buildService().getCheckInResult('session-1')).resolves.toEqual({
-      status: 'unavailable',
-    });
+  test('rejects malformed C02 and C01 payloads', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(response(200, {
+      ...myAttendanceFixtures[sessionId], initialCheckIn: { status: 'present' },
+    }));
+    await expect(service().getMyAttendance(sessionId)).resolves.toEqual({ status: 'server-error' });
+    jest.spyOn(global, 'fetch').mockResolvedValue(response(200, {
+      status: 'checked_in', initialCheckIn: { status: 'present' }, missingRequirements: [],
+    }));
+    await expect(service().checkIn(sessionId)).resolves.toEqual({ status: 'server-error' });
   });
 });
