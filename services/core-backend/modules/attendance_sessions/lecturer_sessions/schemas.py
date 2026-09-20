@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from modules.attendance_sessions.lecturer_sessions.repository import LecturerSessionRecord
+from modules.attendance_verification.finalization.types import FinalizationSummary
 
 
 class CreateSessionRequest(BaseModel):
@@ -39,6 +40,32 @@ def derive_session_status(record: LecturerSessionRecord) -> str:
     return "scheduled"
 
 
+class FinalizationResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    enrolled_count: int = Field(alias="enrolledCount")
+    present_count: int = Field(alias="presentCount")
+    late_count: int = Field(alias="lateCount")
+    absent_count: int = Field(alias="absentCount")
+    kept_manual_count: int = Field(alias="keptManualCount")
+    reconciled_count: int = Field(alias="reconciledCount")
+    deactivated_qr_batch_count: int = Field(alias="deactivatedQrBatchCount")
+    finalized_at: datetime = Field(alias="finalizedAt")
+
+    @staticmethod
+    def from_summary(summary: FinalizationSummary) -> "FinalizationResponse":
+        return FinalizationResponse(
+            enrolled_count=summary.enrolled,
+            present_count=summary.present,
+            late_count=summary.late,
+            absent_count=summary.absent,
+            kept_manual_count=summary.kept_manual,
+            reconciled_count=len(summary.reconciled_student_ids),
+            deactivated_qr_batch_count=len(summary.deactivated_qr_batch_ids),
+            finalized_at=summary.finalized_at,
+        )
+
+
 class LecturerSessionResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -68,9 +95,13 @@ class LecturerSessionResponse(BaseModel):
     failed_verification_count: int = Field(alias="failedVerificationCount")
     absent_count: int = Field(alias="absentCount")
     manual_count: int = Field(alias="manualCount")
+    finalization: FinalizationResponse | None = None
 
     @staticmethod
-    def from_record(record: LecturerSessionRecord) -> "LecturerSessionResponse":
+    def from_record(
+        record: LecturerSessionRecord,
+        finalization: FinalizationSummary | None = None,
+    ) -> "LecturerSessionResponse":
         not_checked_in_count = (
             record.enrolled_count
             - record.checked_in_count
@@ -104,6 +135,11 @@ class LecturerSessionResponse(BaseModel):
             failed_verification_count=record.failed_verification_count,
             absent_count=record.absent_count,
             manual_count=record.manual_count,
+            finalization=(
+                FinalizationResponse.from_summary(finalization)
+                if finalization is not None
+                else None
+            ),
         )
 
 

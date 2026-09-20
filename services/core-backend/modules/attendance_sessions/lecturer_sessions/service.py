@@ -1,5 +1,5 @@
-from dataclasses import replace
 import asyncio
+from dataclasses import replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -24,6 +24,10 @@ from modules.attendance_sessions.lecturer_sessions.repository import (
     SessionStudentRecord,
     TimetableEntryForSessionRecord,
 )
+from modules.attendance_sessions.qr_session.repository import QrSessionRepository
+from modules.attendance_verification.check_in.service import CheckInService
+from modules.attendance_verification.finalization.service import AttendanceFinalizationService
+from modules.attendance_verification.finalization.types import FinalizationSummary
 from modules.audit.repository import write_audit_log
 from modules.contracts.qr_evidence import QrEvidenceProvider
 from modules.notification.push.notification_service import NotificationService
@@ -46,6 +50,8 @@ class LecturerSessionService:
         repository: LecturerSessionRepository | None = None,
         lecturer_profile_repository: LecturerProfileRepository | None = None,
         qr_evidence: QrEvidenceProvider | None = None,
+        qr_session_repository: QrSessionRepository | None = None,
+        check_in_service: CheckInService | None = None,
         notification_service: NotificationService | None = None,
     ) -> None:
         self._repository = repository or LecturerSessionRepository()
@@ -53,6 +59,8 @@ class LecturerSessionService:
             lecturer_profile_repository or LecturerProfileRepository()
         )
         self._qr_evidence = qr_evidence
+        self._qr_session_repository = qr_session_repository or QrSessionRepository()
+        self._check_in_service = check_in_service or CheckInService()
         self._notification_service = notification_service
 
     async def list_for_user(
@@ -251,7 +259,8 @@ class LecturerSessionService:
         pool: asyncpg.Pool,
         user_id: UUID,
         session_id: UUID,
-    ) -> LecturerSessionRecord:
+        redis_client=None,
+    ) -> tuple[LecturerSessionRecord, FinalizationSummary | None]:
         async with pool.acquire() as connection, connection.transaction():
             lecturer_id = await self._resolve_active_lecturer_id(connection, user_id)
             record = await self._repository.find_for_lecturer(
@@ -272,6 +281,44 @@ class LecturerSessionService:
             await self._repository.close(connection, session_id)
             updated = await self._repository.find_for_lecturer(connection, session_id, lecturer_id)
             assert updated is not None
+            closed_at = updated.closed_at
+            assert closed_at is not None
+
+            deactivated_qr_batch_ids = (
+                await self._qr_session_repository.close_existing_active_qr_sessions(
+                    connection,
+                    session_id,
+                    closed_at,
+                )
+            )
+
+            summary: FinalizationSummary | None = None
+            if self._qr_evidence is not None:
+                finalization_service = AttendanceFinalizationService(
+                    self._qr_evidence,
+                    self._check_in_service,
+                )
+                summary = await finalization_service.finalize(
+                    connection,
+                    session_id=session_id,
+                    closed_at=closed_at,
+                    actor_user_id=user_id,
+                )
+                summary = replace(
+                    summary,
+                    deactivated_qr_batch_ids=tuple(deactivated_qr_batch_ids),
+                )
+
+            audit_new_values: dict[str, object] = {"closedAt": closed_at.isoformat()}
+            if summary is not None:
+                audit_new_values["finalization"] = {
+                    "present": summary.present,
+                    "late": summary.late,
+                    "absent": summary.absent,
+                    "keptManual": summary.kept_manual,
+                    "reconciled": len(summary.reconciled_student_ids),
+                    "deactivatedQrBatches": len(summary.deactivated_qr_batch_ids),
+                }
 
             await write_audit_log(
                 connection,
@@ -281,10 +328,13 @@ class LecturerSessionService:
                 entity_type=AUDIT_ENTITY_TYPE,
                 entity_id=session_id,
                 old_values={"closedAt": None},
-                new_values={"closedAt": updated.closed_at.isoformat()},
+                new_values=audit_new_values,
             )
 
-        return updated
+        if summary is not None:
+            await AttendanceFinalizationService.after_commit(summary, redis_client)
+
+        return updated, summary
 
     async def list_students_for_user(
         self,
