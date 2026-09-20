@@ -13,6 +13,9 @@ export type QrVerificationResult = {
   qrSessionId: string;
   status: QrVerificationStatus;
   verifiedAt: string;
+  batchPassed: boolean;
+  alreadyPassed: boolean;
+  requiredForStudent: boolean;
 };
 
 export type ScannedQrPayload = {

@@ -1,11 +1,11 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useMemo } from 'react';
 import { Text } from 'react-native';
 
 import { ScreenContainer } from '../../../../components/ui';
 import { useAuth } from '../../../../features/auth/context/AuthContext';
 import { QrScannerScreen } from '../../../../features/qr/screens/QrScannerScreen';
-import { CoreApiQrVerificationService } from '../../../../features/qr/services/coreApiQrVerificationService';
+import { createQrVerificationService } from '../../../../features/qr/services/createQrServices';
 import { CoreApiClient } from '../../../../services/api/coreApiClient';
 
 export default function QrScannerRoute() {
@@ -25,7 +25,7 @@ export default function QrScannerRoute() {
       getAccessToken: () => accessToken,
     });
 
-    return new CoreApiQrVerificationService(coreApiClient);
+    return createQrVerificationService(coreApiClient);
   }, [accessToken]);
   const sessionIdValue = Array.isArray(sessionIdParam)
     ? sessionIdParam[0]
@@ -54,6 +54,9 @@ export default function QrScannerRoute() {
   return (
     <QrScannerScreen
       onBack={() => router.back()}
+      onQrVerified={() => router.dismissTo({
+        pathname: '/(student)/attendance/[sessionId]/progress', params: { sessionId },
+      } as unknown as Href)}
       qrSessionId={qrSessionId}
       qrVerificationService={qrVerificationService}
       sessionId={sessionId}

@@ -4,10 +4,12 @@ import { StyleSheet, Text, View } from 'react-native';
 import { AppButton } from '../ui';
 import { lightColors, radii, spacing, typography } from '../../theme';
 import type { AttendanceSession } from '../../features/dashboard/types';
+import type { QrProgress } from '../../features/qr/types/qrProgress';
 
 type ActiveSessionCardProps = {
   session?: AttendanceSession | null | (Partial<Record<string, any>> & AttendanceSession);
   onStart?: () => void;
+  qrProgress?: QrProgress | null;
 };
 
 function formatTimeRange(start?: string, end?: string) {
@@ -29,7 +31,7 @@ function computeClosingText(end?: string) {
   return `Check-in closes in ${minutes} min`;
 }
 
-export function ActiveSessionCard({ session, onStart }: ActiveSessionCardProps) {
+export function ActiveSessionCard({ session, onStart, qrProgress }: ActiveSessionCardProps) {
   const courseLabel = session ? `${session.courseCode} · ${session.courseName}` : '—';
   const title = (session as any)?.sessionTitle ?? session?.courseName ?? '';
   const timeRange = formatTimeRange((session as any)?.startTime ?? (session && (session as any).startTime), (session as any)?.endTime ?? (session && (session as any).endTime));
@@ -40,6 +42,8 @@ export function ActiveSessionCard({ session, onStart }: ActiveSessionCardProps) 
   const initialStatus = session?.initialCheckInStatus;
   const statusLabel = finalStatus
     ? `Final: ${finalStatus[0].toUpperCase()}${finalStatus.slice(1)}`
+    : qrProgress?.activeBatch?.required && !qrProgress.activeBatch.passed
+      ? 'QR check active — scan now'
     : initialStatus === 'late_checked_in'
       ? 'Initial check-in complete (late)'
       : initialStatus === 'checked_in'
@@ -96,6 +100,11 @@ export function ActiveSessionCard({ session, onStart }: ActiveSessionCardProps) 
         />
       </View>
       <Text style={styles.closingText}>{statusLabel}</Text>
+      {qrProgress?.qrEnabled && isCheckedIn ? (
+        <Text style={styles.closingText}>
+          QR: {qrProgress.passedCount}/{qrProgress.requiredCount} required batches passed
+        </Text>
+      ) : null}
       {!isCheckedIn ? <Text style={styles.closingText}>{closingText}</Text> : null}
     </View>
   );

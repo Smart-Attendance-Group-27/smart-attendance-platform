@@ -3,6 +3,7 @@ import { fireEvent, render } from '@testing-library/react-native';
 
 import AttendanceProgressRoute from '../../../app/(student)/attendance/[sessionId]/progress';
 import { resetMockAttendanceStore } from '../__fixtures__/mockAttendanceStore';
+import { resetMockQrStore, mockQrSessionId } from '../../qr/__fixtures__/mockQrStore';
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
@@ -29,6 +30,7 @@ describe('AttendanceProgressRoute', () => {
   beforeEach(() => {
     process.env.EXPO_PUBLIC_API_MODE = 'mock';
     resetMockAttendanceStore();
+    resetMockQrStore();
     mockPush.mockClear();
     mockReplace.mockClear();
     mockSearchParams = { sessionId: [' attendance-session-checked-in ', 'ignored'] };
@@ -42,6 +44,26 @@ describe('AttendanceProgressRoute', () => {
     expect(await screen.findByText('Initial check-in complete (on time)')).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: 'Return home' }));
     expect(mockReplace).toHaveBeenCalledWith('/(student)/(tabs)');
+  });
+
+  test('shows required QR counts and opens the active batch scanner', async () => {
+    const screen = await render(<AttendanceProgressRoute />);
+    expect(await screen.findByText('0/2 required batches passed')).toBeTruthy();
+    fireEvent.press(screen.getByRole('button', { name: 'Scan QR' }));
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname: '/(student)/attendance/[sessionId]/qr-scanner',
+      params: { sessionId: 'attendance-session-checked-in',
+        qrSessionId: mockQrSessionId('attendance-session-checked-in', 2) },
+    });
+    expect(screen.getByText('Awaiting final attendance')).toBeTruthy();
+  });
+
+  test('shows not required for a student who checked in after the batch', async () => {
+    mockSearchParams = { sessionId: 'attendance-session-late' };
+    const screen = await render(<AttendanceProgressRoute />);
+    expect(await screen.findByText('0/0 required batches passed')).toBeTruthy();
+    expect(screen.getByText('Not required for you')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Scan QR' })).toBeNull();
   });
 
   test('shows a friendly fallback for an incomplete link', async () => {

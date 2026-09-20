@@ -4,7 +4,7 @@ import {
   useCameraPermissions,
 } from 'expo-camera';
 import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -20,6 +20,7 @@ import type {
   QrVerificationStatus,
 } from '../types/qrVerification';
 import type { QrVerificationService } from '../services/qrVerificationService';
+import { QrVerificationError } from '../services/qrVerificationService';
 import { parseScannedQrPayload } from '../utils/parseScannedQrPayload';
 
 type QrScannerScreenProps = {
@@ -33,8 +34,9 @@ type QrScannerScreenProps = {
 type QrScannerUiState =
   | { status: 'scanning' }
   | { status: 'verifying' }
-  | { status: QrVerificationStatus; verifiedAt: string }
+  | { status: QrVerificationStatus; verifiedAt: string; alreadyPassed: boolean; requiredForStudent: boolean }
   | { status: 'missing_qr_session' }
+  | { status: 'check_in_required' }
   | { status: 'verification_error' };
 
 type VerificationContent = {
@@ -73,6 +75,11 @@ const verificationContent: Record<
     message:
       'This QR code could not be verified because it did not include the QR session ID.',
     tone: 'error',
+  },
+  check_in_required: {
+    title: 'Check in first',
+    message: 'Complete your initial check-in before scanning attendance QR codes.',
+    tone: 'warning',
   },
   verification_error: {
     title: "We couldn't verify the QR",
@@ -124,9 +131,10 @@ export function QrScannerScreen({
   const [state, setState] = useState<QrScannerUiState>({
     status: 'scanning',
   });
+  const verifying = useRef(false);
 
   async function handleQrScanned(result: BarcodeScanningResult) {
-    if (state.status !== 'scanning') {
+    if (state.status !== 'scanning' || verifying.current) {
       return;
     }
 
@@ -143,6 +151,7 @@ export function QrScannerScreen({
       return;
     }
 
+    verifying.current = true;
     setState({ status: 'verifying' });
 
     try {
@@ -155,10 +164,15 @@ export function QrScannerScreen({
       setState({
         status: verificationResult.status,
         verifiedAt: verificationResult.verifiedAt,
+        alreadyPassed: verificationResult.alreadyPassed,
+        requiredForStudent: verificationResult.requiredForStudent,
       });
-      onQrVerified?.(verificationResult);
-    } catch {
-      setState({ status: 'verification_error' });
+      if (verificationResult.status === 'accepted') onQrVerified?.(verificationResult);
+    } catch (error) {
+      setState({ status: error instanceof QrVerificationError && error.reason === 'check-in-required'
+        ? 'check_in_required' : 'verification_error' });
+    } finally {
+      verifying.current = false;
     }
   }
 
@@ -275,7 +289,13 @@ function VerificationResultCard({
   state: Exclude<QrScannerUiState, { status: 'scanning' | 'verifying' }>;
   onScanAgain: () => void;
 }) {
-  const content = verificationContent[state.status];
+  const content = state.status === 'accepted' && state.alreadyPassed
+    ? { ...verificationContent.accepted, title: 'QR already passed',
+        message: 'This batch was already counted for you.' }
+    : state.status === 'accepted' && !state.requiredForStudent
+      ? { ...verificationContent.accepted, title: 'QR not required',
+          message: 'This batch is not required for your attendance.' }
+      : verificationContent[state.status];
   const verifiedAt =
     'verifiedAt' in state
       ? new Intl.DateTimeFormat(undefined, {
