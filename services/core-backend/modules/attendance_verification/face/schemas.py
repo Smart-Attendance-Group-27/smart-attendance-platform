@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from modules.attendance_verification.check_in.schemas import InitialCheckInPayload
+
 
 PublicFaceStatus = Literal[
     "success",
@@ -17,6 +19,11 @@ class AttendanceFaceVerificationResponse(BaseModel):
     status: PublicFaceStatus
     attempt_number: int = Field(alias="attemptNumber")
     can_retry: bool = Field(alias="canRetry")
+    # Populated when this pass was the last step the session required.
+    initial_check_in: InitialCheckInPayload | None = Field(
+        alias="initialCheckIn",
+        default=None,
+    )
 
 
 class AttendanceFaceProgressResponse(BaseModel):
