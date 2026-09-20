@@ -3,6 +3,7 @@ from uuid import UUID
 
 import httpx
 
+# face-verification service ask the Core Backend
 
 class CoreApiStudentProfileError(RuntimeError):
     """Base class for safe Core Backend profile lookup failures."""

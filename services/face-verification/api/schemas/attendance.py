@@ -9,5 +9,5 @@ class AttendanceFaceVerificationResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     status: AttendanceFaceVerificationStatus
-    message: str
-    similarity_score: float | None = Field(default=None, alias="similarityScore")
+    attempt_number: int = Field(alias="attemptNumber")
+    can_retry: bool = Field(alias="canRetry")

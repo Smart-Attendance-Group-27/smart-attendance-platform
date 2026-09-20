@@ -62,6 +62,7 @@ async def list_my_active_attendance_sessions(
             requires_face_verification=session.requires_face_verification,
             requires_geofence=session.requires_geofence,
             requires_qr=session.requires_qr,
+            check_in_completed=session.check_in_completed,
         )
         for session in sessions
     ]

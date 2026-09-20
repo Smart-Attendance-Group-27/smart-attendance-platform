@@ -22,6 +22,7 @@ class ActiveAttendanceSessionRecord:
     requires_face_verification: bool
     requires_geofence: bool
     requires_qr: bool
+    check_in_completed: bool
 
 
 class ActiveAttendanceSessionRepository:
@@ -64,7 +65,8 @@ class ActiveAttendanceSessionRepository:
                 ) AS venue,
                 session.requires_face_verification,
                 session.requires_geofence,
-                session.requires_qr
+                session.requires_qr,
+                bool_or(attendance_record.id IS NOT NULL) AS check_in_completed
             FROM attendance_session.session_students AS eligible_student
             JOIN attendance_session.sessions AS session
                 ON session.id = eligible_student.session_id
@@ -84,6 +86,9 @@ class ActiveAttendanceSessionRepository:
                 ON timetable_exception.id = session.timetable_exception_id
             LEFT JOIN academic.classrooms AS exception_classroom
                 ON exception_classroom.id = timetable_exception.new_classroom_id
+            LEFT JOIN attendance_verification.attendance_records AS attendance_record
+                ON attendance_record.session_id = session.id
+               AND attendance_record.student_id = eligible_student.student_id
             WHERE eligible_student.student_id = $1
               AND session.status = 'active'
               AND session.closed_at IS NULL
@@ -134,6 +139,7 @@ class ActiveAttendanceSessionRepository:
                 requires_face_verification=bool(row["requires_face_verification"]),
                 requires_geofence=bool(row["requires_geofence"]),
                 requires_qr=bool(row["requires_qr"]),
+                check_in_completed=bool(row["check_in_completed"]),
             )
             for row in rows
         ]

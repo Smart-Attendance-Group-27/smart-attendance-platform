@@ -9,6 +9,7 @@ export type LocationValidationResult =
   | { status: 'unavailable' }
   | { status: 'mock_location_detected' }
   | { status: 'session_unavailable' }
+  | { status: 'already_checked_in' }
   | { status: 'attempt_limit_reached' }
   | { status: 'unauthenticated' }
   | { status: 'forbidden' }

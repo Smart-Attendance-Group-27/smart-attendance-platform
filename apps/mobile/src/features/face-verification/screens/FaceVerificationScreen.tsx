@@ -39,6 +39,7 @@ type FaceVerificationUiState =
   | { status: 'camera_ready' }
   | { status: 'camera_permission_denied' }
   | { status: 'camera_error' }
+  | { status: 'capturing' }
   | { status: 'processing' }
   | Exclude<FaceVerificationResult, { status: 'success' }>
   | { status: 'unexpected_error' }
@@ -49,7 +50,7 @@ type StatusTone = 'info' | 'success' | 'error';
 type StatusContent = {
   icon: SymbolViewProps['name'];
   title: string;
-  message: string;
+  message?: string;
   tone: StatusTone;
 };
 
@@ -107,6 +108,16 @@ const statusContent: Record<
     message: 'Check that the camera is available, then try again.',
     tone: 'error',
   },
+  capturing: {
+    icon: {
+      ios: 'camera.fill',
+      android: 'photo_camera',
+      web: 'photo_camera',
+    },
+    title: 'Capturing photo...',
+    message: 'Hold still for just a moment.',
+    tone: 'info',
+  },
   processing: {
     icon: {
       ios: 'face.smiling',
@@ -114,7 +125,7 @@ const statusContent: Record<
       web: 'face',
     },
     title: 'Verifying your face...',
-    message: 'Please keep your face steady.',
+    message: 'Your photo was captured. You can relax while we verify it.',
     tone: 'info',
   },
   success: {
@@ -180,7 +191,47 @@ const statusContent: Record<
   },
 };
 
-function ScreenHeader({ onBack }: { onBack: () => void }) {
+const readinessStatusContent: Partial<
+  Record<FaceVerificationUiState['status'], StatusContent>
+> = {
+  processing: {
+    icon: {
+      ios: 'face.smiling',
+      android: 'face',
+      web: 'face',
+    },
+    title: 'Verifying readiness...',
+    tone: 'info',
+  },
+  success: {
+    icon: {
+      ios: 'checkmark.circle.fill',
+      android: 'check_circle',
+      web: 'check_circle',
+    },
+    title: 'Readiness check passed',
+    message: 'Face verification is ready to use for attendance.',
+    tone: 'success',
+  },
+  verification_failure: {
+    icon: {
+      ios: 'xmark.circle.fill',
+      android: 'cancel',
+      web: 'cancel',
+    },
+    title: 'Readiness check failed',
+    message: "We couldn't verify your face. Please try again.",
+    tone: 'error',
+  },
+};
+
+function ScreenHeader({
+  onBack,
+  title,
+}: {
+  onBack: () => void;
+  title: string;
+}) {
   return (
     <View style={styles.header}>
       <Pressable
@@ -204,8 +255,58 @@ function ScreenHeader({ onBack }: { onBack: () => void }) {
         />
       </Pressable>
       <Text accessibilityRole="header" style={styles.screenTitle}>
-        Face Verification
+        {title}
       </Text>
+    </View>
+  );
+}
+
+function VerificationStage({
+  content,
+  processing,
+}: {
+  content: StatusContent;
+  processing: boolean;
+}) {
+  return (
+    <View
+      accessible
+      accessibilityLabel={
+        processing ? 'Readiness verification in progress' : content.title
+      }
+      accessibilityLiveRegion="polite"
+      accessibilityRole={content.tone === 'error' ? 'alert' : undefined}
+      accessibilityState={{ busy: processing }}
+      style={[
+        styles.cameraContainer,
+        styles.verificationStage,
+        statusContainerStyles[content.tone],
+      ]}
+    >
+      {processing ? (
+        <ActivityIndicator
+          accessibilityLabel="Readiness verification processing"
+          color={lightColors.primaryInteraction}
+          size="large"
+        />
+      ) : (
+        <SymbolView
+          name={content.icon}
+          size={64}
+          tintColor={statusIconColors[content.tone]}
+        />
+      )}
+      <Text
+        style={[
+          styles.verificationStageTitle,
+          statusTitleStyles[content.tone],
+        ]}
+      >
+        {content.title}
+      </Text>
+      {content.message ? (
+        <Text style={styles.verificationStageMessage}>{content.message}</Text>
+      ) : null}
     </View>
   );
 }
@@ -314,7 +415,9 @@ function StatusCard({
         >
           {content.title}
         </Text>
-        <Text style={styles.statusMessage}>{content.message}</Text>
+        {content.message ? (
+          <Text style={styles.statusMessage}>{content.message}</Text>
+        ) : null}
       </View>
     </View>
   );
@@ -326,6 +429,7 @@ function VerificationAction({
   continueTitle,
   state,
   onContinue,
+  onExit,
   onOpenCamera,
   onVerify,
 }: {
@@ -334,6 +438,7 @@ function VerificationAction({
   continueTitle: string;
   state: FaceVerificationUiState;
   onContinue: () => void;
+  onExit: () => void;
   onOpenCamera: () => void;
   onVerify: () => void;
 }) {
@@ -347,12 +452,24 @@ function VerificationAction({
     );
   }
 
+  if ('canRetry' in state && state.canRetry === false) {
+    return (
+      <AppButton
+        accessibilityLabel="Return to attendance session"
+        onPress={onExit}
+        title="Return to Session"
+      />
+    );
+  }
+
   if (
     state.status === 'requesting_camera_permission' ||
+    state.status === 'capturing' ||
     state.status === 'processing'
   ) {
     const requestingPermission =
       state.status === 'requesting_camera_permission';
+    const capturing = state.status === 'capturing';
 
     return (
       <AppButton
@@ -361,6 +478,8 @@ function VerificationAction({
         loadingTitle={
           requestingPermission
             ? 'Requesting Camera...'
+            : capturing
+              ? 'Capturing Photo...'
             : 'Verifying Face...'
         }
         onPress={() => undefined}
@@ -494,12 +613,23 @@ export function FaceVerificationScreen({
     isProcessing.current = true;
     const requestId = activeRequest.current + 1;
     activeRequest.current = requestId;
-    setState({ status: 'processing' });
+    setState({ status: 'capturing' });
 
     try {
       const capture = await cameraRef.current.takePictureAsync({
         quality: 0.7,
       });
+
+      if (!isMounted.current || activeRequest.current !== requestId) {
+        return;
+      }
+
+      if (isReadinessCheck) {
+        setCameraActive(false);
+        setCameraReady(false);
+      }
+      setState({ status: 'processing' });
+
       const result = await faceVerificationService.verifyFace({
         sessionId,
         capture: {
@@ -510,7 +640,10 @@ export function FaceVerificationScreen({
       if (isMounted.current && activeRequest.current === requestId) {
         setState(result);
 
-        if (result.status === 'success') {
+        if (
+          result.status === 'success' ||
+          ('canRetry' in result && result.canRetry === false)
+        ) {
           setCameraActive(false);
           setCameraReady(false);
         }
@@ -535,30 +668,52 @@ export function FaceVerificationScreen({
     onFaceVerified(sessionId);
   };
 
-  const content = statusContent[state.status];
+  const defaultContent =
+    (isReadinessCheck ? readinessStatusContent[state.status] : undefined) ??
+    statusContent[state.status];
+  const content =
+    !isReadinessCheck &&
+    'canRetry' in state &&
+    state.canRetry === false
+      ? {
+          ...defaultContent,
+          message: 'No face verification attempts remain for this session.',
+        }
+      : defaultContent;
   const processing = state.status === 'processing';
+  const showReadinessStage =
+    isReadinessCheck && isVerificationOutcomeState(state.status);
 
   return (
     <ScreenContainer scrollable contentContainerStyle={styles.screenContent}>
-      <ScreenHeader onBack={onBack} />
+      <ScreenHeader
+        onBack={onBack}
+        title={isReadinessCheck ? 'Face Readiness Check' : 'Face Verification'}
+      />
 
       {isReadinessCheck ? null : (
         <AttendanceProgressSteps phase="face" />
       )}
 
-      <FaceCameraPreview
-        cameraActive={cameraActive}
-        cameraRef={cameraRef}
-        onCameraError={() => {
-          setCameraActive(false);
-          setCameraReady(false);
-          setState({ status: 'camera_error' });
-        }}
-        onCameraReady={() => setCameraReady(true)}
-        processing={processing}
-      />
+      {showReadinessStage ? (
+        <VerificationStage content={content} processing={processing} />
+      ) : (
+        <FaceCameraPreview
+          cameraActive={cameraActive}
+          cameraRef={cameraRef}
+          onCameraError={() => {
+            setCameraActive(false);
+            setCameraReady(false);
+            setState({ status: 'camera_error' });
+          }}
+          onCameraReady={() => setCameraReady(true)}
+          processing={state.status === 'capturing' || processing}
+        />
+      )}
 
-      <StatusCard content={content} processing={processing} />
+      {showReadinessStage ? null : (
+        <StatusCard content={content} processing={processing} />
+      )}
 
       <View style={styles.action}>
         <VerificationAction
@@ -570,8 +725,16 @@ export function FaceVerificationScreen({
           }
           continueTitle={isReadinessCheck ? 'Done' : 'Continue'}
           onContinue={continueToResult}
+          onExit={onBack}
           onOpenCamera={() => void openCamera()}
-          onVerify={() => void verifyFace()}
+          onVerify={() => {
+            if (isReadinessCheck && isVerificationFailureState(state.status)) {
+              void openCamera();
+              return;
+            }
+
+            void verifyFace();
+          }}
           state={state}
         />
       </View>
@@ -593,6 +756,28 @@ export function FaceVerificationScreen({
         </Text>
       </View>
     </ScreenContainer>
+  );
+}
+
+function isVerificationOutcomeState(
+  status: FaceVerificationUiState['status'],
+): boolean {
+  return (
+    status === 'processing' ||
+    status === 'success' ||
+    isVerificationFailureState(status)
+  );
+}
+
+function isVerificationFailureState(
+  status: FaceVerificationUiState['status'],
+): boolean {
+  return (
+    status === 'face_not_detected' ||
+    status === 'multiple_faces' ||
+    status === 'liveness_failure' ||
+    status === 'verification_failure' ||
+    status === 'unexpected_error'
   );
 }
 
@@ -648,6 +833,23 @@ const styles = StyleSheet.create({
   cameraPlaceholderText: {
     ...typography.body,
     marginTop: spacing.xs,
+    textAlign: 'center',
+    color: lightColors.textSecondary,
+  },
+  verificationStage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  verificationStageTitle: {
+    ...typography.screenTitle,
+    marginTop: spacing.lg,
+    textAlign: 'center',
+  },
+  verificationStageMessage: {
+    ...typography.body,
+    maxWidth: 280,
+    marginTop: spacing.sm,
     textAlign: 'center',
     color: lightColors.textSecondary,
   },

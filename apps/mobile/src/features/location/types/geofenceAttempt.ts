@@ -34,6 +34,7 @@ export type GeofenceAttempt = {
 
 export type GeofenceAttemptResult =
   | { readonly status: 'completed'; readonly attempt: GeofenceAttempt }
+  | { readonly status: 'already-checked-in' }
   | { readonly status: CoreApiFailureStatus };
 
 export type SubmitGeofenceAttemptRequest = {

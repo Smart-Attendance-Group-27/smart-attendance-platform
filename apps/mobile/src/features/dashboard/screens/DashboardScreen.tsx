@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
   Pressable,
@@ -66,6 +66,7 @@ export function DashboardScreen({
   const [courseCards, setCourseCards] = useState<CourseSummary[]>([]);
   const [requiresReadinessCheck, setRequiresReadinessCheck] = useState(false);
   const [userName, setUserName] = useState<string>('');
+  const hasFocusedDashboard = useRef(false);
 
   const today = useMemo(() => new Date(), []);
   const dateString = useMemo(
@@ -163,12 +164,60 @@ export function DashboardScreen({
     };
   }, [activeSessionService, courseService, faceVerificationApiService, profileServiceInstance, service]);
 
-  const handleStart = (sessionId?: string) => {
-    if (!sessionId) return;
+  // The dashboard remains mounted while attendance routes are open. Refresh
+  // the student-specific session state when focus returns so a completed
+  // check-in immediately changes the card action without flashing the whole
+  // dashboard through another loading state.
+  useFocusEffect(
+    useCallback(() => {
+      if (!hasFocusedDashboard.current) {
+        hasFocusedDashboard.current = true;
+        return undefined;
+      }
+
+      if (!faceVerificationApiService && !activeSessionService) {
+        return undefined;
+      }
+
+      let active = true;
+
+      void (async () => {
+        const [readinessResult, refreshedSessions] = await Promise.all([
+          faceVerificationApiService?.getReadinessStatus(),
+          activeSessionService?.listMyActiveSessions(),
+        ]);
+
+        if (!active) {
+          return;
+        }
+
+        if (readinessResult?.status === 'loaded') {
+          setRequiresReadinessCheck(
+            readinessResult.readiness.requiresReadinessCheck,
+          );
+        }
+        if (refreshedSessions?.status === 'loaded') {
+          setActiveSessions(
+            refreshedSessions.sessions.map(toDashboardSession),
+          );
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [activeSessionService, faceVerificationApiService]),
+  );
+
+  const handleSessionAction = (attendanceSession: AttendanceSession) => {
+    if (!attendanceSession.id) return;
 
     router.push({
-      pathname: '/(student)/attendance/[sessionId]',
-      params: { sessionId },
+      pathname:
+        attendanceSession.checkInStatus === 'completed'
+          ? '/(student)/attendance/[sessionId]/check-in-success'
+          : '/(student)/attendance/[sessionId]',
+      params: { sessionId: attendanceSession.id },
     });
   };
 
@@ -226,7 +275,7 @@ export function DashboardScreen({
             {activeSessions.map((activeSession) => (
               <ActiveSessionCard
                 key={activeSession.id}
-                onStart={() => handleStart(activeSession.id)}
+                onStart={() => handleSessionAction(activeSession)}
                 session={activeSession}
               />
             ))}
@@ -408,7 +457,7 @@ function toDashboardSession(
     startTime: session.scheduledStartAt,
     endTime: session.checkInClosesAt,
     lateThreshold: session.lateAfterAt ?? session.checkInClosesAt,
-    checkInStatus: 'open',
+    checkInStatus: session.checkInCompleted ? 'completed' : 'open',
     sessionTitle: session.sessionTitle,
     venue: session.venue ?? undefined,
   };

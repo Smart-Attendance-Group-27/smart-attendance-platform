@@ -119,6 +119,21 @@ describe('CoreApiGeofenceValidationService', () => {
     ).resolves.toEqual({ status: expectedStatus });
   });
 
+  test('identifies the backend already-completed conflict', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      jsonResponse(409, {
+        detail: {
+          code: 'ATTENDANCE_ALREADY_COMPLETED',
+          message: 'Attendance has already been recorded for this session.',
+        },
+      }),
+    );
+
+    await expect(
+      buildService().submitAttempt({ sessionId, reading }),
+    ).resolves.toEqual({ status: 'already-checked-in' });
+  });
+
   test('maps a network failure without returning mock success', async () => {
     jest
       .spyOn(global, 'fetch')

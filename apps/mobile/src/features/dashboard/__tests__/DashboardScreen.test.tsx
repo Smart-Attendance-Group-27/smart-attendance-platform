@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 import { DashboardScreen } from '../screens/DashboardScreen';
 import type { ActiveAttendanceSessionService } from '../services/activeAttendanceSessionService';
@@ -7,16 +7,29 @@ import type { DashboardService } from '../services/dashboardService';
 import type { FaceVerificationApiService } from '../../face-verification/services/faceVerificationApiService';
 
 const mockPush = jest.fn();
+let mockFocusCallback:
+  | (() => void | (() => void))
+  | undefined;
 
-jest.mock('expo-router', () => ({
-  useRouter: () => ({
-    push: mockPush,
-  }),
-}));
+jest.mock('expo-router', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const React = require('react');
+
+  return {
+    useFocusEffect: (callback: () => void | (() => void)) => {
+      mockFocusCallback = callback;
+      React.useEffect(callback, [callback]);
+    },
+    useRouter: () => ({
+      push: mockPush,
+    }),
+  };
+});
 
 describe('DashboardScreen', () => {
   beforeEach(() => {
     mockPush.mockClear();
+    mockFocusCallback = undefined;
   });
 
   test('renders upcoming lectures from the service', async () => {
@@ -160,6 +173,93 @@ describe('DashboardScreen', () => {
     expect(getActiveAttendanceSession).not.toHaveBeenCalled();
   });
 
+  test('opens the existing check-in result for a completed student', async () => {
+    const activeSessionService: ActiveAttendanceSessionService = {
+      async listMyActiveSessions() {
+        return {
+          status: 'loaded',
+          sessions: [
+            {
+              ...buildActiveSession(
+                '40000000-0000-0000-0000-000000000001',
+                'Completed attendance',
+              ),
+              checkInCompleted: true,
+            },
+          ],
+        };
+      },
+    };
+
+    const screen = await render(
+      <DashboardScreen
+        activeSessionService={activeSessionService}
+        dashboardService={createEmptyDashboardService()}
+      />,
+    );
+
+    fireEvent.press(
+      await screen.findByRole('button', { name: 'Check-in result' }),
+    );
+
+    expect(mockPush).toHaveBeenCalledWith({
+      pathname:
+        '/(student)/attendance/[sessionId]/check-in-success',
+      params: {
+        sessionId: '40000000-0000-0000-0000-000000000001',
+      },
+    });
+    expect(
+      screen.queryByRole('button', { name: 'Start attendance' }),
+    ).toBeNull();
+  });
+
+  test('refreshes a completed check-in when the dashboard regains focus', async () => {
+    const listMyActiveSessions =
+      jest.fn<ActiveAttendanceSessionService['listMyActiveSessions']>();
+    listMyActiveSessions
+      .mockResolvedValueOnce({
+        status: 'loaded',
+        sessions: [
+          buildActiveSession(
+            '40000000-0000-0000-0000-000000000001',
+            'Attendance in progress',
+          ),
+        ],
+      })
+      .mockResolvedValueOnce({
+        status: 'loaded',
+        sessions: [
+          {
+            ...buildActiveSession(
+              '40000000-0000-0000-0000-000000000001',
+              'Attendance in progress',
+            ),
+            checkInCompleted: true,
+          },
+        ],
+      });
+    const screen = await render(
+      <DashboardScreen
+        activeSessionService={{ listMyActiveSessions }}
+        dashboardService={createEmptyDashboardService()}
+      />,
+    );
+
+    expect(
+      await screen.findByRole('button', { name: 'Start attendance' }),
+    ).toBeTruthy();
+
+    await act(async () => {
+      mockFocusCallback?.();
+    });
+
+    expect(
+      await screen.findByRole('button', { name: 'Check-in result' }),
+    ).toBeTruthy();
+    expect(listMyActiveSessions).toHaveBeenCalledTimes(2);
+  });
+
   test('shows an error instead of mock active-session data after an API failure', async () => {
     const dashboardService: DashboardService = {
       async getUpcomingLectures() {
@@ -237,6 +337,53 @@ describe('DashboardScreen', () => {
     ).toBeNull();
   });
 
+  test('removes the readiness button when the dashboard regains focus after a passed check', async () => {
+    const getReadinessStatus =
+      jest.fn<FaceVerificationApiService['getReadinessStatus']>();
+    getReadinessStatus
+      .mockResolvedValueOnce({
+        status: 'loaded',
+        readiness: {
+          status: 'not_checked',
+          requiresReadinessCheck: true,
+          checkedAt: null,
+        },
+      })
+      .mockResolvedValueOnce({
+        status: 'loaded',
+        readiness: {
+          status: 'passed',
+          requiresReadinessCheck: false,
+          checkedAt: '2026-08-28T08:30:00Z',
+        },
+      });
+    const screen = await render(
+      <DashboardScreen
+        dashboardService={createEmptyDashboardService()}
+        faceVerificationApiService={{ getReadinessStatus }}
+      />,
+    );
+
+    expect(
+      await screen.findByRole('button', {
+        name: 'Check Face Verification Readiness',
+      }),
+    ).toBeTruthy();
+
+    await act(async () => {
+      mockFocusCallback?.();
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('button', {
+          name: 'Check Face Verification Readiness',
+        }),
+      ).toBeNull();
+    });
+    expect(getReadinessStatus).toHaveBeenCalledTimes(2);
+  });
+
   test('opens the profile screen from the avatar action', async () => {
     const fakeService: DashboardService = {
       async getUpcomingLectures() {
@@ -301,5 +448,6 @@ function buildActiveSession(id: string, sessionTitle: string) {
     requiresFaceVerification: true,
     requiresGeofence: true,
     requiresQr: false,
+    checkInCompleted: false,
   };
 }

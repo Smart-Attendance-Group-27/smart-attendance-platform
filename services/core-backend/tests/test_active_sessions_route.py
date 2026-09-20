@@ -38,6 +38,7 @@ def build_session() -> ActiveAttendanceSessionRecord:
         course_name="Software Engineering Project",
         session_title="Geofence Demo - Near Centre",
         session_type="lecture",
+        lecturer_names="Dr. N. Perera",
         scheduled_start_at=CURRENT_TIME - timedelta(minutes=5),
         scheduled_end_at=CURRENT_TIME + timedelta(hours=1),
         check_in_opens_at=CURRENT_TIME - timedelta(minutes=2),
@@ -47,6 +48,7 @@ def build_session() -> ActiveAttendanceSessionRecord:
         requires_face_verification=True,
         requires_geofence=True,
         requires_qr=False,
+        check_in_completed=False,
     )
 
 
@@ -110,6 +112,7 @@ def test_returns_privacy_safe_camel_case_sessions(
             "courseName": "Software Engineering Project",
             "sessionTitle": "Geofence Demo - Near Centre",
             "sessionType": "lecture",
+            "lecturerNames": "Dr. N. Perera",
             "scheduledStartAt": "2026-08-13T05:25:00Z",
             "scheduledEndAt": "2026-08-13T06:30:00Z",
             "checkInOpensAt": "2026-08-13T05:28:00Z",
@@ -119,6 +122,7 @@ def test_returns_privacy_safe_camel_case_sessions(
             "requiresFaceVerification": True,
             "requiresGeofence": True,
             "requiresQr": False,
+            "checkInCompleted": False,
         }
     ]
 

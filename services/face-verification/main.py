@@ -56,8 +56,8 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
     )
 
     app.include_router(health_router)
-    app.include_router(readiness_router)
     app.include_router(attendance_router)
+    app.include_router(readiness_router)
 
     return app
 

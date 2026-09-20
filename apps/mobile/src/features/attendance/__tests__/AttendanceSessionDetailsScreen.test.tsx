@@ -7,6 +7,7 @@ import {
 import {
   fireEvent,
   render,
+  waitFor,
 } from '@testing-library/react-native';
 
 import { AttendanceSessionDetailsScreen } from '../screens/AttendanceSessionDetailsScreen';
@@ -17,6 +18,7 @@ type ScreenTestProps = {
   sessionId: string;
   attendanceService: AttendanceService;
   onBack: () => void;
+  onCheckInCompleted: (sessionId: string) => void;
   onStartCheckIn: () => void;
 };
 
@@ -31,6 +33,7 @@ function createScreenProps(
     sessionId: 'attendance-session-active',
     attendanceService,
     onBack: jest.fn(),
+    onCheckInCompleted: jest.fn(),
     onStartCheckIn: jest.fn(),
   };
 }
@@ -98,6 +101,42 @@ describe('AttendanceSessionDetailsScreen', () => {
     fireEvent.press(startButton);
 
     expect(props.onStartCheckIn).toHaveBeenCalledTimes(1);
+  });
+
+  test('redirects a completed attendance without rendering another start action', async () => {
+    const attendanceService: AttendanceService = {
+      async getAttendanceSession() {
+        const activeLookup = await new MockAttendanceService()
+          .getAttendanceSession('attendance-session-active');
+        if (activeLookup.status !== 'available') {
+          return activeLookup;
+        }
+        return {
+          status: 'available',
+          session: {
+            ...activeLookup.session,
+            checkInStatus: 'completed',
+          },
+        };
+      },
+      async getCheckInResult() {
+        return { status: 'unavailable' };
+      },
+    };
+    const props = createScreenProps(attendanceService);
+    const screen = await renderScreen(props);
+
+    await waitFor(() => {
+      expect(props.onCheckInCompleted).toHaveBeenCalledWith(
+        'attendance-session-active',
+      );
+    });
+    expect(
+      screen.queryByRole('button', {
+        name: 'Start attendance check-in',
+      }),
+    ).toBeNull();
+    expect(props.onStartCheckIn).not.toHaveBeenCalled();
   });
 
   test('keeps a closed session read-only', async () => {

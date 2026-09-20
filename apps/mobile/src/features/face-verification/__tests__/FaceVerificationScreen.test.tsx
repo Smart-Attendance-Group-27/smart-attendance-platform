@@ -200,12 +200,20 @@ describe('FaceVerificationScreen', () => {
 
     expect(screen.queryByText('Location')).toBeNull();
     expect(
+      screen.getByRole('header', { name: 'Face Readiness Check' }),
+    ).toBeTruthy();
+    expect(
       screen.getByText(
         'Your face is used only for readiness verification and should not be stored unnecessarily.',
       ),
     ).toBeTruthy();
 
     await captureAndVerify(screen);
+    expect(await screen.findByText('Readiness check passed')).toBeTruthy();
+    expect(
+      screen.getByText('Face verification is ready to use for attendance.'),
+    ).toBeTruthy();
+    expect(screen.queryByText('Native front camera')).toBeNull();
     await fireEvent.press(
       await screen.findByRole('button', { name: 'Return to dashboard' }),
     );
@@ -268,7 +276,6 @@ describe('FaceVerificationScreen', () => {
       capture: { uri: 'file:///face-capture.jpg' },
     });
     expect(screen.getByText('Verifying your face...')).toBeTruthy();
-    expect(screen.getByText('Please keep your face steady.')).toBeTruthy();
     expect(
       screen.getByRole('button', { name: 'Begin face verification' }).props
         .accessibilityState,
@@ -278,6 +285,68 @@ describe('FaceVerificationScreen', () => {
       deferred.resolve({ status: 'verification_failure' });
       await deferred.promise;
     });
+  });
+
+  test('replaces the readiness camera with verifying and result screens after capture', async () => {
+    const deferred = createDeferred<FaceVerificationResult>();
+    const verifyFace = jest.fn<FaceVerificationService['verifyFace']>(
+      () => deferred.promise,
+    );
+    const screen = await render(
+      <FaceVerificationScreen
+        {...createScreenProps({ verifyFace })}
+        mode="readiness"
+      />,
+    );
+
+    await captureAndVerify(screen);
+
+    expect(screen.queryByText('Native front camera')).toBeNull();
+    expect(
+      screen.getByLabelText('Readiness verification in progress'),
+    ).toBeTruthy();
+    expect(screen.getByText('Verifying readiness...')).toBeTruthy();
+    expect(
+      screen.queryByText(
+        'Photo captured. You can relax while we check your face.',
+      ),
+    ).toBeNull();
+
+    await act(async () => {
+      deferred.resolve({ status: 'success' });
+      await deferred.promise;
+    });
+
+    expect(screen.getByLabelText('Readiness check passed')).toBeTruthy();
+    expect(screen.getByText('Readiness check passed')).toBeTruthy();
+    expect(
+      screen.getByText('Face verification is ready to use for attendance.'),
+    ).toBeTruthy();
+  });
+
+  test('returns to the camera before retrying a failed readiness check', async () => {
+    const { service, verifyFace } = createService({
+      status: 'verification_failure',
+    });
+    const screen = await render(
+      <FaceVerificationScreen
+        {...createScreenProps(service)}
+        mode="readiness"
+      />,
+    );
+
+    await captureAndVerify(screen);
+
+    expect(await screen.findByText('Readiness check failed')).toBeTruthy();
+    expect(screen.queryByText('Native front camera')).toBeNull();
+
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Retry face verification' }),
+    );
+
+    expect(await screen.findByText('Native front camera')).toBeTruthy();
+    expect(await screen.findByText('Capture & Verify')).toBeTruthy();
+    expect(verifyFace).toHaveBeenCalledTimes(1);
   });
 
   test('prevents duplicate verification requests while processing', async () => {
@@ -397,6 +466,32 @@ describe('FaceVerificationScreen', () => {
       }),
     ).toBeTruthy();
     expect(props.onFaceVerified).not.toHaveBeenCalled();
+  });
+
+  test('does not offer another capture after the final attendance face attempt', async () => {
+    const { service } = createService({
+      status: 'verification_failure',
+      canRetry: false,
+    });
+    const props = createScreenProps(service);
+    const screen = await render(
+      <FaceVerificationScreen {...props} />,
+    );
+
+    await captureAndVerify(screen);
+
+    expect(await screen.findByText('Face verification failed')).toBeTruthy();
+    expect(
+      await screen.findByText(
+        'No face verification attempts remain for this session.',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Retry face verification' }),
+    ).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Return to attendance session' }),
+    ).toBeTruthy();
   });
 
   test('retry starts a new request, shows processing, and then shows success', async () => {

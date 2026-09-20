@@ -69,6 +69,12 @@ export class CoreApiGeofenceValidationService
     );
 
     if (result.status !== 'ok') {
+      if (
+        result.status === 'conflict' &&
+        result.errorCode === 'ATTENDANCE_ALREADY_COMPLETED'
+      ) {
+        return { status: 'already-checked-in' };
+      }
       return { status: result.status };
     }
 
