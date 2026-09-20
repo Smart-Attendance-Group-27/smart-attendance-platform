@@ -18,6 +18,7 @@ from main import create_app
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
 from modules.attendance_sessions.lecturer_sessions.exception import (
     ClassroomGeofenceNotConfiguredError,
+    GeofenceRequiredError,
     InvalidCancellationReasonError,
     InvalidSessionScheduleError,
     SessionAlreadyActiveError,
@@ -497,6 +498,22 @@ def test_the_service_factory_passes_the_bound_qr_provider_through(monkeypatch) -
 
     assert service._qr_evidence is provider
     assert service._notification_service is None
+
+
+def test_create_session_without_geofence_returns_the_documented_422(
+    jwks_document,
+    make_access_token,
+) -> None:
+    service = StubLecturerSessionService(error=GeofenceRequiredError())
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            SESSIONS_URL,
+            json=build_create_payload(requiresGeofence=False),
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "GEOFENCE_REQUIRED"
 
 
 def test_cancel_session(client: TestClient, service: StubLecturerSessionService, make_access_token) -> None:

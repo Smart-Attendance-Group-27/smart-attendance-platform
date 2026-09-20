@@ -10,6 +10,7 @@ from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundE
 from modules.academic.lecturer_profile.repository import LecturerProfileRepository
 from modules.attendance_sessions.lecturer_sessions.exception import (
     ClassroomGeofenceNotConfiguredError,
+    GeofenceRequiredError,
     InvalidCancellationReasonError,
     InvalidSessionScheduleError,
     SessionAlreadyActiveError,
@@ -160,6 +161,11 @@ class LecturerSessionService:
         requires_geofence: bool,
         requires_qr: bool,
     ) -> LecturerSessionRecord:
+        # Geofence is the only step that creates a verification attempt, so a
+        # session without it could never be attended.
+        if not requires_geofence:
+            raise GeofenceRequiredError()
+
         if scheduled_end_at <= scheduled_start_at:
             raise InvalidSessionScheduleError("scheduledEndAt must be after scheduledStartAt.")
 

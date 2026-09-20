@@ -8,6 +8,7 @@ from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundE
 from modules.academic.lecturer_profile.repository import LecturerProfileRecord
 from modules.attendance_sessions.lecturer_sessions.exception import (
     ClassroomGeofenceNotConfiguredError,
+    GeofenceRequiredError,
     InvalidCancellationReasonError,
     InvalidSessionScheduleError,
     SessionAlreadyActiveError,
@@ -432,25 +433,24 @@ async def test_create_rejects_when_geofence_required_but_classroom_unconfigured(
     assert repository.calls == ["find_timetable_entry"]
 
 
-async def test_create_allows_unconfigured_classroom_when_geofence_not_required() -> None:
-    unconfigured = build_timetable_entry(
-        classroom_latitude=None,
-        classroom_longitude=None,
-        classroom_default_geofence_radius_m=None,
-    )
+async def test_create_rejects_a_session_that_does_not_require_geofence() -> None:
     repository = FakeLecturerSessionRepository(
-        build_session(), build_session(), timetable_entry=unconfigured
+        build_session(),
+        build_session(),
+        timetable_entry=build_timetable_entry(),
     )
     service = LecturerSessionService(
         repository=repository,
         lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
     )
+    pool = FakePool()
 
-    await service.create_for_user(
-        FakePool(), ACTOR_ID, **build_create_kwargs(requires_geofence=False)
-    )
+    with pytest.raises(GeofenceRequiredError):
+        await service.create_for_user(pool, ACTOR_ID, **build_create_kwargs(requires_geofence=False))
 
-    assert "create_session_geofence" not in repository.calls
+    # Refused before any lookup or write.
+    assert repository.calls == []
+    assert pool.connection.executed_queries == []
 
 
 async def test_create_rejects_missing_lecturer_profile() -> None:

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
 from modules.attendance_sessions.lecturer_sessions.exception import (
     ClassroomGeofenceNotConfiguredError,
+    GeofenceRequiredError,
     InvalidCancellationReasonError,
     InvalidSessionScheduleError,
     SessionAlreadyActiveError,
@@ -136,6 +137,14 @@ async def create_my_attendance_session(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
     except ClassroomGeofenceNotConfiguredError as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+    except GeofenceRequiredError as error:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            {
+                "code": "GEOFENCE_REQUIRED",
+                "message": "Sessions must require geofence verification.",
+            },
+        ) from error
 
     return LecturerSessionResponse.from_record(session)
 
