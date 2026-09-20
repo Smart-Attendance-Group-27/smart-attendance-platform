@@ -22,6 +22,14 @@ class SessionCancelledError(LecturerSessionError):
     """The session was cancelled and cannot be acted on."""
 
 
+class SessionAlreadyCancelledError(LecturerSessionError):
+    """The session is already cancelled."""
+
+
+class InvalidCancellationReasonError(LecturerSessionError):
+    """A cancellation needs a reason of 3 to 500 characters."""
+
+
 class TimetableEntryNotFoundError(LecturerSessionError):
     """The timetable entry does not exist, is inactive, or does not belong to this lecturer."""
 

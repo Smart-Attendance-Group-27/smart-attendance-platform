@@ -13,6 +13,7 @@ SESSION_SCHEDULED_STATUS = "scheduled"
 # database/migrations/README.md and the Stage-1 repo audit for why a new status
 # enum was deliberately not invented here.
 SESSION_ACTIVE_STATUS = "active"
+SESSION_CANCELLED_STATUS = "cancelled"
 
 # attendance_state.AttendanceRecordSource.MANUAL is "manual", but the value
 # actually written to record_source today is "manual_review" (manual_review
@@ -266,6 +267,26 @@ class LecturerSessionRepository:
             WHERE id = $1
             """,
             session_id,
+        )
+
+    async def cancel(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+        reason: str,
+    ) -> None:
+        await connection.execute(
+            """
+            UPDATE attendance_session.sessions
+            SET cancelled_at = now(),
+                cancellation_reason = $2,
+                status = $3,
+                updated_at = now()
+            WHERE id = $1
+            """,
+            session_id,
+            reason,
+            SESSION_CANCELLED_STATUS,
         )
 
     async def find_timetable_entry_for_lecturer(
