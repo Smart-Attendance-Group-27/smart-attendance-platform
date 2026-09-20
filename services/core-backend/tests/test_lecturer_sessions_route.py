@@ -66,27 +66,39 @@ def build_session(**overrides) -> LecturerSessionRecord:
         present_count=0,
         late_count=0,
         pending_review_count=0,
+        checked_in_count=0,
+        late_checked_in_count=0,
+        failed_verification_count=0,
+        absent_count=0,
+        manual_count=0,
     )
     defaults.update(overrides)
     return LecturerSessionRecord(**defaults)
 
 
-def build_student() -> SessionStudentRecord:
-    return SessionStudentRecord(
+def build_student(**overrides) -> SessionStudentRecord:
+    defaults = dict(
         verification_attempt_id=None,
         student_id=STUDENT_ID,
         registration_number="230701A",
         full_name="Amal Perera",
         verification_status=None,
+        failure_reason=None,
         geofence_status=None,
         face_status=None,
         face_similarity_score=None,
         face_liveness_passed=None,
         qr_status=None,
-        attendance_status=None,
-        review_status=None,
+        initial_check_in_status=None,
         checked_in_at=None,
+        attendance_status=None,
+        record_source=None,
+        manual_reason=None,
+        record_updated_at=None,
+        review_status=None,
     )
+    defaults.update(overrides)
+    return SessionStudentRecord(**defaults)
 
 
 class StubLecturerSessionService:
@@ -192,6 +204,36 @@ def test_get_session_returns_derived_status_for_active_session(
 
     assert response.status_code == 200
     assert response.json()["status"] == "active"
+
+
+def test_get_session_reports_the_new_roster_counts(
+    jwks_document,
+    make_access_token,
+) -> None:
+    session = build_session(
+        activated_at=CURRENT_TIME,
+        enrolled_count=10,
+        checked_in_count=4,
+        late_checked_in_count=1,
+        failed_verification_count=2,
+        absent_count=1,
+        manual_count=1,
+    )
+    service = StubLecturerSessionService(session=session)
+    with build_client(jwks_document, service) as client:
+        response = client.get(
+            f"{SESSIONS_URL}/{SESSION_ID}",
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    body = response.json()
+    assert body["checkedInCount"] == 4
+    assert body["lateCheckedInCount"] == 1
+    assert body["failedVerificationCount"] == 2
+    assert body["absentCount"] == 1
+    assert body["manualCount"] == 1
+    # 10 enrolled - 4 checked in - 1 late checked in - 2 failed
+    assert body["notCheckedInCount"] == 3
 
 
 def test_get_missing_session_returns_404(jwks_document, make_access_token) -> None:
@@ -331,6 +373,47 @@ def test_lists_students_without_leaking_biometric_data(client: TestClient, make_
     assert body[0]["studentId"] == str(STUDENT_ID)
     for forbidden_field in ("faceEmbedding", "faceImage", "latitude", "longitude"):
         assert forbidden_field not in response.text
+
+
+def test_roster_row_reports_the_new_check_in_fields(
+    jwks_document,
+    make_access_token,
+) -> None:
+    student = build_student(
+        failure_reason=None,
+        initial_check_in_status="late_checked_in",
+        checked_in_at=CURRENT_TIME,
+        record_source="automatic",
+        manual_reason=None,
+        record_updated_at=CURRENT_TIME,
+    )
+    service = StubLecturerSessionService(students=[student])
+
+    with build_client(jwks_document, service) as client:
+        response = client.get(
+            f"{SESSIONS_URL}/{SESSION_ID}/students",
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    row = response.json()[0]
+    assert row["initialCheckInStatus"] == "late_checked_in"
+    assert row["checkedInAt"] is not None
+    assert row["recordSource"] == "automatic"
+
+
+def test_roster_row_reports_qr_progress(jwks_document, make_access_token) -> None:
+    student = build_student(qr_required_count=2, qr_passed_count=1)
+    service = StubLecturerSessionService(students=[student])
+
+    with build_client(jwks_document, service) as client:
+        response = client.get(
+            f"{SESSIONS_URL}/{SESSION_ID}/students",
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    row = response.json()[0]
+    assert row["qrRequiredCount"] == 2
+    assert row["qrPassedCount"] == 1
 
 
 def test_missing_lecturer_profile_returns_404(jwks_document, make_access_token) -> None:
