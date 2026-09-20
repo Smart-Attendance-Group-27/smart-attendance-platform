@@ -75,6 +75,9 @@ class VerifyQrSessionResponse(BaseModel):
     qr_session_id: UUID = Field(alias="qrSessionId")
     status: QrVerificationStatus
     verified_at: datetime = Field(alias="verifiedAt")
+    batch_passed: bool = Field(alias="batchPassed")
+    already_passed: bool = Field(alias="alreadyPassed")
+    required_for_student: bool = Field(alias="requiredForStudent")
 
 
 class CurrentDynamicQrSessionResponse(BaseModel):

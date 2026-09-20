@@ -17,3 +17,4 @@ class QrBatchMetadata:
     deactivated_at: datetime | None
     refresh_interval_seconds: int | None
     expires_at: datetime
+    voided_at: datetime | None = None

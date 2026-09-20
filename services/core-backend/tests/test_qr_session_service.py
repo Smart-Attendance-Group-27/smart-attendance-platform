@@ -8,26 +8,23 @@ from modules.attendance_sessions.qr_session.exception import (
     ActiveStudentProfileNotFoundError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
+    CheckInRequiredError,
     DynamicQrConfigurationError,
     DynamicQrSessionUnavailableError,
     LecturerSessionAccessError,
     QrNotRequiredError,
     QrSessionNotFoundError,
     StudentNotEligibleError,
-    VerificationNotStartedError,
 )
 from modules.attendance_sessions.qr_session.crypto import generate_dynamic_qr_value
 from modules.attendance_sessions.qr_session.repository import (
     AttendanceSessionRecord,
     QrVerificationRecord,
+    StudentAttemptRecord,
 )
 from modules.attendance_sessions.qr_session.metadata import QrBatchMetadata
 from modules.attendance_sessions.qr_session.service import QrSessionService
-from modules.attendance_verification.geofence.repository import (
-    IN_PROGRESS_STATUS,
-    StudentProfileRecord,
-    VerificationAttemptRecord,
-)
+from modules.attendance_verification.geofence.repository import StudentProfileRecord
 
 LECTURER_ID = UUID("20000000-0000-0000-0000-000000000002")
 STUDENT_USER_ID = UUID("20000000-0000-0000-0000-000000000011")
@@ -90,6 +87,9 @@ class FakeRepository:
         self.qr_token_id_for_batch: UUID | None = None
         self.next_attempt_number = 1
         self.inserted_qr_validation_attempts: list[tuple] = []
+        self.attempt: StudentAttemptRecord | None = _DEFAULT_ATTEMPT
+        self.accepted_batch_ids: set[UUID] = set()
+        self.write_session: AttendanceSessionRecord | None = None
 
     async def lock_attendance_session(
         self,
@@ -171,6 +171,22 @@ class FakeRepository:
         self.fetched_qr_session_id = qr_session_id
         return self.verification_record
 
+    async def find_student_attempt(
+        self, connection: FakeConnection, session_id: UUID, student_id: UUID,
+        *, lock_for_update: bool = False,
+    ) -> StudentAttemptRecord | None:
+        return self.attempt
+
+    async def lock_session_for_qr_write(
+        self, connection: FakeConnection, session_id: UUID,
+    ) -> AttendanceSessionRecord | None:
+        return self.write_session or _active_session_for(self.verification_record)
+
+    async def has_accepted_qr_attempt(
+        self, connection: FakeConnection, verification_attempt_id: UUID, qr_batch_id: UUID,
+    ) -> bool:
+        return qr_batch_id in self.accepted_batch_ids
+
     async def find_qr_token_id_for_batch(
         self,
         connection: FakeConnection,
@@ -190,6 +206,7 @@ class FakeRepository:
         connection: FakeConnection,
         qr_validation_attempt_id: UUID,
         verification_attempt_id: UUID,
+        qr_batch_id: UUID,
         qr_token_id: UUID | None,
         attempt_number: int,
         validation_status: str,
@@ -200,6 +217,7 @@ class FakeRepository:
             (
                 qr_validation_attempt_id,
                 verification_attempt_id,
+                qr_batch_id,
                 qr_token_id,
                 attempt_number,
                 validation_status,
@@ -216,6 +234,11 @@ class FakeVerificationRepository:
         self.qr_token_id_for_batch: UUID | None = None
         self.next_attempt_number = 1
         self.inserted_qr_validation_attempts: list[tuple] = []
+        self.attempt: StudentAttemptRecord | None = _DEFAULT_ATTEMPT
+        self.accepted_batch_ids: set[UUID] = set()
+        self.write_session: AttendanceSessionRecord | None = None
+        self.accepted_on_recheck = False
+        self.accepted_checks = 0
 
     async def fetch_qr_verification_record(
         self,
@@ -224,6 +247,25 @@ class FakeVerificationRepository:
     ) -> QrVerificationRecord | None:
         self.requested_qr_session_id = qr_session_id
         return self.record
+
+    async def find_student_attempt(
+        self, connection: FakeConnection, session_id: UUID, student_id: UUID,
+        *, lock_for_update: bool = False,
+    ) -> StudentAttemptRecord | None:
+        return self.attempt
+
+    async def lock_session_for_qr_write(
+        self, connection: FakeConnection, session_id: UUID,
+    ) -> AttendanceSessionRecord | None:
+        return self.write_session or _active_session_for(self.record)
+
+    async def has_accepted_qr_attempt(
+        self, connection: FakeConnection, verification_attempt_id: UUID, qr_batch_id: UUID,
+    ) -> bool:
+        self.accepted_checks += 1
+        return qr_batch_id in self.accepted_batch_ids or (
+            self.accepted_on_recheck and self.accepted_checks > 1
+        )
 
     async def find_qr_token_id_for_batch(
         self,
@@ -244,6 +286,7 @@ class FakeVerificationRepository:
         connection: FakeConnection,
         qr_validation_attempt_id: UUID,
         verification_attempt_id: UUID,
+        qr_batch_id: UUID,
         qr_token_id: UUID | None,
         attempt_number: int,
         validation_status: str,
@@ -254,6 +297,7 @@ class FakeVerificationRepository:
             (
                 qr_validation_attempt_id,
                 verification_attempt_id,
+                qr_batch_id,
                 qr_token_id,
                 attempt_number,
                 validation_status,
@@ -263,12 +307,23 @@ class FakeVerificationRepository:
         )
 
 
-_UNSET = object()
-_DEFAULT_ATTEMPT = VerificationAttemptRecord(
+_DEFAULT_ATTEMPT = StudentAttemptRecord(
     id=UUID("70000000-0000-0000-0000-000000000001"),
-    status=IN_PROGRESS_STATUS,
-    failure_reason=None,
+    status="checked_in",
+    checked_in_at=datetime(2026, 8, 6, 9, 59, tzinfo=UTC),
 )
+
+
+def _active_session_for(record: QrVerificationRecord | None) -> AttendanceSessionRecord | None:
+    if record is None or record.attendance_session_id is None:
+        return None
+    return AttendanceSessionRecord(
+        id=record.attendance_session_id,
+        status=record.attendance_session_status,
+        scheduled_end_at=record.attendance_session_scheduled_end_at,
+        closed_at=record.attendance_session_closed_at,
+        cancelled_at=record.attendance_session_cancelled_at,
+    )
 
 
 class FakeStudentVerificationRepository:
@@ -279,7 +334,6 @@ class FakeStudentVerificationRepository:
         *,
         student: StudentProfileRecord | None = None,
         eligible: bool = True,
-        attempt: object = _UNSET,
     ) -> None:
         self.student = (
             student
@@ -287,7 +341,6 @@ class FakeStudentVerificationRepository:
             else StudentProfileRecord(id=STUDENT_PROFILE_ID, profile_status="active")
         )
         self.eligible = eligible
-        self.attempt = _DEFAULT_ATTEMPT if attempt is _UNSET else attempt
         self.requested_user_id: UUID | None = None
 
     async def lock_student_profile_for_user(
@@ -305,17 +358,6 @@ class FakeStudentVerificationRepository:
         student_id: UUID,
     ) -> bool:
         return self.eligible
-
-    async def find_verification_attempt(
-        self,
-        connection: FakeConnection,
-        session_id: UUID,
-        student_id: UUID,
-        *,
-        lock_for_update: bool = False,
-    ) -> VerificationAttemptRecord | None:
-        return self.attempt
-
 
 class FakeQrBatchCache:
     def __init__(
@@ -1588,10 +1630,11 @@ async def test_verify_qr_session_rejects_when_verification_not_started() -> None
     service = QrSessionService(
         repository=repository,
         clock=lambda: current_time,
-        verification_repository=FakeStudentVerificationRepository(attempt=None),
+        verification_repository=FakeStudentVerificationRepository(),
     )
 
-    with pytest.raises(VerificationNotStartedError):
+    repository.attempt = None
+    with pytest.raises(CheckInRequiredError):
         await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
 
 
@@ -1607,21 +1650,19 @@ async def test_verify_qr_session_returns_closed_when_attempt_already_terminal() 
             token_expires_at=current_time + timedelta(minutes=5),
         )
     )
+    repository.attempt = StudentAttemptRecord(
+        id=UUID("70000000-0000-0000-0000-000000000001"),
+        status="failed",
+        checked_in_at=None,
+    )
     service = QrSessionService(
         repository=repository,
         clock=lambda: current_time,
-        verification_repository=FakeStudentVerificationRepository(
-            attempt=VerificationAttemptRecord(
-                id=UUID("70000000-0000-0000-0000-000000000001"),
-                status="failed",
-                failure_reason="OUTSIDE_GEOFENCE",
-            ),
-        ),
+        verification_repository=FakeStudentVerificationRepository(),
     )
 
-    result = await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
-
-    assert result.status == "closed"
+    with pytest.raises(CheckInRequiredError):
+        await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
 
 
 @pytest.mark.asyncio
@@ -1644,9 +1685,7 @@ async def test_verify_qr_session_persists_a_qr_validation_attempt() -> None:
         repository=repository,
         clock=lambda: current_time,
         uuid_factory=lambda: UUID("80000000-0000-0000-0000-000000000001"),
-        verification_repository=FakeStudentVerificationRepository(
-            attempt=VerificationAttemptRecord(id=attempt_id, status=IN_PROGRESS_STATUS, failure_reason=None),
-        ),
+        verification_repository=FakeStudentVerificationRepository(),
     )
 
     await service.verify_qr_session(FakePool(), qr_session_id, "raw-test-token", STUDENT_USER_ID)
@@ -1655,6 +1694,7 @@ async def test_verify_qr_session_persists_a_qr_validation_attempt() -> None:
         (
             UUID("80000000-0000-0000-0000-000000000001"),
             attempt_id,
+            qr_session_id,
             qr_token_id,
             3,
             "accepted",
@@ -1664,12 +1704,154 @@ async def test_verify_qr_session_persists_a_qr_validation_attempt() -> None:
     ]
 
 
+@pytest.mark.asyncio
+async def test_verify_qr_session_requires_completed_check_in_without_writing() -> None:
+    now = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    batch_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeVerificationRepository(build_qr_verification_record(qr_session_id=batch_id))
+    repository.attempt = StudentAttemptRecord(
+        id=_DEFAULT_ATTEMPT.id, status="in_progress", checked_in_at=None
+    )
+    service = QrSessionService(
+        repository=repository, verification_repository=FakeStudentVerificationRepository(),
+        clock=lambda: now,
+    )
+
+    with pytest.raises(CheckInRequiredError):
+        await service.verify_qr_session(FakePool(), batch_id, "scan", STUDENT_USER_ID)
+
+    assert repository.inserted_qr_validation_attempts == []
+    assert repository.accepted_checks == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("activated_delta, required", [(0, False), (1, True), (-1, False)])
+async def test_verify_qr_session_required_batch_uses_strict_check_in_boundary(
+    activated_delta: int, required: bool,
+) -> None:
+    now = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    batch_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeVerificationRepository(build_qr_verification_record(
+        qr_session_id=batch_id,
+        batch_activated_at=now + timedelta(seconds=activated_delta),
+        token_hash=sha256(b"scan").hexdigest(),
+        token_valid_from=now - timedelta(minutes=1),
+        token_expires_at=now + timedelta(minutes=5),
+    ))
+    repository.attempt = StudentAttemptRecord(
+        id=_DEFAULT_ATTEMPT.id, status="checked_in", checked_in_at=now
+    )
+    service = QrSessionService(
+        repository=repository, verification_repository=FakeStudentVerificationRepository(),
+        clock=lambda: now,
+    )
+
+    result = await service.verify_qr_session(FakePool(), batch_id, "scan", STUDENT_USER_ID)
+
+    assert result.status == "accepted"
+    assert result.batch_passed is True
+    assert result.required_for_student is required
+    assert repository.inserted_qr_validation_attempts[0][2] == batch_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("on_recheck", [False, True])
+async def test_verify_qr_session_repeat_accept_does_not_write(on_recheck: bool) -> None:
+    now = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    batch_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeVerificationRepository(build_qr_verification_record(qr_session_id=batch_id))
+    if on_recheck:
+        repository.accepted_on_recheck = True
+    else:
+        repository.accepted_batch_ids.add(batch_id)
+    service = QrSessionService(
+        repository=repository, verification_repository=FakeStudentVerificationRepository(),
+        clock=lambda: now,
+    )
+
+    result = await service.verify_qr_session(FakePool(), batch_id, "scan", STUDENT_USER_ID)
+
+    assert result.status == "accepted"
+    assert result.batch_passed is True
+    assert result.already_passed is True
+    assert repository.inserted_qr_validation_attempts == []
+    assert repository.accepted_checks == (2 if on_recheck else 1)
+
+
+@pytest.mark.asyncio
+async def test_verify_qr_session_voided_batch_is_closed() -> None:
+    now = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    batch_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeVerificationRepository(build_qr_verification_record(
+        qr_session_id=batch_id, batch_voided_at=now,
+    ))
+    service = QrSessionService(
+        repository=repository, verification_repository=FakeStudentVerificationRepository(),
+        clock=lambda: now,
+    )
+
+    result = await service.verify_qr_session(FakePool(), batch_id, "scan", STUDENT_USER_ID)
+
+    assert result.status == "closed"
+    assert result.batch_passed is False
+    assert repository.inserted_qr_validation_attempts[0][2] == batch_id
+
+
+@pytest.mark.asyncio
+async def test_verify_qr_session_voided_batch_stays_closed_after_previous_accept() -> None:
+    now = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    batch_id = UUID("50000000-0000-0000-0000-000000000001")
+    repository = FakeVerificationRepository(build_qr_verification_record(
+        qr_session_id=batch_id, batch_voided_at=now,
+    ))
+    repository.accepted_batch_ids.add(batch_id)
+    service = QrSessionService(
+        repository=repository, verification_repository=FakeStudentVerificationRepository(),
+        clock=lambda: now,
+    )
+
+    result = await service.verify_qr_session(FakePool(), batch_id, "scan", STUDENT_USER_ID)
+
+    assert result.status == "closed"
+    assert result.already_passed is False
+
+
+@pytest.mark.asyncio
+async def test_verify_qr_session_close_before_write_is_recorded_as_closed() -> None:
+    now = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    batch_id = UUID("50000000-0000-0000-0000-000000000001")
+    record = build_qr_verification_record(
+        qr_session_id=batch_id,
+        token_hash=sha256(b"scan").hexdigest(),
+        token_valid_from=now - timedelta(minutes=1),
+        token_expires_at=now + timedelta(minutes=5),
+    )
+    repository = FakeVerificationRepository(record)
+    repository.write_session = AttendanceSessionRecord(
+        id=record.attendance_session_id, status="closed",
+        scheduled_end_at=now + timedelta(hours=1), closed_at=now,
+        cancelled_at=None,
+    )
+    service = QrSessionService(
+        repository=repository, verification_repository=FakeStudentVerificationRepository(),
+        clock=lambda: now,
+    )
+
+    result = await service.verify_qr_session(FakePool(), batch_id, "scan", STUDENT_USER_ID)
+
+    assert result.status == "closed"
+    assert result.batch_passed is False
+    assert repository.inserted_qr_validation_attempts[0][5] == "closed"
+
+
 def build_qr_verification_record(
     *,
     qr_session_id: UUID,
     qr_mode: str = "static",
     batch_status: str = "active",
+    batch_activated_at: datetime = datetime(2026, 8, 6, 10, 0, tzinfo=UTC),
     batch_deactivated_at: datetime | None = None,
+    batch_voided_at: datetime | None = None,
     attendance_session_id: UUID = UUID("40000000-0000-0000-0000-000000000001"),
     attendance_session_status: str = "active",
     attendance_session_scheduled_end_at: datetime = datetime(
@@ -1692,7 +1874,9 @@ def build_qr_verification_record(
         qr_mode=qr_mode,
         refresh_interval_seconds=None,
         batch_status=batch_status,
+        batch_activated_at=batch_activated_at,
         batch_deactivated_at=batch_deactivated_at,
+        batch_voided_at=batch_voided_at,
         attendance_session_id=attendance_session_id,
         attendance_session_status=attendance_session_status,
         attendance_session_scheduled_end_at=attendance_session_scheduled_end_at,
