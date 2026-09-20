@@ -372,7 +372,11 @@ class ManualReviewRepository:
         await connection.execute(
             """
             UPDATE attendance_verification.verification_attempts
-            SET status = NULL, failure_reason = NULL, completed_at = NULL
+            SET status = NULL,
+                failure_reason = NULL,
+                completed_at = NULL,
+                checked_in_at = NULL,
+                initial_check_in_status = NULL
             WHERE id = $1
             """,
             verification_attempt_id,

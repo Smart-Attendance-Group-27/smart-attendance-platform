@@ -197,7 +197,7 @@ class FakeRepository:
         self.verification_failure_reason = failure_reason
 
 
-class FakeCompletionRepository:
+class FakeCheckInRepository:
     def __init__(self, attendance_status: str | None = None) -> None:
         self.attendance_status = attendance_status
         self.request: tuple[UUID, UUID] | None = None
@@ -277,7 +277,7 @@ def build_service(
         ),
         max_attempts=max_attempts,
         repository=repository,
-        completion_repository=FakeCompletionRepository(attendance_status),
+        check_in_repository=FakeCheckInRepository(attendance_status),
         clock=lambda: CURRENT_TIME,
         uuid_factory=uuid_factory,
     )
@@ -500,10 +500,10 @@ async def test_session_that_does_not_require_geofence_is_rejected() -> None:
         )
 
 
-async def test_completed_verification_redirects_to_existing_attendance() -> None:
+async def test_checked_in_verification_redirects_to_existing_attendance() -> None:
     repository = FakeRepository(
         session=build_session(status="closed", closed_at=CURRENT_TIME),
-        verification_status="completed",
+        verification_status="checked_in",
     )
 
     with pytest.raises(AttendanceAlreadyCompletedError):
@@ -579,7 +579,7 @@ async def test_naive_service_clock_is_rejected() -> None:
         policy=GeofenceValidationPolicy(30, 5),
         max_attempts=3,
         repository=repository,
-        completion_repository=FakeCompletionRepository(),
+        check_in_repository=FakeCheckInRepository(),
         clock=lambda: CURRENT_TIME.replace(tzinfo=None),
     )
 
