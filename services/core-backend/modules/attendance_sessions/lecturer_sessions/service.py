@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -23,6 +24,7 @@ from modules.attendance_sessions.lecturer_sessions.repository import (
     TimetableEntryForSessionRecord,
 )
 from modules.audit.repository import write_audit_log
+from modules.contracts.qr_evidence import QrEvidenceProvider
 
 ACTIVE_PROFILE_STATUS = "active"
 ACTOR_TYPE_LECTURER = "lecturer"
@@ -40,11 +42,13 @@ class LecturerSessionService:
         self,
         repository: LecturerSessionRepository | None = None,
         lecturer_profile_repository: LecturerProfileRepository | None = None,
+        qr_evidence: QrEvidenceProvider | None = None,
     ) -> None:
         self._repository = repository or LecturerSessionRepository()
         self._lecturer_profile_repository = (
             lecturer_profile_repository or LecturerProfileRepository()
         )
+        self._qr_evidence = qr_evidence
 
     async def list_for_user(
         self,
@@ -279,7 +283,22 @@ class LecturerSessionService:
             if record is None:
                 raise SessionNotFoundError()
 
-            return await self._repository.list_students_for_session(connection, session_id)
+            students = await self._repository.list_students_for_session(connection, session_id)
+
+            if self._qr_evidence is None:
+                return students
+
+            progress = await self._qr_evidence.progress_for_session(connection, session_id)
+            return [
+                replace(
+                    student,
+                    qr_required_count=progress[student.verification_attempt_id].required_count,
+                    qr_passed_count=progress[student.verification_attempt_id].passed_count,
+                )
+                if student.verification_attempt_id in progress
+                else student
+                for student in students
+            ]
 
     async def _resolve_active_lecturer_id(
         self,
