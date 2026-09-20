@@ -1,7 +1,8 @@
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from modules.attendance_sessions.lecturer_sessions.repository import LecturerSessionRecord
 from modules.attendance_verification.finalization.types import FinalizationSummary
@@ -21,6 +22,12 @@ class CreateSessionRequest(BaseModel):
     requires_face_verification: bool = Field(default=True, alias="requiresFaceVerification")
     requires_geofence: bool = Field(default=True, alias="requiresGeofence")
     requires_qr: bool = Field(default=False, alias="requiresQr")
+
+
+class CancelSessionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=3, max_length=500)]
 
 
 def derive_session_status(record: LecturerSessionRecord) -> str:
