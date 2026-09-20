@@ -22,6 +22,8 @@ from modules.attendance_sessions.lecturer_sessions.schemas import (
 from modules.attendance_sessions.lecturer_sessions.service import LecturerSessionService
 from modules.contracts.providers import get_qr_evidence_provider
 from modules.identity.auth.dependencies import CurrentLecturer
+from modules.notification.push.expo_provider import ExpoPushProvider
+from modules.notification.push.notification_service import NotificationService
 
 router = APIRouter(prefix="/lecturers/me/attendance-sessions", tags=["lecturer-sessions"])
 
@@ -29,8 +31,17 @@ _PROFILE_NOT_FOUND_DETAIL = "An active lecturer profile was not found for this a
 _SESSION_NOT_FOUND_DETAIL = "The attendance session was not found."
 
 
-def get_lecturer_session_service() -> LecturerSessionService:
-    return LecturerSessionService(qr_evidence=get_qr_evidence_provider())
+def get_lecturer_session_service(http_request: Request) -> LecturerSessionService:
+    """Build a LecturerSessionService, wiring in a NotificationService when
+    a push provider is available on app state (production / docker)."""
+    push_provider = getattr(http_request.app.state, "push_provider", None)
+    notification_service: NotificationService | None = None
+    if isinstance(push_provider, ExpoPushProvider):
+        notification_service = NotificationService(push_provider=push_provider)
+    return LecturerSessionService(
+        qr_evidence=get_qr_evidence_provider(),
+        notification_service=notification_service,
+    )
 
 
 @router.get("", response_model=list[LecturerSessionResponse], status_code=status.HTTP_200_OK)

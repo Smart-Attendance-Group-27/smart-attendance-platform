@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
@@ -27,6 +28,7 @@ from modules.attendance_sessions.lecturer_sessions.repository import (
     LecturerSessionRecord,
     SessionStudentRecord,
 )
+from modules.attendance_sessions.lecturer_sessions import route as lecturer_route
 from modules.attendance_sessions.lecturer_sessions.route import get_lecturer_session_service
 from modules.attendance_verification.finalization.types import (
     FinalizationResult,
@@ -474,3 +476,14 @@ def test_requires_bearer_token(client: TestClient) -> None:
     response = client.get(SESSIONS_URL)
 
     assert response.status_code == 401
+
+
+def test_the_service_factory_passes_the_bound_qr_provider_through(monkeypatch) -> None:
+    provider = object()
+    monkeypatch.setattr(lecturer_route, "get_qr_evidence_provider", lambda: provider)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+
+    service = get_lecturer_session_service(request)
+
+    assert service._qr_evidence is provider
+    assert service._notification_service is None

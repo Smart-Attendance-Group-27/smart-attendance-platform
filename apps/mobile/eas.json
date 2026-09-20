@@ -1,0 +1,47 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_KEYCLOAK_ISSUER_URL": "https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend",
+        "EXPO_PUBLIC_KEYCLOAK_REALM": "Uni Attend",
+        "EXPO_PUBLIC_KEYCLOAK_CLIENT_ID": "uniattend-mobile"
+      }
+    },
+    "production": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_KEYCLOAK_ISSUER_URL": "https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend",
+        "EXPO_PUBLIC_KEYCLOAK_REALM": "Uni Attend",
+        "EXPO_PUBLIC_KEYCLOAK_CLIENT_ID": "uniattend-mobile"
+      }
+    },
+    "production-aab": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_KEYCLOAK_ISSUER_URL": "https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend",
+        "EXPO_PUBLIC_KEYCLOAK_REALM": "Uni Attend",
+        "EXPO_PUBLIC_KEYCLOAK_CLIENT_ID": "uniattend-mobile"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
