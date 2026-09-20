@@ -91,7 +91,7 @@ async def test_pending_review_excludes_a_student_who_already_has_a_manual_record
     await LecturerSessionRepository().list_for_lecturer(connection, LECTURER_ID)
 
     assert "NOT EXISTS" in connection.query
-    assert "ar.record_source = 'manual_review'" in connection.query
+    assert "ar.record_source = 'manual'" in connection.query
 
 
 def build_student_row(**overrides: Any) -> dict[str, Any]:
