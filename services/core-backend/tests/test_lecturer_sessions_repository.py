@@ -32,6 +32,10 @@ class FakeDatabaseConnection:
         self.args = args
         return self.rows
 
+    async def execute(self, query: str, *args: Any) -> None:
+        self.query = query
+        self.args = args
+
 
 def build_session_row() -> dict[str, Any]:
     return {
@@ -157,3 +161,17 @@ async def test_the_roster_row_carries_the_real_check_in_time_and_source_fields()
     assert "record.updated_at AS record_updated_at" in connection.query
     # va.started_at was the old (wrong) stand-in for the check-in time.
     assert "va.started_at AS checked_in_at" not in connection.query
+
+
+async def test_cancel_records_when_why_and_the_cancelled_status() -> None:
+    connection = FakeDatabaseConnection([])
+
+    await LecturerSessionRepository().cancel(connection, SESSION_ID, "room flooded")
+
+    assert "cancelled_at = now()" in connection.query
+    assert "cancellation_reason = $2" in connection.query
+    assert "status = $3" in connection.query
+    assert "WHERE id = $1" in connection.query
+    assert connection.args == (SESSION_ID, "room flooded", "cancelled")
+    # Cancelling only updates the session; it never touches attendance records.
+    assert "attendance_records" not in connection.query

@@ -8,8 +8,11 @@ from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundE
 from modules.academic.lecturer_profile.repository import LecturerProfileRecord
 from modules.attendance_sessions.lecturer_sessions.exception import (
     ClassroomGeofenceNotConfiguredError,
+    GeofenceRequiredError,
+    InvalidCancellationReasonError,
     InvalidSessionScheduleError,
     SessionAlreadyActiveError,
+    SessionAlreadyCancelledError,
     SessionAlreadyClosedError,
     SessionCancelledError,
     SessionNotActiveError,
@@ -161,11 +164,12 @@ class FakeLecturerSessionRepository:
         self.timetable_entry = timetable_entry
         self.enrolled_count = enrolled_count
         self.calls: list[str] = []
+        self.cancel_reason: str | None = None
         self.create_session_kwargs: dict | None = None
         self.create_session_geofence_kwargs: dict | None = None
 
     async def find_for_lecturer(self, connection, session_id, lecturer_id, *, lock_for_update=False):
-        if self.calls and self.calls[-1] in ("activate", "close", "create_session"):
+        if self.calls and self.calls[-1] in ("activate", "close", "cancel", "create_session"):
             return self.after
         return self.before
 
@@ -174,6 +178,10 @@ class FakeLecturerSessionRepository:
 
     async def close(self, connection, session_id) -> None:
         self.calls.append("close")
+
+    async def cancel(self, connection, session_id, reason) -> None:
+        self.calls.append("cancel")
+        self.cancel_reason = reason
 
     async def find_timetable_entry_for_lecturer(self, connection, timetable_entry_id, lecturer_id):
         self.calls.append("find_timetable_entry")
@@ -425,25 +433,24 @@ async def test_create_rejects_when_geofence_required_but_classroom_unconfigured(
     assert repository.calls == ["find_timetable_entry"]
 
 
-async def test_create_allows_unconfigured_classroom_when_geofence_not_required() -> None:
-    unconfigured = build_timetable_entry(
-        classroom_latitude=None,
-        classroom_longitude=None,
-        classroom_default_geofence_radius_m=None,
-    )
+async def test_create_rejects_a_session_that_does_not_require_geofence() -> None:
     repository = FakeLecturerSessionRepository(
-        build_session(), build_session(), timetable_entry=unconfigured
+        build_session(),
+        build_session(),
+        timetable_entry=build_timetable_entry(),
     )
     service = LecturerSessionService(
         repository=repository,
         lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
     )
+    pool = FakePool()
 
-    await service.create_for_user(
-        FakePool(), ACTOR_ID, **build_create_kwargs(requires_geofence=False)
-    )
+    with pytest.raises(GeofenceRequiredError):
+        await service.create_for_user(pool, ACTOR_ID, **build_create_kwargs(requires_geofence=False))
 
-    assert "create_session_geofence" not in repository.calls
+    # Refused before any lookup or write.
+    assert repository.calls == []
+    assert pool.connection.executed_queries == []
 
 
 async def test_create_rejects_missing_lecturer_profile() -> None:
@@ -457,3 +464,172 @@ async def test_create_rejects_missing_lecturer_profile() -> None:
 
     with pytest.raises(LecturerProfileNotFoundError):
         await service.create_for_user(FakePool(), ACTOR_ID, **build_create_kwargs())
+
+
+class RecordingRedis:
+    def __init__(self) -> None:
+        self.deleted_keys: list[str] = []
+
+    async def delete(self, key: str) -> None:
+        self.deleted_keys.append(key)
+
+
+def build_cancel_service(
+    before: LecturerSessionRecord | None,
+    after: LecturerSessionRecord | None = None,
+    *,
+    deactivated_batch_ids: list[UUID] | None = None,
+    profile: LecturerProfileRecord | None = None,
+):
+    repository = FakeLecturerSessionRepository(before, after or before)
+    qr_session_repository = FakeQrSessionRepository(deactivated_batch_ids)
+    service = LecturerSessionService(
+        repository=repository,
+        lecturer_profile_repository=FakeLecturerProfileRepository(profile or build_profile()),
+        qr_session_repository=qr_session_repository,
+    )
+    return service, repository, qr_session_repository
+
+
+async def test_cancel_marks_the_session_cancelled_with_its_reason() -> None:
+    before = build_session(activated_at=CURRENT_TIME)
+    after = build_session(activated_at=CURRENT_TIME, cancelled_at=CURRENT_TIME)
+    service, repository, _ = build_cancel_service(before, after)
+
+    result = await service.cancel_for_user(FakePool(), ACTOR_ID, SESSION_ID, "  room flooded  ")
+
+    assert result == after
+    assert repository.calls == ["cancel"]
+    assert repository.cancel_reason == "room flooded"
+
+
+async def test_a_session_that_never_started_can_be_cancelled() -> None:
+    before = build_session()
+    after = build_session(cancelled_at=CURRENT_TIME)
+    service, repository, _ = build_cancel_service(before, after)
+
+    await service.cancel_for_user(FakePool(), ACTOR_ID, SESSION_ID, "lecturer unwell")
+
+    assert repository.calls == ["cancel"]
+
+
+async def test_cancel_shuts_down_the_sessions_qr_batches() -> None:
+    before = build_session(activated_at=CURRENT_TIME)
+    after = build_session(activated_at=CURRENT_TIME, cancelled_at=CURRENT_TIME)
+    service, _, qr_session_repository = build_cancel_service(before, after)
+
+    await service.cancel_for_user(FakePool(), ACTOR_ID, SESSION_ID, "room flooded")
+
+    assert qr_session_repository.calls == [(SESSION_ID, CURRENT_TIME)]
+
+
+async def test_cancel_writes_one_audit_row_and_nothing_else() -> None:
+    before = build_session(activated_at=CURRENT_TIME)
+    after = build_session(activated_at=CURRENT_TIME, cancelled_at=CURRENT_TIME)
+    service, _, _ = build_cancel_service(before, after)
+    pool = FakePool()
+
+    await service.cancel_for_user(pool, ACTOR_ID, SESSION_ID, "room flooded")
+
+    # The only statement run on the connection is the audit row: no attendance
+    # record is written, because a cancelled session has nothing to decide.
+    assert len(pool.connection.executed_queries) == 1
+    assert "audit.audit_logs" in pool.connection.executed_queries[0]
+    assert "attendance_records" not in pool.connection.executed_queries[0]
+    args = pool.connection.executed_args[0]
+    assert args[2] == "session.cancel"
+    assert args[4] == SESSION_ID
+    assert "room flooded" in " ".join(str(arg) for arg in args)
+
+
+async def test_cancel_clears_the_cache_for_every_deactivated_batch_after_commit() -> None:
+    batch_a = UUID("60000000-0000-0000-0000-000000000001")
+    batch_b = UUID("60000000-0000-0000-0000-000000000002")
+    before = build_session(activated_at=CURRENT_TIME)
+    after = build_session(activated_at=CURRENT_TIME, cancelled_at=CURRENT_TIME)
+    service, _, _ = build_cancel_service(before, after, deactivated_batch_ids=[batch_a, batch_b])
+    redis_client = RecordingRedis()
+
+    await service.cancel_for_user(FakePool(), ACTOR_ID, SESSION_ID, "room flooded", redis_client)
+
+    assert redis_client.deleted_keys == [f"qr:batch:{batch_a}", f"qr:batch:{batch_b}"]
+
+
+async def test_cancel_touches_no_cache_when_no_batch_was_active() -> None:
+    before = build_session(activated_at=CURRENT_TIME)
+    after = build_session(activated_at=CURRENT_TIME, cancelled_at=CURRENT_TIME)
+    service, _, _ = build_cancel_service(before, after)
+    redis_client = RecordingRedis()
+
+    await service.cancel_for_user(FakePool(), ACTOR_ID, SESSION_ID, "room flooded", redis_client)
+
+    assert redis_client.deleted_keys == []
+
+
+async def test_cancel_works_with_no_cache_available() -> None:
+    batch = UUID("60000000-0000-0000-0000-000000000001")
+    before = build_session(activated_at=CURRENT_TIME)
+    after = build_session(activated_at=CURRENT_TIME, cancelled_at=CURRENT_TIME)
+    service, _, _ = build_cancel_service(before, after, deactivated_batch_ids=[batch])
+
+    result = await service.cancel_for_user(FakePool(), ACTOR_ID, SESSION_ID, "room flooded", None)
+
+    assert result == after
+
+
+async def test_an_already_cancelled_session_is_refused_without_writing() -> None:
+    cancelled = build_session(cancelled_at=CURRENT_TIME)
+    service, repository, qr_session_repository = build_cancel_service(cancelled)
+    pool = FakePool()
+    redis_client = RecordingRedis()
+
+    with pytest.raises(SessionAlreadyCancelledError):
+        await service.cancel_for_user(pool, ACTOR_ID, SESSION_ID, "room flooded", redis_client)
+
+    assert repository.calls == []
+    assert qr_session_repository.calls == []
+    assert pool.connection.executed_queries == []
+    assert redis_client.deleted_keys == []
+
+
+async def test_a_closed_session_cannot_be_cancelled() -> None:
+    closed = build_session(activated_at=CURRENT_TIME, closed_at=CURRENT_TIME)
+    service, repository, qr_session_repository = build_cancel_service(closed)
+
+    with pytest.raises(SessionAlreadyClosedError):
+        await service.cancel_for_user(FakePool(), ACTOR_ID, SESSION_ID, "room flooded")
+
+    assert repository.calls == []
+    assert qr_session_repository.calls == []
+
+
+async def test_cancelling_a_session_the_lecturer_does_not_teach_is_not_found() -> None:
+    service, repository, _ = build_cancel_service(None)
+
+    with pytest.raises(SessionNotFoundError):
+        await service.cancel_for_user(FakePool(), ACTOR_ID, SESSION_ID, "room flooded")
+
+    assert repository.calls == []
+
+
+async def test_cancel_rejects_a_missing_lecturer_profile() -> None:
+    service = LecturerSessionService(
+        repository=FakeLecturerSessionRepository(build_session(), build_session()),
+        lecturer_profile_repository=FakeLecturerProfileRepository(None),
+        qr_session_repository=FakeQrSessionRepository(),
+    )
+
+    with pytest.raises(LecturerProfileNotFoundError):
+        await service.cancel_for_user(FakePool(), ACTOR_ID, SESSION_ID, "room flooded")
+
+
+@pytest.mark.parametrize("reason", ["", "  ", "ab", "x" * 501])
+async def test_a_reason_outside_three_to_five_hundred_characters_is_refused(reason: str) -> None:
+    service, repository, _ = build_cancel_service(build_session(activated_at=CURRENT_TIME))
+    pool = FakePool()
+
+    with pytest.raises(InvalidCancellationReasonError):
+        await service.cancel_for_user(pool, ACTOR_ID, SESSION_ID, reason)
+
+    assert repository.calls == []
+    assert pool.connection.executed_queries == []

@@ -6,8 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
 from modules.attendance_sessions.lecturer_sessions.exception import (
     ClassroomGeofenceNotConfiguredError,
+    GeofenceRequiredError,
+    InvalidCancellationReasonError,
     InvalidSessionScheduleError,
     SessionAlreadyActiveError,
+    SessionAlreadyCancelledError,
     SessionAlreadyClosedError,
     SessionCancelledError,
     SessionNotActiveError,
@@ -15,6 +18,7 @@ from modules.attendance_sessions.lecturer_sessions.exception import (
     TimetableEntryNotFoundError,
 )
 from modules.attendance_sessions.lecturer_sessions.schemas import (
+    CancelSessionRequest,
     CreateSessionRequest,
     LecturerSessionResponse,
     SessionStudentResponse,
@@ -137,6 +141,14 @@ async def create_my_attendance_session(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
     except ClassroomGeofenceNotConfiguredError as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+    except GeofenceRequiredError as error:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            {
+                "code": "GEOFENCE_REQUIRED",
+                "message": "Sessions must require geofence verification.",
+            },
+        ) from error
 
     return LecturerSessionResponse.from_record(session)
 
@@ -206,6 +218,61 @@ async def close_my_attendance_session(
         ) from error
 
     return LecturerSessionResponse.from_record(session, finalization)
+
+
+@router.post(
+    "/{session_id}/cancel",
+    response_model=LecturerSessionResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def cancel_my_attendance_session(
+    session_id: UUID,
+    body: CancelSessionRequest,
+    http_request: Request,
+    current_lecturer: CurrentLecturer,
+    session_service: Annotated[
+        LecturerSessionService,
+        Depends(get_lecturer_session_service),
+    ] = None,  # type: ignore[assignment]
+) -> LecturerSessionResponse:
+    try:
+        session = await session_service.cancel_for_user(
+            http_request.app.state.db_pool,
+            current_lecturer.user_id,
+            session_id,
+            body.reason,
+            getattr(http_request.app.state, "redis_client", None),
+        )
+    except LecturerProfileNotFoundError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _PROFILE_NOT_FOUND_DETAIL) from error
+    except SessionNotFoundError as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _SESSION_NOT_FOUND_DETAIL) from error
+    except SessionAlreadyClosedError as error:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {
+                "code": "SESSION_ALREADY_CLOSED",
+                "message": "A closed session cannot be cancelled.",
+            },
+        ) from error
+    except SessionAlreadyCancelledError as error:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {
+                "code": "SESSION_ALREADY_CANCELLED",
+                "message": "This session is already cancelled.",
+            },
+        ) from error
+    except InvalidCancellationReasonError as error:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            {
+                "code": "REASON_INVALID",
+                "message": "A reason of 3 to 500 characters is required.",
+            },
+        ) from error
+
+    return LecturerSessionResponse.from_record(session)
 
 
 @router.get(

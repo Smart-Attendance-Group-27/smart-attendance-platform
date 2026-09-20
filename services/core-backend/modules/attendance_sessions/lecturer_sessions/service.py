@@ -10,8 +10,11 @@ from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundE
 from modules.academic.lecturer_profile.repository import LecturerProfileRepository
 from modules.attendance_sessions.lecturer_sessions.exception import (
     ClassroomGeofenceNotConfiguredError,
+    GeofenceRequiredError,
+    InvalidCancellationReasonError,
     InvalidSessionScheduleError,
     SessionAlreadyActiveError,
+    SessionAlreadyCancelledError,
     SessionAlreadyClosedError,
     SessionCancelledError,
     SessionNotActiveError,
@@ -24,6 +27,7 @@ from modules.attendance_sessions.lecturer_sessions.repository import (
     SessionStudentRecord,
     TimetableEntryForSessionRecord,
 )
+from modules.attendance_sessions.qr_session.cache import QrBatchMetadataCache
 from modules.attendance_sessions.qr_session.repository import QrSessionRepository
 from modules.attendance_verification.check_in.service import CheckInService
 from modules.attendance_verification.finalization.service import AttendanceFinalizationService
@@ -42,6 +46,8 @@ AUDIT_ENTITY_TYPE = "attendance_session"
 DEFAULT_ACCURACY_BUFFER_M = Decimal("10")
 DEFAULT_MAXIMUM_ALLOWED_ACCURACY_M = Decimal("50")
 DEFAULT_LATE_AFTER_MINUTES = 10
+MIN_CANCELLATION_REASON_LENGTH = 3
+MAX_CANCELLATION_REASON_LENGTH = 500
 
 
 class LecturerSessionService:
@@ -155,6 +161,11 @@ class LecturerSessionService:
         requires_geofence: bool,
         requires_qr: bool,
     ) -> LecturerSessionRecord:
+        # Geofence is the only step that creates a verification attempt, so a
+        # session without it could never be attended.
+        if not requires_geofence:
+            raise GeofenceRequiredError()
+
         if scheduled_end_at <= scheduled_start_at:
             raise InvalidSessionScheduleError("scheduledEndAt must be after scheduledStartAt.")
 
@@ -335,6 +346,70 @@ class LecturerSessionService:
             await AttendanceFinalizationService.after_commit(summary, redis_client)
 
         return updated, summary
+
+    async def cancel_for_user(
+        self,
+        pool: asyncpg.Pool,
+        user_id: UUID,
+        session_id: UUID,
+        reason: str,
+        redis_client=None,
+    ) -> LecturerSessionRecord:
+        reason = reason.strip()
+        if not MIN_CANCELLATION_REASON_LENGTH <= len(reason) <= MAX_CANCELLATION_REASON_LENGTH:
+            raise InvalidCancellationReasonError()
+
+        async with pool.acquire() as connection, connection.transaction():
+            lecturer_id = await self._resolve_active_lecturer_id(connection, user_id)
+            record = await self._repository.find_for_lecturer(
+                connection,
+                session_id,
+                lecturer_id,
+                lock_for_update=True,
+            )
+            if record is None:
+                raise SessionNotFoundError()
+            if record.cancelled_at is not None:
+                raise SessionAlreadyCancelledError()
+            if record.closed_at is not None:
+                raise SessionAlreadyClosedError()
+
+            await self._repository.cancel(connection, session_id, reason)
+            updated = await self._repository.find_for_lecturer(connection, session_id, lecturer_id)
+            assert updated is not None
+            cancelled_at = updated.cancelled_at
+            assert cancelled_at is not None
+
+            # No attendance records are written: a cancelled session has no
+            # attendance to decide.
+            deactivated_qr_batch_ids = (
+                await self._qr_session_repository.close_existing_active_qr_sessions(
+                    connection,
+                    session_id,
+                    cancelled_at,
+                )
+            )
+
+            await write_audit_log(
+                connection,
+                actor_user_id=user_id,
+                actor_type=ACTOR_TYPE_LECTURER,
+                action="session.cancel",
+                entity_type=AUDIT_ENTITY_TYPE,
+                entity_id=session_id,
+                old_values={"cancelledAt": None},
+                new_values={
+                    "cancelledAt": cancelled_at.isoformat(),
+                    "reason": reason,
+                    "deactivatedQrBatches": len(deactivated_qr_batch_ids),
+                },
+            )
+
+        cache = QrBatchMetadataCache(redis_client)
+        for batch_id in deactivated_qr_batch_ids:
+            await cache.delete_qr_batch_cache(batch_id)
+
+        return updated
 
     async def list_students_for_user(
         self,
