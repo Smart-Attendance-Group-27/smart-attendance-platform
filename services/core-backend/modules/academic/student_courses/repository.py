@@ -37,15 +37,6 @@ class StudentCourseSessionRecord:
     attendance_recorded_at: datetime | None
 
 
-@dataclass(frozen=True)
-class StudentAttendanceRecord:
-    id: UUID
-    course_offering_id: UUID
-    session_title: str | None
-    attendance_status: str | None
-    created_at: datetime | None
-
-
 class StudentCourseRepository:
     async def list_courses_for_student(
         self,
@@ -75,23 +66,27 @@ class StudentCourseRepository:
                 semester.semester_number,
                 academic_year.start_date AS academic_year_start,
                 COUNT(DISTINCT session.id) FILTER (
-                    WHERE record.attendance_status IN ('present', 'late')
+                    WHERE session.closed_at IS NOT NULL
+                      AND session.cancelled_at IS NULL
+                      AND record.attendance_status IN ('present', 'late')
                 ) AS attended_sessions,
                 COUNT(DISTINCT session.id) FILTER (
-                    WHERE session.scheduled_end_at <= now()
-                       OR record.id IS NOT NULL
+                    WHERE session.closed_at IS NOT NULL
+                      AND session.cancelled_at IS NULL
                 ) AS total_sessions,
                 CASE
                     WHEN COUNT(DISTINCT session.id) FILTER (
-                        WHERE session.scheduled_end_at <= now()
-                           OR record.id IS NOT NULL
+                        WHERE session.closed_at IS NOT NULL
+                          AND session.cancelled_at IS NULL
                     ) = 0 THEN NULL
                     ELSE ROUND(
                         100.0 * COUNT(DISTINCT session.id) FILTER (
-                            WHERE record.attendance_status IN ('present', 'late')
+                            WHERE session.closed_at IS NOT NULL
+                              AND session.cancelled_at IS NULL
+                              AND record.attendance_status IN ('present', 'late')
                         ) / COUNT(DISTINCT session.id) FILTER (
-                            WHERE session.scheduled_end_at <= now()
-                               OR record.id IS NOT NULL
+                            WHERE session.closed_at IS NOT NULL
+                              AND session.cancelled_at IS NULL
                         ),
                         1
                     )
@@ -111,6 +106,10 @@ class StudentCourseRepository:
                 ON lecturer.id = assignment.lecturer_id
             LEFT JOIN attendance_session.sessions AS session
                 ON session.course_offering_id = offering.id
+               AND EXISTS (
+                   SELECT 1 FROM attendance_session.session_students AS roster
+                   WHERE roster.session_id = session.id AND roster.student_id = enrolment.student_id
+               )
             LEFT JOIN attendance_verification.attendance_records AS record
                 ON record.session_id = session.id
                AND record.student_id = enrolment.student_id
@@ -171,6 +170,8 @@ class StudentCourseRepository:
             FROM academic.course_enrolments AS enrolment
             JOIN attendance_session.sessions AS session
                 ON session.course_offering_id = enrolment.course_offering_id
+            JOIN attendance_session.session_students AS roster
+                ON roster.session_id = session.id AND roster.student_id = enrolment.student_id
             LEFT JOIN academic.timetable_entries AS timetable
                 ON timetable.id = session.timetable_entry_id
             LEFT JOIN academic.classrooms AS timetable_classroom
@@ -205,43 +206,6 @@ class StudentCourseRepository:
                 cancelled_at=row["cancelled_at"],
                 attendance_status=row["attendance_status"],
                 attendance_recorded_at=row["attendance_recorded_at"],
-            )
-            for row in rows
-        ]
-
-    async def list_attendance_records_for_student_courses(
-        self,
-        connection: asyncpg.Connection,
-        student_id: UUID,
-    ) -> list[StudentAttendanceRecord]:
-        rows = await connection.fetch(
-            """
-            SELECT
-                record.id,
-                session.course_offering_id,
-                session.session_title,
-                record.attendance_status,
-                record.created_at
-            FROM attendance_verification.attendance_records AS record
-            JOIN attendance_session.sessions AS session
-                ON session.id = record.session_id
-            JOIN academic.course_enrolments AS enrolment
-                ON enrolment.course_offering_id = session.course_offering_id
-               AND enrolment.student_id = record.student_id
-            WHERE record.student_id = $1
-              AND enrolment.enrolment_status = 'enrolled'
-            ORDER BY record.created_at DESC, record.id ASC
-            """,
-            student_id,
-        )
-
-        return [
-            StudentAttendanceRecord(
-                id=row["id"],
-                course_offering_id=row["course_offering_id"],
-                session_title=row["session_title"],
-                attendance_status=row["attendance_status"],
-                created_at=row["created_at"],
             )
             for row in rows
         ]

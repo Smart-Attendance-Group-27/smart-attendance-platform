@@ -6,7 +6,6 @@ from uuid import UUID
 import asyncpg
 
 from modules.academic.student_courses.repository import (
-    StudentAttendanceRecord,
     StudentCourseRecord,
     StudentCourseRepository,
     StudentCourseSessionRecord,
@@ -86,15 +85,8 @@ class StudentCourseService:
                 connection,
                 profile.id,
             )
-            attendance_rows = (
-                await self._repository.list_attendance_records_for_student_courses(
-                    connection,
-                    profile.id,
-                )
-            )
-
         sessions_by_course = _group_sessions_by_course(session_rows)
-        records_by_course = _group_attendance_records_by_course(attendance_rows)
+        records_by_course = _group_attendance_records_by_course(session_rows)
 
         return [
             StudentCourse(
@@ -138,23 +130,34 @@ def _group_sessions_by_course(
 
 
 def _group_attendance_records_by_course(
-    attendance_rows: list[StudentAttendanceRecord],
+    session_rows: list[StudentCourseSessionRecord],
 ) -> dict[UUID, list[StudentCourseAttendanceRecord]]:
     grouped: dict[UUID, list[StudentCourseAttendanceRecord]] = {}
+    now = datetime.now(timezone.utc)
 
-    for row in attendance_rows:
-        if row.created_at is None:
-            continue
-
+    for row in session_rows:
+        status = _derive_session_status(row, now)
+        if status == "cancelled":
+            recorded_text = "Session cancelled"
+        else:
+            recorded_text = _format_recorded_time(row.attendance_recorded_at) or {
+                "absent": "No attendance recorded",
+                "active": "Check-in open",
+                "upcoming": "Session upcoming",
+            }.get(status, "Awaiting final attendance")
         grouped.setdefault(row.course_offering_id, []).append(
             StudentCourseAttendanceRecord(
                 id=row.id,
-                day=row.created_at.strftime("%d"),
-                month=row.created_at.strftime("%b").upper(),
+                day=row.scheduled_start_at.strftime("%d"),
+                month=row.scheduled_start_at.strftime("%b").upper(),
                 title=row.session_title or "Attendance session",
-                recorded_text=_format_recorded_time(row.created_at)
-                or "Recorded",
-                status=_format_attendance_status(row.attendance_status),
+                recorded_text=recorded_text,
+                status={
+                    "marked": "Present",
+                    "late": "Late",
+                    "absent": "Absent",
+                    "cancelled": "Cancelled",
+                }.get(status, "Awaiting"),
             )
         )
 
@@ -210,10 +213,14 @@ def _derive_session_status(
     row: StudentCourseSessionRecord,
     now: datetime,
 ) -> str:
-    if row.attendance_status in {"present", "late"}:
+    if row.cancelled_at is not None:
+        return "cancelled"
+    if row.attendance_status == "present":
         return "marked"
-    if row.cancelled_at is not None or row.closed_at is not None:
-        return "closed"
+    if row.attendance_status == "late":
+        return "late"
+    if row.attendance_status == "absent" or row.closed_at is not None:
+        return "absent"
 
     check_in_opens_at = _as_utc(row.check_in_opens_at or row.scheduled_start_at)
     check_in_closes_at = _as_utc(row.check_in_closes_at or row.scheduled_end_at)
@@ -222,21 +229,13 @@ def _derive_session_status(
         return "active"
     if check_in_opens_at > now:
         return "upcoming"
-    if check_in_closes_at <= now and row.attendance_status is None:
-        return "missed"
-    return "closed"
+    return "awaiting"
 
 
 def _format_recorded_time(value: datetime | None) -> str | None:
     if value is None:
         return None
     return f"Recorded at {_as_utc(value).strftime('%H:%M')}"
-
-
-def _format_attendance_status(value: str | None) -> str:
-    if value in {"present", "late"}:
-        return "Present"
-    return "Absent"
 
 
 def _format_week_header(value: datetime, now: datetime) -> str:

@@ -27,7 +27,7 @@ export default async function AdminReportsPage() {
       <SummaryStrip
         items={[
           { label: "Overall attendance", value: `${summary.overallAttendancePercent}%`, note: "This semester" },
-          { label: "Sessions completed", value: summary.totalSessionsCompleted.toLocaleString() },
+          { label: "Closed sessions", value: summary.totalSessionsCompleted.toLocaleString() },
           { label: "Students", value: summary.totalStudents.toLocaleString() },
           { label: "Students at risk", value: summary.studentsAtRiskCount, note: "Below course threshold", noteTone: "warn" },
         ]}
