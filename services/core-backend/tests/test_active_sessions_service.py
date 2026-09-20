@@ -58,7 +58,7 @@ class FakeActiveSessionRepository:
         self.sessions = sessions
         self.request: tuple[UUID, datetime] | None = None
 
-    async def list_open_geofence_sessions_for_student(
+    async def list_visible_sessions_for_student(
         self,
         connection: object,
         student_id: UUID,
@@ -93,25 +93,31 @@ def build_profile(*, status: str = "active") -> StudentProfileRecord:
     )
 
 
-def build_session() -> ActiveAttendanceSessionRecord:
-    return ActiveAttendanceSessionRecord(
-        id=SESSION_ID,
-        course_code="CS3203",
-        course_name="Software Engineering Project",
-        session_title="Geofence Demo - Near Centre",
-        session_type="lecture",
-        lecturer_names="Dr. N. Perera",
-        scheduled_start_at=CURRENT_TIME - timedelta(minutes=5),
-        scheduled_end_at=CURRENT_TIME + timedelta(hours=1),
-        check_in_opens_at=CURRENT_TIME - timedelta(minutes=2),
-        check_in_closes_at=CURRENT_TIME + timedelta(minutes=30),
-        late_after_at=CURRENT_TIME + timedelta(minutes=15),
-        venue="LH-02",
-        requires_face_verification=True,
-        requires_geofence=True,
-        requires_qr=False,
-        check_in_completed=False,
-    )
+def build_session(**overrides: Any) -> ActiveAttendanceSessionRecord:
+    values: dict[str, Any] = {
+        "id": SESSION_ID,
+        "course_code": "CS3203",
+        "course_name": "Software Engineering Project",
+        "session_title": "Geofence Demo - Near Centre",
+        "session_type": "lecture",
+        "lecturer_names": "Dr. N. Perera",
+        "scheduled_start_at": CURRENT_TIME - timedelta(minutes=5),
+        "scheduled_end_at": CURRENT_TIME + timedelta(hours=1),
+        "check_in_opens_at": CURRENT_TIME - timedelta(minutes=2),
+        "check_in_closes_at": CURRENT_TIME + timedelta(minutes=30),
+        "late_after_at": CURRENT_TIME + timedelta(minutes=15),
+        "venue": "LH-02",
+        "requires_face_verification": True,
+        "requires_geofence": True,
+        "requires_qr": False,
+        "check_in_completed": False,
+        "attempt_status": None,
+        "initial_check_in_status": None,
+        "checked_in_at": None,
+        "final_attendance_status": None,
+    }
+    values.update(overrides)
+    return ActiveAttendanceSessionRecord(**values)
 
 
 async def test_lists_sessions_for_the_profile_derived_from_user() -> None:
@@ -189,16 +195,18 @@ async def test_repository_maps_rows_and_enforces_discovery_filters() -> None:
                 "requires_geofence": True,
                 "requires_qr": False,
                 "check_in_completed": False,
+                "attempt_status": None,
+                "initial_check_in_status": None,
+                "checked_in_at": None,
+                "final_attendance_status": None,
             }
         ],
     )
 
-    records = (
-        await ActiveAttendanceSessionRepository().list_open_geofence_sessions_for_student(
-            connection,
-            STUDENT_ID,
-            CURRENT_TIME,
-        )
+    records = await ActiveAttendanceSessionRepository().list_visible_sessions_for_student(
+        connection,
+        STUDENT_ID,
+        CURRENT_TIME,
     )
 
     assert records == [session]
@@ -209,7 +217,51 @@ async def test_repository_maps_rows_and_enforces_discovery_filters() -> None:
     assert "session.requires_geofence IS TRUE" in connection.query
     assert "session.check_in_opens_at <= $2" in connection.query
     assert "session.check_in_closes_at > $2" in connection.query
+    assert "attempt.status = 'checked_in'" in connection.query
+    assert "attendance_verification.verification_attempts" in connection.query
     assert "attendance_verification.attendance_records" in connection.query
     assert "ORDER BY session.scheduled_start_at ASC, session.id ASC" in connection.query
     assert "centre_latitude" not in connection.query
     assert "centre_longitude" not in connection.query
+
+
+async def test_a_checked_in_student_is_visible_after_the_window_closes() -> None:
+    session = build_session(
+        check_in_opens_at=CURRENT_TIME - timedelta(hours=1),
+        check_in_closes_at=CURRENT_TIME - timedelta(minutes=1),
+        attempt_status="checked_in",
+    )
+    connection = FakeDatabaseConnection(
+        [
+            {
+                "id": session.id,
+                "course_code": session.course_code,
+                "course_name": session.course_name,
+                "session_title": session.session_title,
+                "session_type": session.session_type,
+                "lecturer_names": session.lecturer_names,
+                "scheduled_start_at": session.scheduled_start_at,
+                "scheduled_end_at": session.scheduled_end_at,
+                "check_in_opens_at": session.check_in_opens_at,
+                "check_in_closes_at": session.check_in_closes_at,
+                "late_after_at": session.late_after_at,
+                "venue": session.venue,
+                "requires_face_verification": True,
+                "requires_geofence": True,
+                "requires_qr": False,
+                "check_in_completed": False,
+                "attempt_status": "checked_in",
+                "initial_check_in_status": None,
+                "checked_in_at": None,
+                "final_attendance_status": None,
+            }
+        ],
+    )
+
+    records = await ActiveAttendanceSessionRepository().list_visible_sessions_for_student(
+        connection,
+        STUDENT_ID,
+        CURRENT_TIME,
+    )
+
+    assert records == [session]

@@ -70,4 +70,8 @@ class VerificationAttemptClosedError(GeofenceServiceError):
 
 
 class AttendanceAlreadyCompletedError(GeofenceServiceError):
-    """Raised when attendance has already been recorded for this attempt."""
+    """Raised when the student is already checked in, or already has a record."""
+
+    def __init__(self, message: str, state: str) -> None:
+        super().__init__(message)
+        self.state = state

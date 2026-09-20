@@ -146,7 +146,8 @@ never substitute a real Supabase credential into these commands.
 | --- | --- | --- | --- |
 | `0001_add_keycloak_user_id` | Adds `identity.users.keycloak_user_id` plus a partial unique index, so a Keycloak `sub` claim resolves to an internal application user | Yes — see below | **Not applied.** Pending a manual run by someone with Supabase project access |
 | `0002_add_session_geofence_snapshot` | Adds frozen centre coordinates and radius plus snapshot and policy checks to `attendance_session.session_geofences` | Yes - PostgreSQL 16, see below | **Not applied.** Supabase access is blocked; do not apply remotely |
-| `20260920_01_attendance_lifecycle_columns` | Additive columns for the attendance lifecycle: initial check-in state on `verification_attempts`, `qr_batch_id` on `qr_validation_attempts` (backfilled for static batches), and void fields on `qr_token_batches`, plus their indexes and the void consistency check | Pending - see "Verifying A Migration Before It Reaches Supabase" | **Not applied.** Apply only after the O0 schema audit confirms `0001` and `0002` are in place |
+| `20260920_01_attendance_lifecycle_columns` | Additive columns for the attendance lifecycle: initial check-in state on `verification_attempts`, `qr_batch_id` on `qr_validation_attempts` (backfilled for static batches), and void fields on `qr_token_batches`, plus their indexes and the void consistency check | Yes - PostgreSQL 16, see below | **Not applied.** Apply only after the O0 schema audit confirms `0001` and `0002` are in place |
+| `20260920_02_attendance_check_in_state` | Backfills the initial check-in of attempts that already completed, renames the `completed` status to `checked_in`, and adds CHECK constraints for the frozen status vocabulary | Yes - PostgreSQL 16, see below | **Not applied.** Not additive: apply it together with the release that replaces the completion endpoint, never ahead of it |
 
 ### What The Local Verification Confirmed
 
@@ -167,6 +168,40 @@ and `smart_attendance_seed.sql`, and the following all held:
 - Row counts are unchanged. The migration adds a column and reads nothing.
 - The rollback script removes the column and index, leaves all user and profile
   rows intact, and the migration re-applies cleanly afterwards.
+
+### What The Attendance Lifecycle Local Verification Confirmed
+
+`20260920_01` and `20260920_02` were applied in order to PostgreSQL 16 loaded
+with the baseline, `0001`, `0002` and the development seed, without connecting
+to Supabase. Because the seed contains no verification attempts, representative
+legacy rows were inserted into the throwaway database first: attempts that
+completed before and after the session's `late_after_at`, one `completed`
+attempt with no timestamps at all, an `in_progress` attempt, a `failed`
+attempt, and an attempt whose status the manual-review retry path had cleared to
+NULL. The following all held:
+
+- Both migrations apply cleanly in filename order, and re-running either is
+  harmless — `20260920_01` reports "already exists, skipping" throughout, and
+  `20260920_02` finds its work already done.
+- The backfill sets `checked_in_at` from `completed_at` and derives lateness
+  from the session threshold: the attempt finishing before it became
+  `checked_in`, the one finishing after it became `late_checked_in`.
+- A `completed` attempt with no timestamps survives the rename with
+  `checked_in_at` left NULL, rather than being dropped or given a fabricated
+  time.
+- `in_progress`, `failed` and NULL statuses are untouched. NULL remains legal,
+  so the lecturer's manual-review retry button keeps working.
+- After the migration the database rejects `status = 'completed'`, any invented
+  status, any invented `initial_check_in_status`, a `checked_in_at` without an
+  outcome, and an outcome without a `checked_in_at`. A valid pair is accepted.
+- Planting an unrecognised status (`'abandoned'`) makes `20260920_02` refuse to
+  run, naming the offending value, and **nothing** is left half-applied: no rows
+  renamed and no constraints added, because the guard runs inside the same
+  transaction.
+- The rollback drops the three constraints and returns `checked_in` to
+  `completed`, after which the migration re-applies successfully. It leaves
+  `checked_in_at` and `initial_check_in_status` populated on purpose; removing
+  those columns is `20260920_01`'s rollback, which is a separate later step.
 
 ### What The 0002 Local Verification Confirmed
 

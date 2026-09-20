@@ -18,6 +18,7 @@ from modules.attendance_verification.geofence.exception import (
     StudentNotEligibleError,
     VerificationAttemptClosedError,
 )
+from modules.attendance_verification.check_in.schemas import InitialCheckInPayload
 from modules.attendance_verification.geofence.policy import GeofenceValidationPolicy
 from modules.attendance_verification.geofence.schemas import (
     CreateGeofenceAttemptRequest,
@@ -98,6 +99,7 @@ async def create_geofence_attempt(
             detail={
                 "code": "ATTENDANCE_ALREADY_COMPLETED",
                 "message": error.message,
+                "state": error.state,
             },
         ) from error
     except (
@@ -122,6 +124,11 @@ async def create_geofence_attempt(
         allowed_radius_m=recorded_attempt.result.allowed_radius_m,
         next_step=recorded_attempt.result.next_step,
         reason=recorded_attempt.result.reason,
+        initial_check_in=(
+            InitialCheckInPayload.from_domain(recorded_attempt.initial_check_in)
+            if recorded_attempt.initial_check_in is not None
+            else None
+        ),
     )
 
 

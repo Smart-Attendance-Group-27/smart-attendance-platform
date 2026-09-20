@@ -62,9 +62,21 @@ class LecturerSessionResponse(BaseModel):
     present_count: int = Field(alias="presentCount")
     late_count: int = Field(alias="lateCount")
     pending_review_count: int = Field(alias="pendingReviewCount")
+    checked_in_count: int = Field(alias="checkedInCount")
+    late_checked_in_count: int = Field(alias="lateCheckedInCount")
+    not_checked_in_count: int = Field(alias="notCheckedInCount")
+    failed_verification_count: int = Field(alias="failedVerificationCount")
+    absent_count: int = Field(alias="absentCount")
+    manual_count: int = Field(alias="manualCount")
 
     @staticmethod
     def from_record(record: LecturerSessionRecord) -> "LecturerSessionResponse":
+        not_checked_in_count = (
+            record.enrolled_count
+            - record.checked_in_count
+            - record.late_checked_in_count
+            - record.failed_verification_count
+        )
         return LecturerSessionResponse(
             id=record.id,
             course_offering_id=record.course_offering_id,
@@ -86,6 +98,12 @@ class LecturerSessionResponse(BaseModel):
             present_count=record.present_count,
             late_count=record.late_count,
             pending_review_count=record.pending_review_count,
+            checked_in_count=record.checked_in_count,
+            late_checked_in_count=record.late_checked_in_count,
+            not_checked_in_count=max(not_checked_in_count, 0),
+            failed_verification_count=record.failed_verification_count,
+            absent_count=record.absent_count,
+            manual_count=record.manual_count,
         )
 
 
@@ -103,7 +121,16 @@ class SessionStudentResponse(BaseModel):
     face_status: str | None = Field(alias="faceStatus")
     face_similarity_score: float | None = Field(alias="faceSimilarityScore")
     face_liveness_passed: bool | None = Field(alias="faceLivenessPassed")
-    qr_status: str | None = Field(alias="qrStatus")
+    qr_status: str | None = Field(alias="qrStatus")  # deprecated, kept until INT-5
     attendance_status: str | None = Field(alias="attendanceStatus")
     review_status: str | None = Field(alias="reviewStatus")
     checked_in_at: datetime | None = Field(alias="checkedInAt")
+    # Added in O4. Defaulted so route.py can populate them one at a time
+    # instead of needing every field in the same change.
+    failure_reason: str | None = Field(default=None, alias="failureReason")
+    initial_check_in_status: str | None = Field(default=None, alias="initialCheckInStatus")
+    record_source: str | None = Field(default=None, alias="recordSource")
+    manual_reason: str | None = Field(default=None, alias="manualReason")
+    record_updated_at: datetime | None = Field(default=None, alias="recordUpdatedAt")
+    qr_required_count: int | None = Field(default=None, alias="qrRequiredCount")
+    qr_passed_count: int | None = Field(default=None, alias="qrPassedCount")

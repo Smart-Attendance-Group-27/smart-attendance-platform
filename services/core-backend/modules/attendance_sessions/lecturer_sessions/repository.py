@@ -14,6 +14,11 @@ SESSION_SCHEDULED_STATUS = "scheduled"
 # enum was deliberately not invented here.
 SESSION_ACTIVE_STATUS = "active"
 
+# attendance_state.AttendanceRecordSource.MANUAL is "manual", but the value
+# actually written to record_source today is "manual_review" (manual_review
+# repository). Matches the real data until that's reconciled.
+RECORD_SOURCE_MANUAL = "manual_review"
+
 
 @dataclass(frozen=True)
 class LecturerSessionRecord:
@@ -37,6 +42,12 @@ class LecturerSessionRecord:
     present_count: int
     late_count: int
     pending_review_count: int
+    # Added in O4, same reasoning as SessionStudentRecord's defaults below.
+    checked_in_count: int = 0
+    late_checked_in_count: int = 0
+    failed_verification_count: int = 0
+    absent_count: int = 0
+    manual_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -64,9 +75,18 @@ class SessionStudentRecord:
     attendance_status: str | None
     review_status: str | None
     checked_in_at: datetime | None
+    # Added in O4. Defaulted so a caller built for the old field set (an older
+    # test's direct constructor call) still works unchanged.
+    failure_reason: str | None = None
+    initial_check_in_status: str | None = None
+    record_source: str | None = None
+    manual_reason: str | None = None
+    record_updated_at: datetime | None = None
+    qr_required_count: int | None = None
+    qr_passed_count: int | None = None
 
 
-_SESSION_COLUMNS = """
+_SESSION_COLUMNS = f"""
     session.id,
     session.course_offering_id,
     course.course_code,
@@ -97,14 +117,45 @@ _SESSION_COLUMNS = """
     ) AS late_count,
     (
         -- A failed attempt needs review until a manual_reviews row exists for it
-        -- with a non-pending status — no row yet also counts as pending, since
-        -- nothing auto-creates manual_reviews rows on failure.
+        -- with a non-pending status, or a manual record was set some other way —
+        -- no manual_reviews row yet also counts as pending, since nothing
+        -- auto-creates that row on failure.
         SELECT COUNT(*) FROM attendance_verification.verification_attempts va
         LEFT JOIN attendance_verification.manual_reviews mr ON mr.verification_attempt_id = va.id
         WHERE va.session_id = session.id
           AND va.status = 'failed'
           AND (mr.review_status IS NULL OR mr.review_status = 'pending')
-    ) AS pending_review_count
+          AND NOT EXISTS (
+            SELECT 1 FROM attendance_verification.attendance_records ar
+            WHERE ar.session_id = va.session_id
+              AND ar.student_id = va.student_id
+              AND ar.record_source = '{RECORD_SOURCE_MANUAL}'
+          )
+    ) AS pending_review_count,
+    (
+        SELECT COUNT(*) FROM attendance_verification.verification_attempts va
+        WHERE va.session_id = session.id
+          AND va.status = 'checked_in'
+          AND va.initial_check_in_status = 'checked_in'
+    ) AS checked_in_count,
+    (
+        SELECT COUNT(*) FROM attendance_verification.verification_attempts va
+        WHERE va.session_id = session.id
+          AND va.status = 'checked_in'
+          AND va.initial_check_in_status = 'late_checked_in'
+    ) AS late_checked_in_count,
+    (
+        SELECT COUNT(*) FROM attendance_verification.verification_attempts va
+        WHERE va.session_id = session.id AND va.status = 'failed'
+    ) AS failed_verification_count,
+    (
+        SELECT COUNT(*) FROM attendance_verification.attendance_records ar
+        WHERE ar.session_id = session.id AND ar.attendance_status = 'absent'
+    ) AS absent_count,
+    (
+        SELECT COUNT(*) FROM attendance_verification.attendance_records ar
+        WHERE ar.session_id = session.id AND ar.record_source = '{RECORD_SOURCE_MANUAL}'
+    ) AS manual_count
 """
 
 _SESSION_JOINS = """
@@ -148,6 +199,11 @@ def _row_to_record(row: asyncpg.Record) -> LecturerSessionRecord:
         present_count=row["present_count"],
         late_count=row["late_count"],
         pending_review_count=row["pending_review_count"],
+        checked_in_count=row["checked_in_count"],
+        late_checked_in_count=row["late_checked_in_count"],
+        failed_verification_count=row["failed_verification_count"],
+        absent_count=row["absent_count"],
+        manual_count=row["manual_count"],
     )
 
 
@@ -381,13 +437,18 @@ class LecturerSessionRepository:
                     )
                 ) AS full_name,
                 va.status AS verification_status,
-                va.started_at AS checked_in_at,
+                va.failure_reason,
+                va.initial_check_in_status,
+                va.checked_in_at,
                 geofence.validation_status AS geofence_status,
                 face.validation_status AS face_status,
                 face.similarity_score AS face_similarity_score,
                 face.liveness_passed AS face_liveness_passed,
                 qr.validation_status AS qr_status,
                 record.attendance_status,
+                record.record_source,
+                record.manual_reason,
+                record.updated_at AS record_updated_at,
                 CASE
                     WHEN review.review_status IS NOT NULL THEN review.review_status
                     WHEN va.status = 'failed' THEN 'pending'
@@ -436,14 +497,19 @@ class LecturerSessionRepository:
                 registration_number=row["registration_number"],
                 full_name=row["full_name"] or "",
                 verification_status=row["verification_status"],
+                failure_reason=row["failure_reason"],
                 geofence_status=row["geofence_status"],
                 face_status=row["face_status"],
                 face_similarity_score=row["face_similarity_score"],
                 face_liveness_passed=row["face_liveness_passed"],
                 qr_status=row["qr_status"],
-                attendance_status=row["attendance_status"],
-                review_status=row["review_status"],
+                initial_check_in_status=row["initial_check_in_status"],
                 checked_in_at=row["checked_in_at"],
+                attendance_status=row["attendance_status"],
+                record_source=row["record_source"],
+                manual_reason=row["manual_reason"],
+                record_updated_at=row["record_updated_at"],
+                review_status=row["review_status"],
             )
             for row in rows
         ]

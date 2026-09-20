@@ -5,6 +5,12 @@ from uuid import UUID
 
 import pytest
 
+from modules.attendance_verification.attendance_state import InitialCheckInStatus
+from modules.attendance_verification.check_in.domain import (
+    CheckInOutcome,
+    CheckInResult,
+    InitialCheckIn,
+)
 from modules.attendance_verification.geofence.exception import (
     ActiveStudentProfileNotFoundError,
     AttendanceAlreadyCompletedError,
@@ -197,7 +203,7 @@ class FakeRepository:
         self.verification_failure_reason = failure_reason
 
 
-class FakeCompletionRepository:
+class FakeCheckInRepository:
     def __init__(self, attendance_status: str | None = None) -> None:
         self.attendance_status = attendance_status
         self.request: tuple[UUID, UUID] | None = None
@@ -210,6 +216,26 @@ class FakeCompletionRepository:
     ) -> str | None:
         self.request = (session_id, student_id)
         return self.attendance_status
+
+
+class FakeCheckInService:
+    """Stands in for CheckInService so geofence tests stay about geofence."""
+
+    def __init__(self, result: object | None = None) -> None:
+        self.result = result
+        self.calls: list[tuple[UUID, UUID]] = []
+
+    async def try_check_in(
+        self,
+        connection: FakeConnection,
+        *,
+        session_id: UUID,
+        student_id: UUID,
+        session: object | None = None,
+        attempt: object | None = None,
+    ) -> object | None:
+        self.calls.append((session_id, student_id))
+        return self.result
 
 
 def build_student(**overrides: Any) -> StudentProfileRecord:
@@ -262,6 +288,7 @@ def build_service(
     *,
     max_attempts: int = 3,
     attendance_status: str | None = None,
+    check_in_service: FakeCheckInService | None = None,
 ) -> GeofenceValidationService:
     next_uuid = 100
 
@@ -277,7 +304,8 @@ def build_service(
         ),
         max_attempts=max_attempts,
         repository=repository,
-        completion_repository=FakeCompletionRepository(attendance_status),
+        check_in_repository=FakeCheckInRepository(attendance_status),
+        check_in_service=check_in_service or FakeCheckInService(),
         clock=lambda: CURRENT_TIME,
         uuid_factory=uuid_factory,
     )
@@ -301,6 +329,97 @@ async def test_eligible_student_pass_is_stored_and_remains_in_progress() -> None
     assert repository.marked_failed is None
     assert repository.verification_status == IN_PROGRESS_STATUS
     assert repository.attendance_records_created == 0
+
+
+async def test_a_pass_asks_check_in_to_run_and_returns_its_result() -> None:
+    repository = FakeRepository()
+    check_in_service = FakeCheckInService(
+        CheckInResult(
+            outcome=CheckInOutcome.CHECKED_IN,
+            verification_attempt_id=VERIFICATION_ATTEMPT_ID,
+            initial_check_in=InitialCheckIn(
+                checked_in_at=CURRENT_TIME,
+                status=InitialCheckInStatus.CHECKED_IN,
+            ),
+            was_persisted=True,
+        )
+    )
+
+    outcome = await build_service(
+        repository,
+        check_in_service=check_in_service,
+    ).validate_attempt(FakePool(), USER_ID, SESSION_ID, build_reading())
+
+    assert check_in_service.calls == [(SESSION_ID, STUDENT_ID)]
+    assert outcome.initial_check_in is not None
+    assert outcome.initial_check_in.status is InitialCheckInStatus.CHECKED_IN
+
+
+async def test_a_pass_that_still_needs_face_leaves_the_response_without_a_check_in() -> None:
+    repository = FakeRepository()
+    check_in_service = FakeCheckInService(
+        CheckInResult(
+            outcome=CheckInOutcome.PENDING,
+            verification_attempt_id=VERIFICATION_ATTEMPT_ID,
+        )
+    )
+
+    outcome = await build_service(
+        repository,
+        check_in_service=check_in_service,
+    ).validate_attempt(FakePool(), USER_ID, SESSION_ID, build_reading())
+
+    assert outcome.initial_check_in is None
+
+
+async def test_a_failed_geofence_reading_does_not_ask_check_in_to_run() -> None:
+    repository = FakeRepository(existing_attempt_count=2)
+    check_in_service = FakeCheckInService()
+
+    outcome = await build_service(
+        repository,
+        check_in_service=check_in_service,
+    ).validate_attempt(
+        FakePool(),
+        USER_ID,
+        SESSION_ID,
+        build_reading(accuracy_m=55.0),
+    )
+
+    assert outcome.result.decision is GeofenceDecision.FAILED
+    assert check_in_service.calls == []
+
+
+async def test_a_retry_required_reading_does_not_ask_check_in_to_run() -> None:
+    repository = FakeRepository()
+    check_in_service = FakeCheckInService()
+
+    await build_service(
+        repository,
+        check_in_service=check_in_service,
+    ).validate_attempt(
+        FakePool(),
+        USER_ID,
+        SESSION_ID,
+        build_reading(accuracy_m=55.0),
+    )
+
+    assert check_in_service.calls == []
+
+
+async def test_an_already_checked_in_attempt_is_rejected_before_recording_anything() -> None:
+    repository = FakeRepository(verification_status="checked_in")
+
+    with pytest.raises(AttendanceAlreadyCompletedError) as excinfo:
+        await build_service(repository).validate_attempt(
+            FakePool(),
+            USER_ID,
+            SESSION_ID,
+            build_reading(),
+        )
+
+    assert excinfo.value.state == "checked_in"
+    assert repository.inserted_attempts == []
 
 
 async def test_retry_attempts_receive_sequential_numbers() -> None:
@@ -500,10 +619,10 @@ async def test_session_that_does_not_require_geofence_is_rejected() -> None:
         )
 
 
-async def test_completed_verification_redirects_to_existing_attendance() -> None:
+async def test_checked_in_verification_redirects_to_existing_attendance() -> None:
     repository = FakeRepository(
         session=build_session(status="closed", closed_at=CURRENT_TIME),
-        verification_status="completed",
+        verification_status="checked_in",
     )
 
     with pytest.raises(AttendanceAlreadyCompletedError):
@@ -579,7 +698,7 @@ async def test_naive_service_clock_is_rejected() -> None:
         policy=GeofenceValidationPolicy(30, 5),
         max_attempts=3,
         repository=repository,
-        completion_repository=FakeCompletionRepository(),
+        check_in_repository=FakeCheckInRepository(),
         clock=lambda: CURRENT_TIME.replace(tzinfo=None),
     )
 

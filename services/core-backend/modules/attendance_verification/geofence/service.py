@@ -5,7 +5,10 @@ from uuid import UUID, uuid4
 
 import asyncpg
 
-from modules.attendance_verification.completion.repository import CompletionRepository
+from modules.attendance_verification.attendance_state import VerificationAttemptStatus
+from modules.attendance_verification.check_in.domain import InitialCheckIn
+from modules.attendance_verification.check_in.repository import CheckInRepository
+from modules.attendance_verification.check_in.service import CheckInService
 from modules.attendance_verification.geofence.exception import (
     ActiveStudentProfileNotFoundError,
     AttendanceAlreadyCompletedError,
@@ -44,6 +47,7 @@ class RecordedGeofenceAttempt:
     verification_attempt_id: UUID
     attempt_number: int
     result: GeofenceValidationResult
+    initial_check_in: InitialCheckIn | None = None
 
 
 class GeofenceValidationService:
@@ -52,7 +56,8 @@ class GeofenceValidationService:
         policy: GeofenceValidationPolicy,
         max_attempts: int,
         repository: GeofenceRepository | None = None,
-        completion_repository: CompletionRepository | None = None,
+        check_in_repository: CheckInRepository | None = None,
+        check_in_service: CheckInService | None = None,
         clock: Callable[[], datetime] | None = None,
         uuid_factory: Callable[[], UUID] | None = None,
     ) -> None:
@@ -62,7 +67,8 @@ class GeofenceValidationService:
         self._policy = policy
         self._max_attempts = max_attempts
         self._repository = repository or GeofenceRepository()
-        self._completion_repository = completion_repository or CompletionRepository()
+        self._check_in_repository = check_in_repository or CheckInRepository()
+        self._check_in_service = check_in_service or CheckInService()
         self._clock = clock or self._utc_now
         self._uuid_factory = uuid_factory or uuid4
 
@@ -90,7 +96,7 @@ class GeofenceValidationService:
                 )
                 if session is not None:
                     attendance_status = (
-                        await self._completion_repository.find_attendance_status(
+                        await self._check_in_repository.find_attendance_status(
                             connection,
                             session_id,
                             student.id,
@@ -99,6 +105,7 @@ class GeofenceValidationService:
                     if attendance_status is not None:
                         raise AttendanceAlreadyCompletedError(
                             "Attendance has already been recorded for this session.",
+                            state="attendance_recorded",
                         )
                 self._validate_session(session, validated_at)
                 assert session is not None
@@ -128,6 +135,13 @@ class GeofenceValidationService:
                         validated_at,
                     )
                 )
+                if verification_attempt.status == VerificationAttemptStatus.CHECKED_IN:
+                    # Already checked in, nothing left to prove.
+                    raise AttendanceAlreadyCompletedError(
+                        "The student is already checked in for this session.",
+                        state=VerificationAttemptStatus.CHECKED_IN.value,
+                    )
+
                 if verification_attempt.status != IN_PROGRESS_STATUS:
                     if (
                         verification_attempt.failure_reason
@@ -165,6 +179,8 @@ class GeofenceValidationService:
                     validated_at,
                 )
 
+                initial_check_in: InitialCheckIn | None = None
+
                 if result.decision is GeofenceDecision.FAILED:
                     assert result.reason is not None
                     await self._repository.mark_verification_attempt_failed(
@@ -173,11 +189,21 @@ class GeofenceValidationService:
                         result.reason.value,
                         validated_at,
                     )
+                elif result.decision is GeofenceDecision.PASSED:
+                    # Same transaction as the attempt row.
+                    check_in = await self._check_in_service.try_check_in(
+                        connection,
+                        session_id=session_id,
+                        student_id=student.id,
+                    )
+                    if check_in is not None:
+                        initial_check_in = check_in.initial_check_in
 
         return RecordedGeofenceAttempt(
             verification_attempt_id=verification_attempt.id,
             attempt_number=attempt_number,
             result=result,
+            initial_check_in=initial_check_in,
         )
 
     def _finalize_last_retry(

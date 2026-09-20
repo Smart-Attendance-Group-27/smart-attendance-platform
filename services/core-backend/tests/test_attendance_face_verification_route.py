@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from fastapi.testclient import TestClient
@@ -10,6 +11,16 @@ from conftest import (
     default_connection,
 )
 from main import create_app
+from modules.attendance_verification.check_in.domain import (
+    CheckInOutcome,
+    CheckInResult,
+    InitialCheckIn,
+)
+from modules.attendance_verification.check_in.exception import (
+    VerificationNotStartedError,
+)
+from modules.attendance_verification.check_in.route import get_check_in_service
+from modules.attendance_verification.attendance_state import InitialCheckInStatus
 from modules.attendance_verification.face.client import (
     InternalFaceVerificationResult,
 )
@@ -21,6 +32,7 @@ from modules.identity.auth.dependencies import get_authentication_service
 
 
 SESSION_ID = UUID("40000000-0000-0000-0000-000000000001")
+ATTEMPT_ID = UUID("50000000-0000-0000-0000-000000000001")
 URL = f"/api/v1/attendance-sessions/{SESSION_ID}/face-verifications"
 
 
@@ -44,7 +56,26 @@ class StubFaceProgressRepository:
         return self.passed
 
 
-def build_client(jwks_document, service: StubFaceVerificationClient) -> TestClient:
+class StubCheckInService:
+    """No pass here checks anyone in unless the test asks for it."""
+
+    def __init__(self, result: CheckInResult | None = None) -> None:
+        self.result = result or CheckInResult(
+            outcome=CheckInOutcome.PENDING,
+            verification_attempt_id=ATTEMPT_ID,
+        )
+        self.calls: list[tuple[UUID, UUID]] = []
+
+    async def check_in_for_user(self, pool, user_id, session_id):
+        self.calls.append((user_id, session_id))
+        return self.result
+
+
+def build_client(
+    jwks_document,
+    service: StubFaceVerificationClient,
+    check_in_service: StubCheckInService | None = None,
+) -> TestClient:
     app = create_app(enable_database=False)
     app.state.settings = build_settings()
     app.state.db_pool = FakePool(default_connection())
@@ -53,6 +84,9 @@ def build_client(jwks_document, service: StubFaceVerificationClient) -> TestClie
     )
     app.dependency_overrides[get_face_verification_service_client] = (
         lambda: service
+    )
+    app.dependency_overrides[get_check_in_service] = (
+        lambda: check_in_service or StubCheckInService()
     )
     return TestClient(app, raise_server_exceptions=False)
 
@@ -115,6 +149,7 @@ def test_maps_internal_pass_and_forwards_authenticated_capture(
         "status": "success",
         "attemptNumber": 2,
         "canRetry": False,
+        "initialCheckIn": None,
     }
     assert service.calls == [
         {
@@ -122,8 +157,94 @@ def test_maps_internal_pass_and_forwards_authenticated_capture(
             "access_token": token,
             "image": b"jpeg",
             "content_type": "image/jpeg",
+            "liveness": None,
         }
     ]
+
+
+def test_forwards_the_liveness_field_when_the_client_sends_one(
+    jwks_document,
+    make_access_token,
+) -> None:
+    service = StubFaceVerificationClient(
+        InternalFaceVerificationResult(
+            status="passed",
+            attempt_number=1,
+            can_retry=False,
+        )
+    )
+
+    with build_client(jwks_document, service) as client:
+        client.post(
+            URL,
+            headers={"Authorization": f"Bearer {make_access_token()}"},
+            files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+            data={"liveness": "blink-token-123"},
+        )
+
+    assert service.calls[0]["liveness"] == "blink-token-123"
+
+
+def test_a_pass_checks_the_student_in_and_reports_it(
+    jwks_document,
+    make_access_token,
+) -> None:
+    service = StubFaceVerificationClient(
+        InternalFaceVerificationResult(
+            status="passed",
+            attempt_number=1,
+            can_retry=False,
+        )
+    )
+    check_in_service = StubCheckInService(
+        CheckInResult(
+            outcome=CheckInOutcome.CHECKED_IN,
+            verification_attempt_id=ATTEMPT_ID,
+            initial_check_in=InitialCheckIn(
+                checked_in_at=datetime.fromisoformat("2026-09-21T09:03:00+00:00"),
+                status=InitialCheckInStatus.CHECKED_IN,
+            ),
+            was_persisted=True,
+        )
+    )
+
+    with build_client(jwks_document, service, check_in_service) as client:
+        response = client.post(
+            URL,
+            headers={"Authorization": f"Bearer {make_access_token()}"},
+            files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+        )
+
+    body = response.json()
+    assert body["initialCheckIn"]["status"] == "checked_in"
+    assert len(check_in_service.calls) == 1
+
+
+def test_a_failure_to_check_in_after_a_pass_does_not_fail_the_request(
+    jwks_document,
+    make_access_token,
+) -> None:
+    class RaisingCheckInService:
+        async def check_in_for_user(self, pool, user_id, session_id):
+            raise VerificationNotStartedError("no attempt yet")
+
+    service = StubFaceVerificationClient(
+        InternalFaceVerificationResult(
+            status="passed",
+            attempt_number=1,
+            can_retry=False,
+        )
+    )
+
+    with build_client(jwks_document, service, RaisingCheckInService()) as client:
+        response = client.post(
+            URL,
+            headers={"Authorization": f"Bearer {make_access_token()}"},
+            files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["initialCheckIn"] is None
 
 
 def test_maps_last_internal_failure_as_non_retryable(
@@ -150,4 +271,5 @@ def test_maps_last_internal_failure_as_non_retryable(
         "status": "verification_failure",
         "attemptNumber": 3,
         "canRetry": False,
+        "initialCheckIn": None,
     }

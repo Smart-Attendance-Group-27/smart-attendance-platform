@@ -20,6 +20,7 @@ from modules.attendance_sessions.lecturer_sessions.schemas import (
     SessionStudentResponse,
 )
 from modules.attendance_sessions.lecturer_sessions.service import LecturerSessionService
+from modules.contracts.providers import get_qr_evidence_provider
 from modules.identity.auth.dependencies import CurrentLecturer
 from modules.notification.push.expo_provider import ExpoPushProvider
 from modules.notification.push.notification_service import NotificationService
@@ -230,6 +231,7 @@ async def list_my_attendance_session_students(
             registration_number=student.registration_number or "",
             full_name=student.full_name,
             verification_status=student.verification_status,
+            failure_reason=student.failure_reason,
             geofence_status=student.geofence_status,
             face_status=student.face_status,
             face_similarity_score=(
@@ -239,9 +241,15 @@ async def list_my_attendance_session_students(
             ),
             face_liveness_passed=student.face_liveness_passed,
             qr_status=student.qr_status,
-            attendance_status=student.attendance_status,
-            review_status=student.review_status,
+            qr_required_count=student.qr_required_count,
+            qr_passed_count=student.qr_passed_count,
+            initial_check_in_status=student.initial_check_in_status,
             checked_in_at=student.checked_in_at,
+            attendance_status=student.attendance_status,
+            record_source=student.record_source,
+            manual_reason=student.manual_reason,
+            record_updated_at=student.record_updated_at,
+            review_status=student.review_status,
         )
         for student in students
     ]

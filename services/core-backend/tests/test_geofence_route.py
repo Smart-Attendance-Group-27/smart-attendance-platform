@@ -160,6 +160,7 @@ def test_pass_returns_the_camel_case_contract(
         "allowedRadiusM": 70.0,
         "nextStep": "FACE_VERIFICATION",
         "reason": None,
+        "initialCheckIn": None,
     }
 
 
@@ -416,6 +417,7 @@ def test_identifies_an_already_completed_attendance_attempt(
 ) -> None:
     error = AttendanceAlreadyCompletedError(
         "Attendance has already been recorded for this session.",
+        state="attendance_recorded",
     )
 
     with build_client(
@@ -432,6 +434,7 @@ def test_identifies_an_already_completed_attendance_attempt(
     assert response.json()["detail"] == {
         "code": "ATTENDANCE_ALREADY_COMPLETED",
         "message": "Attendance has already been recorded for this session.",
+        "state": "attendance_recorded",
     }
 
 

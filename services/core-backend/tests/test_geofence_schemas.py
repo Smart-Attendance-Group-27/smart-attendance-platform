@@ -114,4 +114,5 @@ def test_response_serializes_only_the_privacy_safe_camel_case_contract() -> None
         "allowedRadiusM": 70.0,
         "nextStep": "FACE_VERIFICATION",
         "reason": None,
+        "initialCheckIn": None,
     }

@@ -114,6 +114,11 @@ def build_session(*, activated_at=None, closed_at=None, cancelled_at=None) -> Le
         present_count=0,
         late_count=0,
         pending_review_count=0,
+        checked_in_count=0,
+        late_checked_in_count=0,
+        failed_verification_count=0,
+        absent_count=0,
+        manual_count=0,
     )
 
 
