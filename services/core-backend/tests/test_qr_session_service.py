@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pytest
 
+from fakes.notifications import RecordingNotificationProducer
 from modules.attendance_sessions.qr_session.exception import (
     ActiveStudentProfileNotFoundError,
     AttendanceSessionNotActiveError,
@@ -52,6 +53,10 @@ class FakeConnection:
         self.executed_queries.append(query)
         self.executed_args.append(args)
 
+    async def fetch(self, query: str, *args) -> list[dict]:
+        """Returns no QR notification recipients unless a test injects evidence."""
+        return []
+
 
 class FakeAcquire:
     def __init__(self, connection: FakeConnection) -> None:
@@ -70,6 +75,18 @@ class FakePool:
 
     def acquire(self) -> FakeAcquire:
         return FakeAcquire(self.connection)
+
+
+class FakeEvidenceRepository:
+    def __init__(self, required_student_user_ids: list[UUID]) -> None:
+        self.required_student_user_ids = required_student_user_ids
+        self.calls: list[tuple[FakeConnection, UUID]] = []
+
+    async def student_user_ids_required_for_batch(
+        self, connection: FakeConnection, qr_batch_id: UUID,
+    ) -> list[UUID]:
+        self.calls.append((connection, qr_batch_id))
+        return self.required_student_user_ids
 
 
 class FakeRepository:
@@ -478,6 +495,45 @@ async def test_create_static_qr_session_hashes_raw_value_and_caps_expiration() -
 
 
 @pytest.mark.asyncio
+async def test_create_static_qr_session_notifies_exactly_required_students() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    attendance_session_id = UUID("40000000-0000-0000-0000-000000000001")
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000001")
+    qr_token_id = UUID("60000000-0000-0000-0000-000000000001")
+    required_student_user_ids = [
+        UUID("20000000-0000-0000-0000-000000000011"),
+        UUID("20000000-0000-0000-0000-000000000012"),
+    ]
+    repository = FakeRepository(AttendanceSessionRecord(
+        id=attendance_session_id, status="active",
+        scheduled_end_at=current_time + timedelta(minutes=20),
+        closed_at=None, cancelled_at=None,
+    ))
+    evidence = FakeEvidenceRepository(required_student_user_ids)
+    notifications = RecordingNotificationProducer()
+    pool = FakePool()
+    uuid_values = iter([qr_session_id, qr_token_id])
+    service = QrSessionService(
+        repository=repository,
+        evidence_repository=evidence,  # type: ignore[arg-type]
+        notification_producer=notifications,
+        clock=lambda: current_time,
+        uuid_factory=lambda: next(uuid_values),
+    )
+
+    await service.create_static_qr_session(
+        pool, attendance_session_id, valid_for_seconds=300, lecturer_id=LECTURER_ID,
+    )
+
+    assert evidence.calls == [(pool.connection, qr_session_id)]
+    assert notifications.only_call_of("qr_batch_activated").payload == {
+        "session_id": attendance_session_id,
+        "qr_batch_id": qr_session_id,
+        "recipient_user_ids": required_student_user_ids,
+    }
+
+
+@pytest.mark.asyncio
 async def test_create_static_qr_session_rejects_missing_attendance_session() -> None:
     service = QrSessionService(
         repository=FakeRepository(None),
@@ -560,6 +616,43 @@ async def test_create_dynamic_qr_session_creates_batch_without_token_history() -
         LECTURER_ID,
     )
     assert repository.inserted_token is None
+
+
+@pytest.mark.asyncio
+async def test_create_dynamic_qr_session_notifies_exactly_required_students() -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    attendance_session_id = UUID("40000000-0000-0000-0000-000000000001")
+    qr_session_id = UUID("50000000-0000-0000-0000-000000000002")
+    required_student_user_ids = [
+        UUID("20000000-0000-0000-0000-000000000011"),
+        UUID("20000000-0000-0000-0000-000000000013"),
+    ]
+    evidence = FakeEvidenceRepository(required_student_user_ids)
+    notifications = RecordingNotificationProducer()
+    pool = FakePool()
+    service = QrSessionService(
+        repository=FakeRepository(AttendanceSessionRecord(
+            id=attendance_session_id, status="active",
+            scheduled_end_at=current_time + timedelta(minutes=30),
+            closed_at=None, cancelled_at=None,
+        )),
+        evidence_repository=evidence,  # type: ignore[arg-type]
+        notification_producer=notifications,
+        clock=lambda: current_time,
+        uuid_factory=lambda: qr_session_id,
+    )
+
+    await service.create_dynamic_qr_session(
+        pool, attendance_session_id, valid_for_seconds=900,
+        refresh_interval_seconds=15, lecturer_id=LECTURER_ID,
+    )
+
+    assert evidence.calls == [(pool.connection, qr_session_id)]
+    assert notifications.only_call_of("qr_batch_activated").payload == {
+        "session_id": attendance_session_id,
+        "qr_batch_id": qr_session_id,
+        "recipient_user_ids": required_student_user_ids,
+    }
 
 
 @pytest.mark.asyncio
