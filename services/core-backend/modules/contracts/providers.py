@@ -9,10 +9,10 @@ notification and policy implementations are still being built.
 Each function starts out returning a safe default, and exactly one small
 integration pull request later swaps in the real implementation:
 
-* ``get_qr_evidence_provider`` -> ``None`` until **INT-1** binds Manushan's
-  ``QrEvidenceRepository``. While it is ``None``, the lecturer roster reports
-  unknown QR progress and session close does not finalize attendance, which
-  leaves today's behaviour untouched rather than producing wrong results.
+* ``get_qr_evidence_provider`` -> Manushan's ``QrEvidenceRepository`` (bound
+  by **INT-1**). The lecturer roster reports real QR progress and closing a
+  session finalizes attendance. It can still return ``None``, and callers must
+  then degrade safely: no QR counts, and no finalization.
 * ``get_notification_producer`` -> ``NoOpNotificationProducer`` until **INT-3**
   binds Ashen's producer. Trigger call sites run and are tested; nothing is
   created yet.
@@ -24,6 +24,7 @@ Tests never rely on these defaults for behaviour they care about: they inject
 the fakes from ``tests/fakes`` instead.
 """
 
+from modules.attendance_sessions.qr_session.evidence import QrEvidenceRepository
 from modules.contracts.attendance_policy import (
     AttendancePolicyProvider,
     DefaultAttendancePolicyProvider,
@@ -34,18 +35,19 @@ from modules.contracts.notifications import (
 )
 from modules.contracts.qr_evidence import QrEvidenceProvider
 
-# Both defaults are stateless, so one shared instance is enough.
+# All three are stateless, so one shared instance is enough.
+_QR_EVIDENCE_REPOSITORY = QrEvidenceRepository()
 _DEFAULT_ATTENDANCE_POLICY_PROVIDER = DefaultAttendancePolicyProvider()
 _NO_OP_NOTIFICATION_PRODUCER = NoOpNotificationProducer()
 
 
 def get_qr_evidence_provider() -> QrEvidenceProvider | None:
-    """Returns the bound QR evidence provider, or None while none is bound.
+    """Returns the bound QR evidence provider.
 
-    INT-1 replaces the body with Manushan's repository. Callers must treat
-    ``None`` as "QR evidence is unavailable" and degrade safely.
+    Callers must still treat ``None`` as "QR evidence is unavailable" and
+    degrade safely, since the return type allows it.
     """
-    return None
+    return _QR_EVIDENCE_REPOSITORY
 
 
 def get_notification_producer() -> NotificationProducer:

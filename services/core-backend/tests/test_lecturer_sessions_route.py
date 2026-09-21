@@ -33,6 +33,7 @@ from modules.attendance_sessions.lecturer_sessions.repository import (
     SessionStudentRecord,
 )
 from modules.attendance_sessions.lecturer_sessions import route as lecturer_route
+from modules.attendance_sessions.qr_session.evidence import QrEvidenceRepository
 from modules.attendance_sessions.lecturer_sessions.route import get_lecturer_session_service
 from modules.attendance_verification.finalization.types import (
     FinalizationResult,
@@ -622,3 +623,18 @@ def test_cancel_requires_a_bearer_token(client: TestClient) -> None:
     response = client.post(f"{SESSIONS_URL}/{SESSION_ID}/cancel", json={"reason": "room flooded"})
 
     assert response.status_code == 401
+
+
+def test_the_service_factory_is_wired_to_the_real_qr_evidence_by_default() -> None:
+    """Nothing patched: this is what production builds after INT-1.
+
+    Finalization only runs, and the roster only shows QR counts, when the
+    service is given a provider, so losing this wiring would silently switch
+    both off again.
+    """
+
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+
+    service = get_lecturer_session_service(request)
+
+    assert isinstance(service._qr_evidence, QrEvidenceRepository)
