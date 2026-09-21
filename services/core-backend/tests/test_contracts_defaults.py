@@ -20,6 +20,7 @@ from modules.contracts.notifications import (
     NotificationProducer,
 )
 from modules.contracts.qr_evidence import QrEvidenceProvider, QrRequirementProgress
+from modules.notification.producer.service import NotificationProducer as RealNotificationProducer
 
 
 def test_qr_evidence_provider_is_the_real_repository():
@@ -40,10 +41,10 @@ def test_the_same_repository_is_shared_between_calls():
     assert providers.get_qr_evidence_provider() is providers.get_qr_evidence_provider()
 
 
-def test_notification_producer_defaults_to_the_no_op_producer():
+def test_notification_producer_is_the_real_producer():
     producer = providers.get_notification_producer()
 
-    assert isinstance(producer, NoOpNotificationProducer)
+    assert isinstance(producer, RealNotificationProducer)
     assert isinstance(producer, NotificationProducer)
 
 
@@ -84,7 +85,7 @@ async def test_bound_policy_provider_reads_active_policy_from_caller_connection(
 
 
 async def test_no_op_producer_accepts_every_trigger_and_creates_nothing():
-    producer = providers.get_notification_producer()
+    producer = NoOpNotificationProducer()
     session_id = uuid4()
     user_id = uuid4()
 
