@@ -16,9 +16,11 @@ class StudentNotification:
     title: str
     message: str
     type: str
+    code: str
     created_at: datetime
     is_read: bool
     related_id: UUID | None
+    related_entity_type: str | None
 
 
 class StudentNotificationService:
@@ -59,17 +61,24 @@ def _to_notification(record: StudentNotificationRecord) -> StudentNotification:
         title=record.title or "Notification",
         message=record.body or "",
         type=_map_notification_type(record.notification_type),
+        code=record.notification_type or "GENERAL",
         created_at=record.created_at,
         is_read=record.read_at is not None,
         related_id=record.related_entity_id,
+        related_entity_type=record.related_entity_type,
     )
 
 
 def _map_notification_type(value: str | None) -> str:
-    if value in {"QR_REQUIRED"}:
+    if value in {"QR_REQUIRED", "QR_SESSION_ACTIVE"}:
         return "qr_session"
-    if value in {"ATTENDANCE_SESSION_STARTED"}:
+    if value in {
+        "ATTENDANCE_SESSION_STARTED",
+        "ATTENDANCE_SESSION_OPENED",
+        "UPCOMING_CLASS",
+        "UPCOMING_SESSION_REMINDER",
+    }:
         return "attendance"
-    if value in {"ATTENDANCE_RISK"}:
-        return "general"
-    return "attendance_update"
+    if value in {"ATTENDANCE_RESULT"}:
+        return "attendance_update"
+    return "general"

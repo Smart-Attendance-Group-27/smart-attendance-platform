@@ -146,3 +146,24 @@ function resolvePlatform(): 'android' | 'ios' | 'web' {
   if (Platform.OS === 'ios') return 'ios';
   return 'web';
 }
+
+/**
+ * Revoke the device push token on backend (e.g. during logout or token rotation).
+ */
+export async function revokePushNotifications(
+  coreApiClient: CoreApiClient,
+  expoPushToken: string,
+): Promise<boolean> {
+  try {
+    const result = await coreApiClient.post<unknown>(
+      `${deviceRegistrationPath}/revoke`,
+      {
+        expo_push_token: expoPushToken,
+      },
+    );
+    return result.status === 'ok';
+  } catch (err) {
+    console.warn('[PushNotifications] Failed to revoke push token:', err);
+    return false;
+  }
+}

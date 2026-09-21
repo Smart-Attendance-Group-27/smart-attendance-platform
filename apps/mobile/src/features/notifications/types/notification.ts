@@ -10,4 +10,6 @@ export type NotificationItem = {
   createdAt: string;
   isRead: boolean;
   relatedId?: string;
+  relatedEntityType?: string;
+  code?: string;
 };

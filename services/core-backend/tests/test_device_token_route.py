@@ -60,6 +60,11 @@ class StubDeviceTokenService:
             raise self._raises
         return self._record
 
+    async def revoke(self, pool, *, user_id, expo_push_token):
+        if self._raises is not None:
+            raise self._raises
+        return True
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -123,7 +128,7 @@ def test_register_device_lecturer_returns_201(jwks_document, make_access_token):
 
     response = client.post(
         DEVICES_URL,
-        json={"expoPushToken": VALID_TOKEN, "platform": "ios"},
+        json={"expoPushToken": VALID_TOKEN, "platform": "android"},
         headers=authorize(token),
     )
     assert response.status_code == 201
@@ -155,6 +160,59 @@ def test_register_device_unsupported_platform_returns_422(jwks_document, make_ac
     response = client.post(
         DEVICES_URL,
         json={"expoPushToken": VALID_TOKEN, "platform": "windows"},
+        headers=authorize(token),
+    )
+    assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Revocation endpoints
+# ---------------------------------------------------------------------------
+
+
+def test_revoke_device_requires_auth(jwks_document):
+    client = make_client(jwks_document, StubDeviceTokenService())
+    response = client.post(
+        f"{DEVICES_URL}/revoke", json={"expoPushToken": VALID_TOKEN}
+    )
+    assert response.status_code == 401
+
+
+def test_revoke_device_post_returns_200(jwks_document, make_access_token):
+    client = make_client(jwks_document, StubDeviceTokenService())
+    token = make_access_token(subject=LINKED_STUDENT_SUBJECT, roles=("student",))
+
+    response = client.post(
+        f"{DEVICES_URL}/revoke",
+        json={"expoPushToken": VALID_TOKEN},
+        headers=authorize(token),
+    )
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "revoked": True}
+
+
+def test_revoke_device_delete_returns_200(jwks_document, make_access_token):
+    client = make_client(jwks_document, StubDeviceTokenService())
+    token = make_access_token(subject=LINKED_STUDENT_SUBJECT, roles=("student",))
+
+    response = client.request(
+        "DELETE",
+        DEVICES_URL,
+        json={"expoPushToken": VALID_TOKEN},
+        headers=authorize(token),
+    )
+    assert response.status_code == 200
+    assert response.json() == {"ok": True, "revoked": True}
+
+
+def test_revoke_device_invalid_token_returns_422(jwks_document, make_access_token):
+    stub = StubDeviceTokenService(raises=InvalidExpoPushTokenError("bad token"))
+    client = make_client(jwks_document, stub)
+    token = make_access_token(subject=LINKED_STUDENT_SUBJECT, roles=("student",))
+
+    response = client.post(
+        f"{DEVICES_URL}/revoke",
+        json={"expoPushToken": "bad-token"},
         headers=authorize(token),
     )
     assert response.status_code == 422

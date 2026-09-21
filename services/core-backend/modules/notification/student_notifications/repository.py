@@ -11,6 +11,7 @@ class StudentNotificationRecord:
     notification_type: str | None
     title: str | None
     body: str | None
+    related_entity_type: str | None
     related_entity_id: UUID | None
     read_at: datetime | None
     created_at: datetime
@@ -29,6 +30,7 @@ class StudentNotificationRepository:
                 notification_type,
                 title,
                 body,
+                related_entity_type,
                 related_entity_id,
                 read_at,
                 created_at
@@ -48,6 +50,7 @@ class StudentNotificationRepository:
                 notification_type=row["notification_type"],
                 title=row["title"],
                 body=row["body"],
+                related_entity_type=row["related_entity_type"],
                 related_entity_id=row["related_entity_id"],
                 read_at=row["read_at"],
                 created_at=row["created_at"],

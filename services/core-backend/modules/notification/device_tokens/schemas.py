@@ -22,3 +22,11 @@ class DeviceTokenResponse(BaseModel):
     platform: str
     is_active: bool = Field(alias="isActive")
     registered_at: datetime = Field(alias="registeredAt")
+
+
+class RevokeDeviceRequest(BaseModel):
+    """Payload sent when logging out or rotating device tokens."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    expo_push_token: str = Field(alias="expoPushToken")

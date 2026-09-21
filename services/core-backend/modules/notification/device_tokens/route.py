@@ -10,6 +10,7 @@ from modules.notification.device_tokens.exception import (
 from modules.notification.device_tokens.schemas import (
     DeviceTokenResponse,
     RegisterDeviceRequest,
+    RevokeDeviceRequest,
 )
 from modules.notification.device_tokens.service import DeviceTokenService
 
@@ -64,3 +65,37 @@ async def register_device(
         isActive=record.is_active,
         registeredAt=record.registered_at,
     )
+
+
+@router.post(
+    "/revoke",
+    status_code=status.HTTP_200_OK,
+)
+@router.delete(
+    "",
+    status_code=status.HTTP_200_OK,
+)
+async def revoke_device(
+    payload: RevokeDeviceRequest,
+    http_request: Request,
+    current_user: CurrentUser,
+    service: Annotated[
+        DeviceTokenService,
+        Depends(get_device_token_service),
+    ] = None,  # type: ignore[assignment]
+) -> dict[str, bool]:
+    """Revoke a registered device push token for the authenticated user."""
+    try:
+        revoked = await service.revoke(
+            http_request.app.state.db_pool,
+            user_id=current_user.user_id,
+            expo_push_token=payload.expo_push_token,
+        )
+    except InvalidExpoPushTokenError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=error.message,
+        ) from error
+
+    return {"ok": True, "revoked": revoked}
+
