@@ -46,9 +46,11 @@ from modules.attendance_verification.geofence.repository import GeofenceReposito
 from modules.audit.repository import write_audit_log
 from modules.contracts.announce import announce
 from modules.contracts.notifications import NoOpNotificationProducer, NotificationProducer
+from modules.contracts.attendance_policy import AttendancePolicyProvider, DefaultAttendancePolicyProvider
 
 
 QR_TOKEN_SEQUENCE_NUMBER = 1
+DEFAULT_QR_VALIDITY_SECONDS = 300
 QR_TOKEN_RANDOM_BYTES = 32
 SSE_RECONNECT_RETRY_MS = 3000
 ACTOR_TYPE_LECTURER = "lecturer"
@@ -117,6 +119,7 @@ class QrSessionService:
         verification_repository: GeofenceRepository | None = None,
         evidence_repository: QrEvidenceRepository | None = None,
         notification_producer: NotificationProducer | None = None,
+        attendance_policy_provider: AttendancePolicyProvider | None = None,
     ) -> None:
         self._repository = repository or QrSessionRepository()
         self._qr_batch_cache = qr_batch_cache
@@ -129,6 +132,17 @@ class QrSessionService:
         self._verification_repository = verification_repository or GeofenceRepository()
         self._evidence_repository = evidence_repository or QrEvidenceRepository()
         self._notification_producer = notification_producer or NoOpNotificationProducer()
+        self._attendance_policy_provider = attendance_policy_provider or DefaultAttendancePolicyProvider()
+
+    async def _resolve_validity_seconds(
+        self, connection: asyncpg.Connection, valid_for_seconds: int | None,
+    ) -> int:
+        if valid_for_seconds is not None:
+            return valid_for_seconds
+        policy = await self._attendance_policy_provider.get_active(connection)
+        if policy is not None:
+            return policy.qr_default_validity_minutes * 60
+        return DEFAULT_QR_VALIDITY_SECONDS
 
     async def get_qr_progress_for_student(
         self, pool: asyncpg.Pool, session_id: UUID, student_user_id: UUID,
@@ -175,11 +189,10 @@ class QrSessionService:
         self,
         pool: asyncpg.Pool,
         attendance_session_id: UUID,
-        valid_for_seconds: int,
+        valid_for_seconds: int | None,
         lecturer_id: UUID,
     ) -> CreatedQrSession:
         current_time = self._ensure_utc(self._clock())
-        requested_expires_at = current_time + timedelta(seconds=valid_for_seconds)
 
         async with pool.acquire() as connection:
             async with connection.transaction():
@@ -195,6 +208,8 @@ class QrSessionService:
                 self._validate_attendance_session(attendance_session, current_time)
 
                 assert attendance_session is not None
+                validity_seconds = await self._resolve_validity_seconds(connection, valid_for_seconds)
+                requested_expires_at = current_time + timedelta(seconds=validity_seconds)
                 scheduled_end_at = self._ensure_utc(attendance_session.scheduled_end_at)
                 actual_expires_at = min(requested_expires_at, scheduled_end_at)
 
@@ -263,12 +278,11 @@ class QrSessionService:
         self,
         pool: asyncpg.Pool,
         attendance_session_id: UUID,
-        valid_for_seconds: int,
+        valid_for_seconds: int | None,
         refresh_interval_seconds: int,
         lecturer_id: UUID,
     ) -> CreatedQrSession:
         current_time = self._ensure_utc(self._clock())
-        requested_expires_at = current_time + timedelta(seconds=valid_for_seconds)
 
         async with pool.acquire() as connection:
             async with connection.transaction():
@@ -284,6 +298,8 @@ class QrSessionService:
                 self._validate_attendance_session(attendance_session, current_time)
 
                 assert attendance_session is not None
+                validity_seconds = await self._resolve_validity_seconds(connection, valid_for_seconds)
+                requested_expires_at = current_time + timedelta(seconds=validity_seconds)
                 scheduled_end_at = self._ensure_utc(attendance_session.scheduled_end_at)
                 actual_expires_at = min(requested_expires_at, scheduled_end_at)
                 qr_session_id = self._uuid_factory()

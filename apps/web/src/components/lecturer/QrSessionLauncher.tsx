@@ -71,7 +71,7 @@ export function QrSessionLauncher({
 }: QrSessionLauncherProps) {
   const router = useRouter();
   const [mode, setMode] = useState<QrMode>("static");
-  const [validForSeconds, setValidForSeconds] = useState("300");
+  const [validForSeconds, setValidForSeconds] = useState("");
   const [refreshIntervalSeconds, setRefreshIntervalSeconds] = useState("15");
   const [qrSession, setQrSession] = useState<QrSessionResponse | null>(null);
   const [dynamicQr, setDynamicQr] = useState<DynamicQrStreamPayload | null>(null);
@@ -83,9 +83,8 @@ export function QrSessionLauncher({
   const refreshIntervalNumber = Number(refreshIntervalSeconds);
   const canSubmit =
     isLaunchEnabled &&
-    Number.isInteger(validityNumber) &&
-    validityNumber >= 30 &&
-    validityNumber <= 86400 &&
+    (validForSeconds === "" || (Number.isInteger(validityNumber) &&
+      validityNumber >= 30 && validityNumber <= 86400)) &&
     (mode === "static" ||
       (Number.isInteger(refreshIntervalNumber) &&
         refreshIntervalNumber >= 1 &&
@@ -163,7 +162,7 @@ export function QrSessionLauncher({
         },
         body: JSON.stringify({
           mode,
-          validForSeconds: validityNumber,
+          ...(validForSeconds === "" ? {} : { validForSeconds: validityNumber }),
           ...(mode === "dynamic"
             ? { refreshIntervalSeconds: refreshIntervalNumber }
             : {}),
@@ -239,7 +238,7 @@ export function QrSessionLauncher({
           <FormField
             htmlFor="validForSeconds"
             label="QR session duration"
-            help="Backend accepts 30 to 86,400 seconds. Expiry is also capped by the attendance session end time."
+            help="Leave blank to use the institution default. An explicit duration can be 30 to 86,400 seconds; expiry is capped by the attendance session end time."
           >
             <input
               className={fieldInputClassName()}
@@ -247,6 +246,7 @@ export function QrSessionLauncher({
               inputMode="numeric"
               max={86400}
               min={30}
+              placeholder="Institution default"
               onChange={(event) => setValidForSeconds(event.target.value)}
               type="number"
               value={validForSeconds}

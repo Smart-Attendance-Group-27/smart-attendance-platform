@@ -1,5 +1,20 @@
 import "server-only";
 import { coreBackendFetch } from "@/lib/api/coreBackend";
+import { isWebMockMode } from "@/lib/api/mode";
+import { MOCK_ATTENDANCE_POLICY } from "@/mocks/admin";
+import type { AttendancePolicy } from "@/types/admin";
+
+export type ApiAttendancePolicy = AttendancePolicy;
+export type ApiAttendancePolicyWrite = Omit<AttendancePolicy, "updatedAt" | "updatedByName">;
+
+export function getAttendancePolicy(): Promise<ApiAttendancePolicy> {
+  if (isWebMockMode()) return Promise.resolve(MOCK_ATTENDANCE_POLICY);
+  return coreBackendFetch("/api/v1/administrators/me/attendance-policy");
+}
+
+export function putAttendancePolicy(body: ApiAttendancePolicyWrite): Promise<ApiAttendancePolicy> {
+  return coreBackendFetch("/api/v1/administrators/me/attendance-policy", { method: "PUT", body });
+}
 
 export type ApiAdminOverview = {
   activeUsersCount: number;

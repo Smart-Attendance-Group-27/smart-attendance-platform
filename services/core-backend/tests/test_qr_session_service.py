@@ -5,6 +5,8 @@ from uuid import UUID
 import pytest
 
 from fakes.notifications import RecordingNotificationProducer
+from fakes.attendance_policy import FakeAttendancePolicyProvider
+from modules.contracts.attendance_policy import AttendancePolicy
 from modules.attendance_sessions.qr_session.exception import (
     ActiveStudentProfileNotFoundError,
     AttendanceSessionNotActiveError,
@@ -616,6 +618,50 @@ async def test_create_dynamic_qr_session_creates_batch_without_token_history() -
         LECTURER_ID,
     )
     assert repository.inserted_token is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["static", "dynamic"])
+@pytest.mark.parametrize(
+    ("requested_seconds", "configured_minutes", "expected_seconds", "expected_reads"),
+    [
+        (120, 12, 120, 0),
+        (None, 12, 720, 1),
+        (None, None, 300, 1),
+    ],
+)
+async def test_qr_validity_uses_explicit_value_then_policy_then_fallback(
+    mode: str, requested_seconds: int | None, configured_minutes: int | None,
+    expected_seconds: int, expected_reads: int,
+) -> None:
+    current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    session_id = UUID("40000000-0000-0000-0000-000000000001")
+    repository = FakeRepository(AttendanceSessionRecord(
+        id=session_id, status="active", scheduled_end_at=current_time + timedelta(hours=2),
+        closed_at=None, cancelled_at=None,
+    ))
+    policy = None if configured_minutes is None else AttendancePolicy(
+        check_in_window_minutes=15, late_threshold_minutes=5,
+        qr_default_validity_minutes=configured_minutes,
+    )
+    provider = FakeAttendancePolicyProvider(policy)
+    service = QrSessionService(
+        repository=repository, clock=lambda: current_time,
+        attendance_policy_provider=provider,
+    )
+    pool = FakePool()
+
+    if mode == "static":
+        result = await service.create_static_qr_session(
+            pool, session_id, requested_seconds, LECTURER_ID,
+        )
+    else:
+        result = await service.create_dynamic_qr_session(
+            pool, session_id, requested_seconds, 15, LECTURER_ID,
+        )
+
+    assert result.expires_at == current_time + timedelta(seconds=expected_seconds)
+    assert provider.read_count == expected_reads
 
 
 @pytest.mark.asyncio

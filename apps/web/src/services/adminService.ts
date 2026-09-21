@@ -2,6 +2,7 @@ import "server-only";
 import {
   getAcademicData as fetchAcademicData,
   getAdminDashboardOverview,
+  getAttendancePolicy as fetchAttendancePolicy,
   getAuditLogs as fetchAuditLogs,
   getBuildings as fetchBuildings,
   getClassrooms,
@@ -10,10 +11,10 @@ import {
   getUserDirectory as fetchUserDirectory,
 } from "@/lib/api/admin";
 import { formatDateLabel, formatDateTimeLabel, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
-import { MOCK_ADMIN_DASHBOARD } from "@/mocks/admin";
 import {
   AcademicData,
   AdminDashboardData,
+  AttendancePolicy,
   AuditLogEntry,
   BuildingOption,
   Classroom,
@@ -23,14 +24,7 @@ import {
   UserDirectoryData,
 } from "@/types/admin";
 
-// Stage 6: dashboard/classrooms/users/academic-data/reference-faces/audit-log
-// now call the real core-backend API (see lib/api/admin.ts). Stage 9 added
-// real institution-wide reports (getInstitutionReports), computed server-side
-// from attendance_records — see modules/academic/admin_institution_reports.
-// One piece stays mocked: `policy` (AttendancePolicy) has no backing database
-// table yet — the Stage 5 migration proposal for
-// `academic.attendance_policies` is still awaiting approval, so there is
-// nothing real to fetch.
+// Administrator views read current data from the core-backend API.
 
 function mapClassroomStatus(status: string): Classroom["status"] {
   return status === "active" ? "active" : "needs_review";
@@ -51,7 +45,9 @@ export async function getBuildingOptions(): Promise<BuildingOption[]> {
 }
 
 export async function getAdminDashboard(): Promise<AdminDashboardData> {
-  const [overview, classrooms] = await Promise.all([getAdminDashboardOverview(), getClassrooms()]);
+  const [overview, classrooms, policy] = await Promise.all([
+    getAdminDashboardOverview(), getClassrooms(), fetchAttendancePolicy(),
+  ]);
 
   return {
     summary: {
@@ -77,8 +73,7 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
       status: mapClassroomStatus(classroom.status),
       rawStatus: classroom.status,
     })),
-    // Not backed by a real table yet — see the module comment above.
-    policy: MOCK_ADMIN_DASHBOARD.policy,
+    policy,
     academicSync: [
       {
         id: "academic-sync-1",
@@ -89,6 +84,10 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
       },
     ],
   };
+}
+
+export async function getAttendancePolicy(): Promise<AttendancePolicy> {
+  return fetchAttendancePolicy();
 }
 
 export async function getUserDirectory(): Promise<UserDirectoryData> {

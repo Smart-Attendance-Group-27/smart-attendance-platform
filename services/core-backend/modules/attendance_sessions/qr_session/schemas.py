@@ -5,10 +5,9 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from modules.attendance_sessions.qr_session.evidence import QrBatchParticipation, StudentQrBatch
-from modules.attendance_sessions.qr_session.service import StudentQrProgress
+from modules.attendance_sessions.qr_session.service import DEFAULT_QR_VALIDITY_SECONDS, StudentQrProgress
 
 
-DEFAULT_QR_VALIDITY_SECONDS = 300
 MIN_QR_VALIDITY_SECONDS = 30
 MAX_QR_VALIDITY_SECONDS = 86400
 DEFAULT_DYNAMIC_QR_REFRESH_INTERVAL_SECONDS = 15
@@ -21,8 +20,8 @@ class CreateQrSessionRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     mode: QrSessionMode = "static"
-    valid_for_seconds: int = Field(
-        default=DEFAULT_QR_VALIDITY_SECONDS,
+    valid_for_seconds: int | None = Field(
+        default=None,
         alias="validForSeconds",
         ge=MIN_QR_VALIDITY_SECONDS,
         le=MAX_QR_VALIDITY_SECONDS,
@@ -36,6 +35,8 @@ class CreateQrSessionRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_mode_refresh_interval(self) -> "CreateQrSessionRequest":
+        if "valid_for_seconds" in self.model_fields_set and self.valid_for_seconds is None:
+            raise ValueError("validForSeconds must be an integer when supplied.")
         if self.mode == "static" and self.refresh_interval_seconds is not None:
             raise ValueError(
                 "refreshIntervalSeconds is only supported for dynamic QR sessions.",

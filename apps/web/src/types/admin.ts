@@ -37,9 +37,10 @@ export type BuildingOption = {
 export type AttendancePolicy = {
   checkInWindowMinutes: number;
   lateThresholdMinutes: number;
+  qrDefaultValidityMinutes: number;
   faceConfidenceThresholdPercent: number;
-  dynamicQrPolicyLabel: string;
-  qrWindowMinutes: number;
+  updatedAt: string;
+  updatedByName: string | null;
 };
 
 export type SyncStatus = "current" | "review";
