@@ -2,12 +2,14 @@
 
 The defaults are what production runs on until each integration pull request
 binds the real implementation, so "safe and boring" is the behaviour under test:
-nothing is created, nothing is configured, and no other member's module is
-imported.
+nothing is created and nothing is configured. The QR evidence provider is the
+exception: INT-1 bound it, so it is tested as the real repository.
 """
 
+import inspect
 from uuid import uuid4
 
+from modules.attendance_sessions.qr_session.evidence import QrEvidenceRepository
 from modules.attendance_verification.attendance_state import FinalAttendanceStatus
 from modules.contracts import providers
 from modules.contracts.attendance_policy import (
@@ -21,10 +23,22 @@ from modules.contracts.notifications import (
 from modules.contracts.qr_evidence import QrEvidenceProvider, QrRequirementProgress
 
 
-def test_qr_evidence_provider_is_unbound_until_int_1():
-    # None means "QR evidence unavailable": the roster reports unknown progress
-    # and session close does not finalize, instead of finalizing wrongly.
-    assert providers.get_qr_evidence_provider() is None
+def test_qr_evidence_provider_is_the_real_repository():
+    provider = providers.get_qr_evidence_provider()
+
+    assert isinstance(provider, QrEvidenceRepository)
+    assert isinstance(provider, QrEvidenceProvider)
+
+
+def test_the_bound_repository_takes_the_arguments_the_protocol_promises():
+    # isinstance only checks the method exists; this checks its shape.
+    parameters = list(inspect.signature(QrEvidenceRepository.progress_for_session).parameters)
+
+    assert parameters == ["self", "connection", "session_id"]
+
+
+def test_the_same_repository_is_shared_between_calls():
+    assert providers.get_qr_evidence_provider() is providers.get_qr_evidence_provider()
 
 
 def test_notification_producer_defaults_to_the_no_op_producer():
