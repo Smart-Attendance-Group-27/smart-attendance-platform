@@ -70,7 +70,6 @@ class SessionStudentRecord:
     face_status: str | None
     face_similarity_score: Decimal | None
     face_liveness_passed: bool | None
-    qr_status: str | None
     attendance_status: str | None
     review_status: str | None
     checked_in_at: datetime | None
@@ -464,7 +463,6 @@ class LecturerSessionRepository:
                 face.validation_status AS face_status,
                 face.similarity_score AS face_similarity_score,
                 face.liveness_passed AS face_liveness_passed,
-                qr.validation_status AS qr_status,
                 record.attendance_status,
                 record.record_source,
                 record.manual_reason,
@@ -493,13 +491,6 @@ class LecturerSessionRepository:
                 ORDER BY f.attempt_number DESC
                 LIMIT 1
             ) AS face ON va.id IS NOT NULL
-            LEFT JOIN LATERAL (
-                SELECT q.validation_status
-                FROM attendance_verification.qr_validation_attempts AS q
-                WHERE q.verification_attempt_id = va.id
-                ORDER BY q.attempt_number DESC
-                LIMIT 1
-            ) AS qr ON va.id IS NOT NULL
             LEFT JOIN attendance_verification.attendance_records AS record
                 ON record.session_id = ss.session_id AND record.student_id = ss.student_id
             LEFT JOIN attendance_verification.manual_reviews AS review
@@ -522,7 +513,6 @@ class LecturerSessionRepository:
                 face_status=row["face_status"],
                 face_similarity_score=row["face_similarity_score"],
                 face_liveness_passed=row["face_liveness_passed"],
-                qr_status=row["qr_status"],
                 initial_check_in_status=row["initial_check_in_status"],
                 checked_in_at=row["checked_in_at"],
                 attendance_status=row["attendance_status"],

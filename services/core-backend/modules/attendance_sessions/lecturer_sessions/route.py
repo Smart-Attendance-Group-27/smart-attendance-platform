@@ -313,7 +313,6 @@ async def list_my_attendance_session_students(
                 else None
             ),
             face_liveness_passed=student.face_liveness_passed,
-            qr_status=student.qr_status,
             qr_required_count=student.qr_required_count,
             qr_passed_count=student.qr_passed_count,
             initial_check_in_status=student.initial_check_in_status,

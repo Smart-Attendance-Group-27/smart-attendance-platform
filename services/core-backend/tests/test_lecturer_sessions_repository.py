@@ -110,7 +110,6 @@ def build_student_row(**overrides: Any) -> dict[str, Any]:
         "face_status": "passed",
         "face_similarity_score": None,
         "face_liveness_passed": True,
-        "qr_status": None,
         "initial_check_in_status": "checked_in",
         "checked_in_at": CURRENT_TIME,
         "attendance_status": None,
@@ -143,7 +142,6 @@ async def test_the_roster_row_carries_the_real_check_in_time_and_source_fields()
             face_status="passed",
             face_similarity_score=None,
             face_liveness_passed=True,
-            qr_status=None,
             initial_check_in_status="checked_in",
             checked_in_at=CURRENT_TIME,
             attendance_status=None,
@@ -187,3 +185,12 @@ async def test_close_records_when_and_the_closed_status() -> None:
     assert "cancelled_at" not in connection.query
     assert "WHERE id = $1" in connection.query
     assert connection.args == (SESSION_ID, "closed")
+
+
+async def test_the_roster_query_no_longer_reads_the_latest_qr_attempt() -> None:
+    connection = FakeDatabaseConnection([build_student_row()])
+
+    await LecturerSessionRepository().list_students_for_session(connection, SESSION_ID)
+
+    assert "qr_validation_attempts" not in connection.query
+    assert "qr_status" not in connection.query
