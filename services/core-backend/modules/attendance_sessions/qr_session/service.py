@@ -44,6 +44,8 @@ from modules.attendance_sessions.qr_session.repository import (
 from modules.attendance_verification.attendance_state import VerificationAttemptStatus
 from modules.attendance_verification.geofence.repository import GeofenceRepository
 from modules.audit.repository import write_audit_log
+from modules.contracts.announce import announce
+from modules.contracts.notifications import NoOpNotificationProducer, NotificationProducer
 
 
 QR_TOKEN_SEQUENCE_NUMBER = 1
@@ -114,6 +116,7 @@ class QrSessionService:
         dynamic_qr_hmac_secret: object | None = None,
         verification_repository: GeofenceRepository | None = None,
         evidence_repository: QrEvidenceRepository | None = None,
+        notification_producer: NotificationProducer | None = None,
     ) -> None:
         self._repository = repository or QrSessionRepository()
         self._qr_batch_cache = qr_batch_cache
@@ -125,6 +128,7 @@ class QrSessionService:
         # attempt lookup because it needs the stored check-in time.
         self._verification_repository = verification_repository or GeofenceRepository()
         self._evidence_repository = evidence_repository or QrEvidenceRepository()
+        self._notification_producer = notification_producer or NoOpNotificationProducer()
 
     async def get_qr_progress_for_student(
         self, pool: asyncpg.Pool, session_id: UUID, student_user_id: UUID,
@@ -238,6 +242,9 @@ class QrSessionService:
                         "expiresAt": actual_expires_at.isoformat(),
                     },
                 )
+                await self._announce_qr_batch_activation(
+                    connection, attendance_session_id, qr_session_id,
+                )
 
         await self._delete_cached_qr_batches(deactivated_qr_session_ids)
 
@@ -313,6 +320,9 @@ class QrSessionService:
                         "expiresAt": actual_expires_at.isoformat(),
                     },
                 )
+                await self._announce_qr_batch_activation(
+                    connection, attendance_session_id, qr_session_id,
+                )
 
         await self._delete_cached_qr_batches(deactivated_qr_session_ids)
         await self._set_cached_qr_batch_metadata(
@@ -343,6 +353,31 @@ class QrSessionService:
             status=ACTIVE_STATUS,
             valid_from=current_time,
             expires_at=actual_expires_at,
+        )
+
+    async def _announce_qr_batch_activation(
+        self,
+        connection: asyncpg.Connection,
+        attendance_session_id: UUID,
+        qr_session_id: UUID,
+    ) -> None:
+        async def create_notifications() -> list[UUID]:
+            recipient_user_ids = (
+                await self._evidence_repository.student_user_ids_required_for_batch(
+                    connection, qr_session_id,
+                )
+            )
+            return await self._notification_producer.qr_batch_activated(
+                connection,
+                session_id=attendance_session_id,
+                qr_batch_id=qr_session_id,
+                recipient_user_ids=recipient_user_ids,
+            )
+
+        await announce(
+            connection,
+            create_notifications,
+            label="qr_batch_activated",
         )
 
     async def assert_lecturer_owns_qr_session(

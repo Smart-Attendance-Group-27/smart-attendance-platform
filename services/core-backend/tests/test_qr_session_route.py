@@ -1,7 +1,9 @@
 import json
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import UUID
 
+from fastapi import Request
 from fastapi.testclient import TestClient
 
 from conftest import (
@@ -12,6 +14,7 @@ from conftest import (
     build_settings,
     default_connection,
 )
+from fakes.notifications import RecordingNotificationProducer
 from main import create_app
 from modules.attendance_sessions.qr_session.exception import (
     ActiveStudentProfileNotFoundError,
@@ -47,6 +50,22 @@ def lecturer_token(make_access_token) -> str:
 
 def student_token(make_access_token) -> str:
     return make_access_token(subject=LINKED_STUDENT_SUBJECT, roles=("student",))
+
+
+def test_qr_session_factory_wires_the_notification_producer(monkeypatch) -> None:
+    notifications = RecordingNotificationProducer()
+    monkeypatch.setattr(
+        "modules.attendance_sessions.qr_session.route.get_notification_producer",
+        lambda: notifications,
+    )
+    request = Request({
+        "type": "http",
+        "app": SimpleNamespace(state=SimpleNamespace(redis_client=None, settings=None)),
+    })
+
+    service = get_qr_session_service(request)
+
+    assert service._notification_producer is notifications
 
 
 class SuccessfulQrSessionService:
