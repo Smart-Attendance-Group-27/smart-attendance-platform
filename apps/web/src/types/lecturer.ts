@@ -12,8 +12,70 @@ export type TodayLecture = {
   room: string;
   checkInWindow: string;
   presentCount: number;
+  checkedInCount?: number;
+  lateCheckedInCount?: number;
+  failedVerificationCount?: number;
+  notCheckedInCount?: number;
   enrolledCount: number;
   status: SessionStatus;
+};
+
+export type LecturerQrBatch = {
+  qrSessionId: string;
+  mode: "static" | "dynamic";
+  status: string;
+  activatedAt: string;
+  deactivatedAt: string | null;
+  expiresAt: string;
+  voided: boolean;
+  voidReason: string | null;
+  requiredStudentCount: number;
+  passedStudentCount: number;
+};
+
+export type LiveSessionStudentRow = {
+  studentId: string;
+  studentIndex: string;
+  fullName: string;
+  attemptStatus: "in_progress" | "checked_in" | "failed" | null;
+  initialCheckInStatus: "checked_in" | "late_checked_in" | null;
+  faceStatus: string | null;
+  failureReason: string | null;
+  checkedInAt: string | null;
+  qrRequiredCount: number | null;
+  qrPassedCount: number | null;
+  finalStatus: "present" | "late" | "absent" | null;
+  recordSource: "automatic" | "manual" | null;
+  manualReason: string | null;
+  recordUpdatedAt: string | null;
+  reviewStatus: string | null;
+};
+
+export type LiveSessionDetail = {
+  sessionId: string;
+  courseCode: string;
+  courseName: string;
+  room: string;
+  status: SessionStatus;
+  startedAtLabel: string;
+  checkInWindow: string;
+  lateThreshold: string;
+  lecturerName: string;
+  requiresFaceVerification: boolean;
+  requiresQr: boolean;
+  summary: {
+    enrolledCount: number;
+    checkedInCount: number;
+    lateCheckedInCount: number;
+    notCheckedInCount: number;
+    failedVerificationCount: number;
+    presentCount: number;
+    lateCount: number;
+    absentCount: number;
+    pendingReviewCount: number;
+    manualCount: number;
+  };
+  students: LiveSessionStudentRow[];
 };
 
 export type AttentionItem = {

@@ -1,5 +1,15 @@
 import "server-only";
 import { coreBackendFetch } from "@/lib/api/coreBackend";
+import { isWebMockMode } from "@/lib/api/mode";
+import {
+  mockLecturerDashboardOverview,
+  mockLecturerAttendanceTrend,
+  mockLecturerQrBatches,
+  mockLecturerSessions,
+  mockLecturerStudents,
+  mockLecturerTimetable,
+} from "@/mocks/fixtures/lecturerLive";
+import type { LecturerQrBatch } from "@/types/lecturer";
 
 export type ApiLecturerCourse = {
   courseOfferingId: string;
@@ -46,6 +56,12 @@ export type ApiLecturerSession = {
   presentCount: number;
   lateCount: number;
   pendingReviewCount: number;
+  checkedInCount: number;
+  lateCheckedInCount: number;
+  notCheckedInCount: number;
+  failedVerificationCount: number;
+  absentCount: number;
+  manualCount: number;
 };
 
 export type ApiSessionStudent = {
@@ -61,6 +77,13 @@ export type ApiSessionStudent = {
   attendanceStatus: string | null;
   reviewStatus: string | null;
   checkedInAt: string | null;
+  failureReason: string | null;
+  initialCheckInStatus: "checked_in" | "late_checked_in" | null;
+  qrRequiredCount: number | null;
+  qrPassedCount: number | null;
+  recordSource: "automatic" | "manual" | null;
+  manualReason: string | null;
+  recordUpdatedAt: string | null;
 };
 
 export type ApiManualReviewDecisionRequest =
@@ -130,6 +153,7 @@ export function getLecturerCourses(): Promise<ApiLecturerCourse[]> {
 }
 
 export function getLecturerTimetable(): Promise<ApiLecturerTimetableEntry[]> {
+  if (isWebMockMode()) return Promise.resolve(mockLecturerTimetable);
   return coreBackendFetch("/api/v1/lecturers/me/timetable");
 }
 
@@ -148,6 +172,7 @@ export type ApiCreateSessionRequest = {
 };
 
 export function getLecturerSessions(): Promise<ApiLecturerSession[]> {
+  if (isWebMockMode()) return Promise.resolve(mockLecturerSessions);
   return coreBackendFetch("/api/v1/lecturers/me/attendance-sessions");
 }
 
@@ -159,11 +184,21 @@ export function createLecturerSession(body: ApiCreateSessionRequest): Promise<Ap
 }
 
 export function getLecturerSessionDetail(sessionId: string): Promise<ApiLecturerSession> {
+  if (isWebMockMode()) {
+    const session = mockLecturerSessions.find((item) => item.id === sessionId);
+    return session ? Promise.resolve(session) : Promise.reject(new Error("Session not found"));
+  }
   return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${sessionId}`);
 }
 
 export function getLecturerSessionStudents(sessionId: string): Promise<ApiSessionStudent[]> {
+  if (isWebMockMode()) return Promise.resolve(mockLecturerStudents[sessionId] ?? []);
   return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${sessionId}/students`);
+}
+
+export function getLecturerQrBatches(sessionId: string): Promise<LecturerQrBatch[]> {
+  if (isWebMockMode()) return Promise.resolve(mockLecturerQrBatches[sessionId] ?? []);
+  return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/qr-batches`);
 }
 
 export function activateLecturerSession(sessionId: string): Promise<ApiLecturerSession> {
@@ -193,6 +228,7 @@ export function postManualReviewDecision(
 }
 
 export function getLecturerDashboardOverview(): Promise<ApiLecturerDashboardOverview> {
+  if (isWebMockMode()) return Promise.resolve(mockLecturerDashboardOverview);
   return coreBackendFetch("/api/v1/lecturers/me/dashboard-overview");
 }
 
@@ -201,6 +237,7 @@ export function getCourseSessionReport(courseOfferingId: string): Promise<ApiCou
 }
 
 export function getLecturerAttendanceTrend(): Promise<ApiWeeklyTrendPoint[]> {
+  if (isWebMockMode()) return Promise.resolve(mockLecturerAttendanceTrend);
   return coreBackendFetch("/api/v1/lecturers/me/reports/attendance-trend");
 }
 

@@ -10,11 +10,13 @@ import {
   getLecturerDashboardOverview,
   getLecturerSessionDetail,
   getLecturerSessionStudents,
+  getLecturerQrBatches,
   getLecturerSessions,
   getLecturerTimetable,
   getManualReviewQueue,
 } from "@/lib/api/lecturer";
 import { formatClockTime, formatDateLabel, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
+import { isWebMockMode } from "@/lib/api/mode";
 import {
   AtRiskStudent,
   LecturerCoursesData,
@@ -22,12 +24,11 @@ import {
   LecturerReportsData,
   ReviewCase,
   ReviewIssueType,
-  SessionDetail,
+  LiveSessionDetail,
+  LecturerQrBatch,
   SessionStatus,
-  SessionStudentRow,
   TimetableOption,
   TodayLecture,
-  VerificationOutcome,
 } from "@/types/lecturer";
 
 // Stage 6: every export below now calls the real core-backend API (see
@@ -53,6 +54,7 @@ function isToday(iso: string): boolean {
 }
 
 function isCheckInOpen(session: ApiLecturerSession, now: Date): boolean {
+  if (session.status !== "active") return false;
   if (!session.checkInOpensAt || !session.checkInClosesAt) return false;
   const opensAt = new Date(session.checkInOpensAt).getTime();
   const closesAt = new Date(session.checkInClosesAt).getTime();
@@ -79,6 +81,10 @@ function mapToTodayLecture(session: ApiLecturerSession): TodayLecture {
     room: session.classroomCode ?? "—",
     checkInWindow: formatTimeRange(session.checkInOpensAt, session.checkInClosesAt),
     presentCount: session.presentCount,
+    checkedInCount: session.checkedInCount,
+    lateCheckedInCount: session.lateCheckedInCount,
+    failedVerificationCount: session.failedVerificationCount,
+    notCheckedInCount: session.notCheckedInCount,
     enrolledCount: session.enrolledCount,
     status: mapSessionStatus(session.status),
   };
@@ -99,7 +105,7 @@ export async function getLecturerOverview(): Promise<LecturerOverview> {
       activeLectures: sessions.filter((session) => session.status === "active").length,
       checkInWindowsOpen: sessions.filter((session) => isCheckInOpen(session, now)).length,
       studentsCheckedIn: todaySessions.reduce(
-        (total, session) => total + session.presentCount + session.lateCount,
+        (total, session) => total + session.checkedInCount + session.lateCheckedInCount,
         0,
       ),
       pendingReview: overview.pendingReviewCount,
@@ -187,28 +193,19 @@ export async function getSessionCreationOptions(): Promise<TimetableOption[]> {
   }));
 }
 
-function mapVerificationOutcome(status: string | null, requires: boolean): VerificationOutcome {
-  if (!requires) return "not_required";
-  if (status === null) return "not_submitted";
-  if (status === "passed") return "present";
-  if (status === "failed") return "failed";
-  return "not_submitted";
+function mapAttemptStatus(value: string | null): LiveSessionDetail["students"][number]["attemptStatus"] {
+  return value === "in_progress" || value === "checked_in" || value === "failed" ? value : null;
 }
 
-function mapQrOutcome(status: string | null, requiresQr: boolean): VerificationOutcome {
-  if (!requiresQr) return "not_required";
-  if (status === null) return "not_participated";
-  if (status === "passed") return "participated";
-  return "not_participated";
+function mapFinalStatus(value: string | null): LiveSessionDetail["students"][number]["finalStatus"] {
+  return value === "present" || value === "late" || value === "absent" ? value : null;
 }
 
-function mapFinalStatus(attendanceStatus: string | null, reviewStatus: string | null): SessionStudentRow["finalStatus"] {
-  if (attendanceStatus === "present" || attendanceStatus === "late") return attendanceStatus;
-  if (reviewStatus === "pending") return "pending_review";
-  return "absent";
+export async function getSessionQrBatches(sessionId: string): Promise<LecturerQrBatch[]> {
+  return getLecturerQrBatches(sessionId);
 }
 
-export async function getSessionDetail(sessionId: string): Promise<SessionDetail | null> {
+export async function getSessionDetail(sessionId: string): Promise<LiveSessionDetail | null> {
   let session: ApiLecturerSession;
   try {
     session = await getLecturerSessionDetail(sessionId);
@@ -217,44 +214,50 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
   }
   const students = await getLecturerSessionStudents(sessionId);
 
-  const enrolledCount = session.enrolledCount || 1;
-  const presentCount = session.presentCount;
-  const lateCount = session.lateCount;
-  const pendingReviewCount = session.pendingReviewCount;
-  const notVerifiedCount = Math.max(enrolledCount - presentCount - lateCount - pendingReviewCount, 0);
-
   return {
     sessionId: session.id,
     courseCode: session.courseCode,
     courseName: session.courseName,
     room: session.classroomCode ?? "—",
     status: mapSessionStatus(session.status),
-    startedAtLabel: session.activatedAt
+    startedAtLabel: session.status === "cancelled" ? "Session cancelled" : session.activatedAt
       ? `Started at ${formatClockTime(session.activatedAt)}`
       : session.closedAt
         ? `Closed at ${formatClockTime(session.closedAt)}`
         : "Not started yet",
     checkInWindow: formatTimeRange(session.checkInOpensAt, session.checkInClosesAt),
     lateThreshold: formatClockTime(session.lateAfterAt),
-    lecturerName: (await getCurrentUser())?.name ?? "",
+    lecturerName: isWebMockMode() ? "Demo lecturer" : (await getCurrentUser())?.name ?? "",
+    requiresFaceVerification: session.requiresFaceVerification,
     requiresQr: session.requiresQr,
     summary: {
-      presentCount,
-      presentPercent: roundToOneDecimal((presentCount / enrolledCount) * 100),
-      lateCount,
-      latePercent: roundToOneDecimal((lateCount / enrolledCount) * 100),
-      pendingReviewCount,
-      notVerifiedCount,
-      notVerifiedPercent: roundToOneDecimal((notVerifiedCount / enrolledCount) * 100),
+      enrolledCount: session.enrolledCount,
+      checkedInCount: session.checkedInCount,
+      lateCheckedInCount: session.lateCheckedInCount,
+      notCheckedInCount: session.notCheckedInCount,
+      failedVerificationCount: session.failedVerificationCount,
+      presentCount: session.presentCount,
+      lateCount: session.lateCount,
+      absentCount: session.absentCount,
+      pendingReviewCount: session.pendingReviewCount,
+      manualCount: session.manualCount,
     },
     students: students.map((student) => ({
       studentId: student.studentId,
       studentIndex: student.registrationNumber,
       fullName: student.fullName,
-      initialFaceCheck: mapVerificationOutcome(student.faceStatus, session.requiresFaceVerification),
-      qrVerification: mapQrOutcome(student.qrStatus, session.requiresQr),
-      finalStatus: mapFinalStatus(student.attendanceStatus, student.reviewStatus),
-      time: formatClockTime(student.checkedInAt),
+      attemptStatus: mapAttemptStatus(student.verificationStatus),
+      initialCheckInStatus: student.initialCheckInStatus,
+      faceStatus: student.faceStatus,
+      failureReason: student.failureReason,
+      checkedInAt: student.checkedInAt,
+      qrRequiredCount: student.qrRequiredCount,
+      qrPassedCount: student.qrPassedCount,
+      finalStatus: mapFinalStatus(student.attendanceStatus),
+      recordSource: student.recordSource,
+      manualReason: student.manualReason,
+      recordUpdatedAt: student.recordUpdatedAt,
+      reviewStatus: student.reviewStatus,
     })),
   };
 }
