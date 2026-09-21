@@ -27,7 +27,6 @@ class ActiveAttendanceSessionResponse(BaseModel):
     requires_face_verification: bool = Field(alias="requiresFaceVerification")
     requires_geofence: bool = Field(alias="requiresGeofence")
     requires_qr: bool = Field(alias="requiresQr")
-    check_in_completed: bool = Field(alias="checkInCompleted")  # deprecated, kept until INT-5
     attempt_status: str | None = Field(alias="attemptStatus")
     initial_check_in_status: str | None = Field(alias="initialCheckInStatus")
     checked_in_at: datetime | None = Field(alias="checkedInAt")
