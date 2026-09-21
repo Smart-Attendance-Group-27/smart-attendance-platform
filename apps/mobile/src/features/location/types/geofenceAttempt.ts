@@ -1,4 +1,5 @@
 import type { CoreApiFailureStatus } from '../../../services/api/coreApiClient';
+import type { InitialCheckIn } from '../../attendance/types/myAttendance';
 import type { FreshLocationReading } from './locationReading';
 
 export type GeofenceDecision = 'PASSED' | 'FAILED' | 'RETRY_REQUIRED';
@@ -30,6 +31,7 @@ export type GeofenceAttempt = {
   readonly allowedRadiusM: number;
   readonly nextStep: GeofenceNextStep;
   readonly reason: GeofenceReason | null;
+  readonly initialCheckIn?: InitialCheckIn | null;
 };
 
 export type GeofenceAttemptResult =

@@ -16,7 +16,10 @@ export type ActiveAttendanceSession = {
   readonly requiresFaceVerification: boolean;
   readonly requiresGeofence: boolean;
   readonly requiresQr: boolean;
-  readonly checkInCompleted: boolean;
+  readonly attemptStatus: 'in_progress' | 'checked_in' | 'failed' | null;
+  readonly initialCheckInStatus: 'checked_in' | 'late_checked_in' | null;
+  readonly checkedInAt: string | null;
+  readonly finalAttendanceStatus: 'present' | 'late' | 'absent' | null;
 };
 
 export type ActiveAttendanceSessionsResult =

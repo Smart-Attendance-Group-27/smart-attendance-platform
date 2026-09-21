@@ -15,6 +15,7 @@ from conftest import (
 )
 from main import create_app
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
+from modules.attendance_verification.manual_attendance.exception import SessionCancelledError
 from modules.attendance_verification.manual_review.exception import (
     VerificationAttemptNotFailedError,
     VerificationAttemptNotFoundError,
@@ -77,8 +78,18 @@ class StubManualReviewService:
             raise self.error
         return self.items
 
-    async def decide_for_user(self, pool, user_id, verification_attempt_id, decision, reason):
-        self.decision_calls.append((user_id, verification_attempt_id, decision, reason))
+    async def decide_for_user(
+        self,
+        pool,
+        user_id,
+        verification_attempt_id,
+        decision,
+        attendance_status,
+        reason,
+    ):
+        self.decision_calls.append(
+            (user_id, verification_attempt_id, decision, attendance_status, reason),
+        )
         if self.error is not None:
             raise self.error
         return build_queue_item(decision.value)
@@ -133,37 +144,82 @@ def test_queue_missing_profile_returns_404(jwks_document, make_access_token) -> 
     assert response.status_code == 404
 
 
-@pytest.mark.parametrize("decision", ["approve", "reject", "retry", "escalate"])
-def test_decision_endpoint_forwards_decision(
+def lecturer_headers(make_access_token) -> dict[str, str]:
+    return authorize(make_access_token(subject=LINKED_LECTURER_SUBJECT, roles=("lecturer",)))
+
+
+@pytest.mark.parametrize("attendance_status", ["present", "late"])
+def test_approve_forwards_the_chosen_status(
     client: TestClient,
     service: StubManualReviewService,
     make_access_token,
-    decision: str,
+    attendance_status: str,
 ) -> None:
     response = client.post(
         f"{QUEUE_URL}/{ATTEMPT_ID}/decision",
-        headers=authorize(make_access_token(subject=LINKED_LECTURER_SUBJECT, roles=("lecturer",))),
-        json={"decision": decision, "reason": "reviewed on camera"},
+        headers=lecturer_headers(make_access_token),
+        json={
+            "decision": "approve",
+            "attendanceStatus": attendance_status,
+            "reason": "reviewed on camera",
+        },
     )
 
     assert response.status_code == 200
-    assert response.json()["reviewStatus"] == decision
+    assert response.json()["reviewStatus"] == "approve"
     assert len(service.decision_calls) == 1
-    called_user_id, called_attempt_id, called_decision, called_reason = service.decision_calls[0]
-    assert called_user_id == LECTURER_USER_ID
-    assert called_attempt_id == ATTEMPT_ID
-    assert called_decision.value == decision
-    assert called_reason == "reviewed on camera"
+    user_id, attempt_id, decision, forwarded_status, reason = service.decision_calls[0]
+    assert user_id == LECTURER_USER_ID
+    assert attempt_id == ATTEMPT_ID
+    assert decision.value == "approve"
+    assert forwarded_status == attendance_status
+    assert reason == "reviewed on camera"
 
 
-def test_decision_rejects_unknown_decision_value(client: TestClient, make_access_token) -> None:
+def test_reject_forwards_no_status(
+    client: TestClient,
+    service: StubManualReviewService,
+    make_access_token,
+) -> None:
     response = client.post(
         f"{QUEUE_URL}/{ATTEMPT_ID}/decision",
-        headers=authorize(make_access_token(subject=LINKED_LECTURER_SUBJECT, roles=("lecturer",))),
-        json={"decision": "delete-everything"},
+        headers=lecturer_headers(make_access_token),
+        json={"decision": "reject", "reason": "not in the room"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["reviewStatus"] == "reject"
+    assert service.decision_calls[0][3] is None
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"decision": "approve", "reason": "reviewed on camera"},
+        {"decision": "approve", "attendanceStatus": "absent", "reason": "reviewed on camera"},
+        {"decision": "reject", "attendanceStatus": "present", "reason": "not in the room"},
+        {"decision": "retry", "reason": "try again"},
+        {"decision": "escalate", "reason": "not sure"},
+        {"decision": "approve", "attendanceStatus": "present"},
+        {"decision": "approve", "attendanceStatus": "present", "reason": "ok"},
+        {"decision": "approve", "attendanceStatus": "present", "reason": "x" * 501},
+        {"decision": "delete-everything", "reason": "reviewed on camera"},
+    ],
+)
+def test_invalid_decisions_are_rejected_before_reaching_the_service(
+    client: TestClient,
+    service: StubManualReviewService,
+    make_access_token,
+    payload: dict,
+) -> None:
+    response = client.post(
+        f"{QUEUE_URL}/{ATTEMPT_ID}/decision",
+        headers=lecturer_headers(make_access_token),
+        json=payload,
     )
 
     assert response.status_code == 422
+    assert service.decision_calls == []
 
 
 def test_decision_missing_attempt_returns_404(jwks_document, make_access_token) -> None:
@@ -171,8 +227,8 @@ def test_decision_missing_attempt_returns_404(jwks_document, make_access_token) 
     with build_client(jwks_document, service) as client:
         response = client.post(
             f"{QUEUE_URL}/{ATTEMPT_ID}/decision",
-            headers=authorize(make_access_token(subject=LINKED_LECTURER_SUBJECT, roles=("lecturer",))),
-            json={"decision": "approve"},
+            headers=lecturer_headers(make_access_token),
+            json={"decision": "reject", "reason": "not in the room"},
         )
 
     assert response.status_code == 404
@@ -183,8 +239,20 @@ def test_decision_on_non_failed_attempt_returns_409(jwks_document, make_access_t
     with build_client(jwks_document, service) as client:
         response = client.post(
             f"{QUEUE_URL}/{ATTEMPT_ID}/decision",
-            headers=authorize(make_access_token(subject=LINKED_LECTURER_SUBJECT, roles=("lecturer",))),
-            json={"decision": "approve"},
+            headers=lecturer_headers(make_access_token),
+            json={"decision": "reject", "reason": "not in the room"},
+        )
+
+    assert response.status_code == 409
+
+
+def test_decision_on_a_cancelled_session_returns_409(jwks_document, make_access_token) -> None:
+    service = StubManualReviewService(error=SessionCancelledError())
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            f"{QUEUE_URL}/{ATTEMPT_ID}/decision",
+            headers=lecturer_headers(make_access_token),
+            json={"decision": "reject", "reason": "not in the room"},
         )
 
     assert response.status_code == 409

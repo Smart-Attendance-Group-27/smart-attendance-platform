@@ -11,6 +11,7 @@ import { LineChart } from "@/components/charts/LineChart";
 import { getLecturerOverview } from "@/services/lecturerService";
 import { sessionStatusDisplay } from "@/lib/status";
 import { TodayLecture } from "@/types/lecturer";
+import { isWebMockMode } from "@/lib/api/mode";
 
 export default async function LecturerDashboardPage() {
   const { summary, todayLectures, attentionItems, weeklyTrend, recentActivity } = await getLecturerOverview();
@@ -38,8 +39,9 @@ export default async function LecturerDashboardPage() {
       />
 
       <Notice title="Academic data source:">
-        Courses, enrolments, lecturer assignments, and timetable entries are synchronised from
-        authorised University systems. Lecturers have read-only access to these records.
+        {isWebMockMode()
+          ? "Mock preview: session and roster data shown here is illustrative."
+          : "Courses, enrolments, lecturer assignments, and timetable entries are synchronised from authorised University systems. Lecturers have read-only access to these records."}
       </Notice>
 
       <SummaryStrip
@@ -96,8 +98,8 @@ export default async function LecturerDashboardPage() {
                 { key: "checkin", header: "Check-in", render: (row) => row.checkInWindow },
                 {
                   key: "attendance",
-                  header: "Attendance",
-                  render: (row) => `${row.presentCount} / ${row.enrolledCount}`,
+                  header: "Initial check-in",
+                  render: (row) => `${(row.checkedInCount ?? 0) + (row.lateCheckedInCount ?? 0)} / ${row.enrolledCount}`,
                 },
                 {
                   key: "status",

@@ -275,6 +275,7 @@ describe('LocationCheckScreen', () => {
 
     expect(props.onLocationValidated).toHaveBeenCalledWith(
       'attendance-session-active',
+      null,
     );
   });
 

@@ -21,6 +21,11 @@ from modules.attendance_sessions.qr_session.exception import (
     StudentNotEligibleError,
 )
 from modules.attendance_sessions.qr_session.cache import QrBatchMetadataCache
+from modules.attendance_sessions.qr_session.evidence import (
+    QrBatchParticipation,
+    QrEvidenceRepository,
+    StudentQrBatch,
+)
 from modules.attendance_sessions.qr_session.crypto import (
     calculate_dynamic_qr_sequence,
     generate_dynamic_qr_value,
@@ -87,6 +92,17 @@ class CurrentDynamicQrSession:
     expires_at: datetime
 
 
+@dataclass(frozen=True)
+class StudentQrProgress:
+    session_id: UUID
+    qr_enabled: bool
+    checked_in_at: datetime | None
+    required_count: int
+    passed_count: int
+    active_batch: StudentQrBatch | None
+    batches: list[StudentQrBatch]
+
+
 class QrSessionService:
     def __init__(
         self,
@@ -97,6 +113,7 @@ class QrSessionService:
         qr_value_generator: Callable[[], str] | None = None,
         dynamic_qr_hmac_secret: object | None = None,
         verification_repository: GeofenceRepository | None = None,
+        evidence_repository: QrEvidenceRepository | None = None,
     ) -> None:
         self._repository = repository or QrSessionRepository()
         self._qr_batch_cache = qr_batch_cache
@@ -107,6 +124,48 @@ class QrSessionService:
         # Reuse the geofence student and eligibility lookups. QR owns its
         # attempt lookup because it needs the stored check-in time.
         self._verification_repository = verification_repository or GeofenceRepository()
+        self._evidence_repository = evidence_repository or QrEvidenceRepository()
+
+    async def get_qr_progress_for_student(
+        self, pool: asyncpg.Pool, session_id: UUID, student_user_id: UUID,
+    ) -> StudentQrProgress:
+        async with pool.acquire() as connection:
+            state = await self._evidence_repository.student_state(
+                connection, session_id, student_user_id,
+            )
+            if state is None:
+                raise AttendanceSessionNotFoundError()
+            batches = await self._evidence_repository.student_batches(
+                connection, session_id, state.checked_in_at, state.attempt_id,
+            )
+
+        now = self._ensure_utc(self._clock())
+        active_batch = next(
+            (batch for batch in batches if
+                state.qr_enabled and state.session_status == ACTIVE_STATUS and
+                batch.status == ACTIVE_STATUS and batch.deactivated_at is None and
+                not batch.voided and
+                self._ensure_utc(batch.activated_at) <= now < self._ensure_utc(batch.expires_at)),
+            None,
+        )
+        return StudentQrProgress(
+            session_id=session_id, qr_enabled=state.qr_enabled,
+            checked_in_at=state.checked_in_at,
+            required_count=sum(batch.required for batch in batches),
+            passed_count=sum(batch.required and batch.passed for batch in batches),
+            active_batch=active_batch, batches=batches,
+        )
+
+    async def list_qr_batches_for_lecturer(
+        self, pool: asyncpg.Pool, session_id: UUID, lecturer_user_id: UUID,
+    ) -> list[QrBatchParticipation]:
+        async with pool.acquire() as connection:
+            await self._authorize_lecturer_for_session(
+                connection, session_id, lecturer_user_id,
+            )
+            return await self._evidence_repository.batch_participation_for_session(
+                connection, session_id,
+            )
 
     async def create_static_qr_session(
         self,

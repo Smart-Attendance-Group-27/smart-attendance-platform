@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -37,6 +38,7 @@ type QrSessionLauncherProps = {
   room: string;
   checkInWindow: string;
   isLaunchEnabled: boolean;
+  mockReadOnly?: boolean;
 };
 
 function formatDateTime(value: string | null | undefined): string {
@@ -65,7 +67,9 @@ export function QrSessionLauncher({
   room,
   checkInWindow,
   isLaunchEnabled,
+  mockReadOnly = false,
 }: QrSessionLauncherProps) {
+  const router = useRouter();
   const [mode, setMode] = useState<QrMode>("static");
   const [validForSeconds, setValidForSeconds] = useState("300");
   const [refreshIntervalSeconds, setRefreshIntervalSeconds] = useState("15");
@@ -179,6 +183,7 @@ export function QrSessionLauncher({
 
       setQrSession(createdSession);
       setStreamStatus(createdSession.mode === "dynamic" ? "connecting" : "idle");
+      router.refresh();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : "Unexpected QR launch error.");
     } finally {
@@ -196,7 +201,9 @@ export function QrSessionLauncher({
 
           {!isLaunchEnabled ? (
             <Notice variant="warning" title="QR launch unavailable">
-              This session is not currently active or QR verification is disabled.
+              {mockReadOnly
+                ? "Mock mode shows sample QR batches. Connect the backend to launch a real batch."
+                : "This session is not currently active or QR verification is disabled."}
             </Notice>
           ) : null}
 

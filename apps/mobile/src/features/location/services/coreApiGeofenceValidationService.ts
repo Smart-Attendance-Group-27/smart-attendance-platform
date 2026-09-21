@@ -1,4 +1,5 @@
 import type { CoreApiClient } from '../../../services/api/coreApiClient';
+import type { InitialCheckIn } from '../../attendance/types/myAttendance';
 import type {
   GeofenceAttempt,
   GeofenceAttemptResult,
@@ -17,6 +18,7 @@ type GeofenceAttemptResponse = {
   readonly allowedRadiusM?: unknown;
   readonly nextStep?: unknown;
   readonly reason?: unknown;
+  readonly initialCheckIn?: unknown;
 };
 
 const decisions = new Set<GeofenceDecision>([
@@ -99,6 +101,7 @@ function toGeofenceAttempt(
     typeof response.nextStep !== 'string' ||
     !nextSteps.has(response.nextStep as GeofenceNextStep) ||
     !isReason(response.reason) ||
+    !isInitialCheckIn(response.initialCheckIn) ||
     !isCoherentOutcome(
       response.decision as GeofenceDecision,
       response.nextStep as GeofenceNextStep,
@@ -116,7 +119,16 @@ function toGeofenceAttempt(
     allowedRadiusM: response.allowedRadiusM,
     nextStep: response.nextStep as GeofenceNextStep,
     reason: response.reason,
+    initialCheckIn: response.initialCheckIn,
   };
+}
+
+function isInitialCheckIn(value: unknown): value is InitialCheckIn | null | undefined {
+  if (value === undefined || value === null) return true;
+  if (!value || typeof value !== 'object') return false;
+  const state = value as Partial<InitialCheckIn>;
+  return (state.status === 'checked_in' || state.status === 'late_checked_in') &&
+    typeof state.checkedInAt === 'string' && Number.isFinite(Date.parse(state.checkedInAt));
 }
 
 function isCoherentOutcome(

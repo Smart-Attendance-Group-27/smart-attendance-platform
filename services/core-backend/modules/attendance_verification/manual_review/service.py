@@ -1,18 +1,17 @@
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import asyncpg
 
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
 from modules.academic.lecturer_profile.repository import LecturerProfileRepository
+from modules.attendance_verification.attendance_state import FinalAttendanceStatus
+from modules.attendance_verification.manual_attendance.service import ManualAttendanceService
 from modules.attendance_verification.manual_review.exception import (
     VerificationAttemptNotFailedError,
     VerificationAttemptNotFoundError,
 )
 from modules.attendance_verification.manual_review.repository import (
-    ABSENT_STATUS,
     FAILED_ATTEMPT_STATUS,
-    LATE_STATUS,
-    PRESENT_STATUS,
     ManualReviewQueueItemRecord,
     ManualReviewRepository,
 )
@@ -30,11 +29,13 @@ class ManualReviewService:
         self,
         repository: ManualReviewRepository | None = None,
         lecturer_profile_repository: LecturerProfileRepository | None = None,
+        manual_attendance_service: ManualAttendanceService | None = None,
     ) -> None:
         self._repository = repository or ManualReviewRepository()
         self._lecturer_profile_repository = (
             lecturer_profile_repository or LecturerProfileRepository()
         )
+        self._manual_attendance_service = manual_attendance_service or ManualAttendanceService()
 
     async def list_queue_for_user(
         self,
@@ -56,8 +57,15 @@ class ManualReviewService:
         user_id: UUID,
         verification_attempt_id: UUID,
         decision: ManualReviewDecision,
-        reason: str | None,
+        attendance_status: str | None,
+        reason: str,
     ) -> ManualReviewQueueItemRecord:
+        if decision is ManualReviewDecision.APPROVE and attendance_status not in (
+            FinalAttendanceStatus.PRESENT.value,
+            FinalAttendanceStatus.LATE.value,
+        ):
+            raise ValueError("Approving needs an explicit present or late status.")
+
         async with pool.acquire() as connection, connection.transaction():
             lecturer_id = await self._resolve_active_lecturer_id(connection, user_id)
             attempt = await self._repository.find_attempt_for_lecturer(
@@ -82,47 +90,19 @@ class ManualReviewService:
             )
 
             review_status = decision.value
-            if decision == ManualReviewDecision.APPROVE:
-                attendance_status = (
-                    LATE_STATUS
-                    if attempt.late_after_at is not None
-                    and attempt.started_at is not None
-                    and attempt.started_at > attempt.late_after_at
-                    else PRESENT_STATUS
-                )
-                await self._repository.upsert_attendance_record(
-                    connection,
-                    record_id=uuid4(),
-                    session_id=attempt.session_id,
-                    student_id=attempt.student_id,
-                    recorded_by=user_id,
-                    attendance_status=attendance_status,
-                    manual_reason=reason,
-                )
-            elif decision == ManualReviewDecision.REJECT:
-                await self._repository.upsert_attendance_record(
-                    connection,
-                    record_id=uuid4(),
-                    session_id=attempt.session_id,
-                    student_id=attempt.student_id,
-                    recorded_by=user_id,
-                    attendance_status=ABSENT_STATUS,
-                    manual_reason=reason,
-                )
-            elif decision == ManualReviewDecision.RETRY:
-                # Clears any prior manual attendance record and resets the
-                # attempt so the student can go through verification again.
-                await self._repository.delete_attendance_record(
-                    connection,
-                    attempt.session_id,
-                    attempt.student_id,
-                )
-                await self._repository.reset_attempt_for_retry(
-                    connection,
-                    verification_attempt_id,
-                )
-            # ESCALATE leaves the attendance record untouched — it only flags
-            # the review row so the queue no longer treats it as pending.
+            final_status = (
+                FinalAttendanceStatus(attendance_status)
+                if decision is ManualReviewDecision.APPROVE
+                else FinalAttendanceStatus.ABSENT
+            )
+            await self._manual_attendance_service.set_status_in_transaction(
+                connection,
+                lecturer_user_id=user_id,
+                session_id=attempt.session_id,
+                student_id=attempt.student_id,
+                status=final_status,
+                reason=reason,
+            )
 
             await self._repository.upsert_manual_review(
                 connection,

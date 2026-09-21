@@ -26,7 +26,10 @@ const backendSession = {
   requiresFaceVerification: true,
   requiresGeofence: true,
   requiresQr: false,
-  checkInCompleted: false,
+  attemptStatus: null,
+  initialCheckInStatus: null,
+  checkedInAt: null,
+  finalAttendanceStatus: null,
 };
 
 function jsonResponse(status: number, body: unknown): Response {

@@ -1,5 +1,5 @@
 import type { AttendanceSession } from '../types/attendanceSession';
-import type { AttendanceCheckInResult } from '../types/attendanceCheckInResult';
+import type { CheckInResult, MyAttendanceResult } from '../types/myAttendance';
 
 export type AttendanceSessionLookupResult =
   | {
@@ -10,21 +10,11 @@ export type AttendanceSessionLookupResult =
       status: 'unavailable';
     };
 
-export type AttendanceCheckInResultLookupResult =
-  | {
-      status: 'available';
-      result: AttendanceCheckInResult;
-    }
-  | {
-      status: 'unavailable';
-    };
-
 export interface AttendanceService {
   getAttendanceSession(
     sessionId: string,
   ): Promise<AttendanceSessionLookupResult>;
 
-  getCheckInResult(
-    sessionId: string,
-  ): Promise<AttendanceCheckInResultLookupResult>;
+  getMyAttendance(sessionId: string): Promise<MyAttendanceResult>;
+  checkIn(sessionId: string): Promise<CheckInResult>;
 }

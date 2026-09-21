@@ -5,6 +5,8 @@ from uuid import UUID
 
 import asyncpg
 
+from modules.attendance_verification.attendance_state import AttendanceRecordSource
+
 SESSION_SCHEDULED_STATUS = "scheduled"
 
 # Session status is derived from timestamps (activated_at/closed_at/cancelled_at),
@@ -13,11 +15,9 @@ SESSION_SCHEDULED_STATUS = "scheduled"
 # database/migrations/README.md and the Stage-1 repo audit for why a new status
 # enum was deliberately not invented here.
 SESSION_ACTIVE_STATUS = "active"
+SESSION_CANCELLED_STATUS = "cancelled"
 
-# attendance_state.AttendanceRecordSource.MANUAL is "manual", but the value
-# actually written to record_source today is "manual_review" (manual_review
-# repository). Matches the real data until that's reconciled.
-RECORD_SOURCE_MANUAL = "manual_review"
+RECORD_SOURCE_MANUAL = AttendanceRecordSource.MANUAL.value
 
 
 @dataclass(frozen=True)
@@ -266,6 +266,26 @@ class LecturerSessionRepository:
             WHERE id = $1
             """,
             session_id,
+        )
+
+    async def cancel(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+        reason: str,
+    ) -> None:
+        await connection.execute(
+            """
+            UPDATE attendance_session.sessions
+            SET cancelled_at = now(),
+                cancellation_reason = $2,
+                status = $3,
+                updated_at = now()
+            WHERE id = $1
+            """,
+            session_id,
+            reason,
+            SESSION_CANCELLED_STATUS,
         )
 
     async def find_timetable_entry_for_lecturer(

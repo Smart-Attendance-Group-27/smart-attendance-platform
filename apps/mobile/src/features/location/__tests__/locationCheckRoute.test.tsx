@@ -13,7 +13,7 @@ const mockBack = jest.fn();
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 let mockLocationResult:
-  | { status: 'inside_geofence' }
+  | { status: 'inside_geofence'; initialCheckIn?: { status: 'checked_in'; checkedInAt: string } }
   | { status: 'already_checked_in' };
 let mockSearchParams: {
   sessionId?: string | string[];
@@ -110,7 +110,7 @@ describe('LocationCheckRoute', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  test('replaces location verification with the existing check-in result', async () => {
+  test('replaces location verification with Progress after an existing check-in', async () => {
     mockLocationResult = { status: 'already_checked_in' };
     const screen = await render(<LocationCheckRoute />);
 
@@ -123,9 +123,28 @@ describe('LocationCheckRoute', () => {
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith({
         pathname:
-          '/(student)/attendance/[sessionId]/check-in-success',
+          '/(student)/attendance/[sessionId]/progress',
         params: { sessionId: 'attendance-session-active' },
       });
+    });
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  test('goes directly to Progress when geofence validation completes initial check-in', async () => {
+    mockLocationResult = {
+      status: 'inside_geofence',
+      initialCheckIn: { status: 'checked_in', checkedInAt: '2026-07-20T10:02:00+05:30' },
+    };
+    const screen = await render(<LocationCheckRoute />);
+
+    fireEvent.press(screen.getByRole('button', {
+      name: 'Allow location access and check classroom location',
+    }));
+    fireEvent.press(await screen.findByRole('button', { name: 'View attendance progress' }));
+
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/(student)/attendance/[sessionId]/progress',
+      params: { sessionId: 'attendance-session-active' },
     });
     expect(mockPush).not.toHaveBeenCalled();
   });

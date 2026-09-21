@@ -36,6 +36,17 @@ export function ActiveSessionCard({ session, onStart }: ActiveSessionCardProps) 
   const venue = (session as any)?.venue ?? '';
   const closingText = computeClosingText((session as any)?.endTime ?? (session && (session as any).endTime));
   const isCheckedIn = session?.checkInStatus === 'completed';
+  const finalStatus = session?.finalAttendanceStatus;
+  const initialStatus = session?.initialCheckInStatus;
+  const statusLabel = finalStatus
+    ? `Final: ${finalStatus[0].toUpperCase()}${finalStatus.slice(1)}`
+    : initialStatus === 'late_checked_in'
+      ? 'Initial check-in complete (late)'
+      : initialStatus === 'checked_in'
+        ? 'Initial check-in complete (on time)'
+        : session?.attemptStatus === 'failed'
+          ? 'Verification failed'
+          : 'Check in now';
 
   return (
     <View style={styles.card}>
@@ -80,11 +91,12 @@ export function ActiveSessionCard({ session, onStart }: ActiveSessionCardProps) 
 
       <View style={styles.button}>
         <AppButton
-          title={isCheckedIn ? 'Check-in result' : 'Start attendance'}
+          title={isCheckedIn ? 'View progress' : 'Start attendance'}
           onPress={onStart}
         />
       </View>
-      <Text style={styles.closingText}>{closingText}</Text>
+      <Text style={styles.closingText}>{statusLabel}</Text>
+      {!isCheckedIn ? <Text style={styles.closingText}>{closingText}</Text> : null}
     </View>
   );
 }

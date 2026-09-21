@@ -5,6 +5,7 @@ import { DashboardScreen } from '../../../features/dashboard/screens/DashboardSc
 import { useAuth } from '../../../features/auth/context/AuthContext';
 import { CoreApiCourseService } from '../../../features/courses/services/coreApiCourseService';
 import { CoreApiActiveAttendanceSessionService } from '../../../features/dashboard/services/coreApiActiveAttendanceSessionService';
+import { MockActiveAttendanceSessionService } from '../../../features/dashboard/services/mockActiveAttendanceSessionService';
 import { FaceVerificationApiService } from '../../../features/face-verification/services/faceVerificationApiService';
 import { CoreApiProfileService } from '../../../features/profile/services/coreApiProfileService';
 import { CoreApiClient } from '../../../services/api/coreApiClient';
@@ -15,8 +16,9 @@ export default function StudentHomeRoute() {
   const accessToken =
     session.status === 'authenticated' ? session.accessToken : undefined;
   const activeSessionService = useMemo(
-    () =>
-      new CoreApiActiveAttendanceSessionService(
+    () => process.env.EXPO_PUBLIC_API_MODE === 'mock'
+      ? new MockActiveAttendanceSessionService()
+      : new CoreApiActiveAttendanceSessionService(
         new CoreApiClient({ getAccessToken: () => accessToken }),
       ),
     [accessToken],

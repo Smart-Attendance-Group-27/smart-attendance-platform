@@ -23,8 +23,8 @@ type AttendanceSessionDetailsScreenProps = {
   sessionId: string;
   attendanceService: AttendanceService;
   onBack: () => void;
-  onCheckInCompleted?: (sessionId: string) => void;
-  onStartCheckIn: (requiresQr: boolean) => void;
+  onOpenProgress?: (sessionId: string) => void;
+  onStartCheckIn: () => void;
 };
 
 type AttendanceSessionDetailsState =
@@ -98,7 +98,7 @@ export function AttendanceSessionDetailsScreen({
   sessionId,
   attendanceService,
   onBack,
-  onCheckInCompleted,
+  onOpenProgress,
   onStartCheckIn,
 }: AttendanceSessionDetailsScreenProps) {
   const [state, setState] = useState<AttendanceSessionDetailsState>({
@@ -119,9 +119,9 @@ export function AttendanceSessionDetailsScreen({
         if (result.status === 'available') {
           if (
             result.session.checkInStatus === 'completed' &&
-            onCheckInCompleted
+            onOpenProgress
           ) {
-            onCheckInCompleted(sessionId);
+            onOpenProgress(sessionId);
             return;
           }
           setState({ status: 'ready', session: result.session });
@@ -139,7 +139,7 @@ export function AttendanceSessionDetailsScreen({
     return () => {
       isMounted = false;
     };
-  }, [attendanceService, onCheckInCompleted, requestNumber, sessionId]);
+  }, [attendanceService, onOpenProgress, requestNumber, sessionId]);
 
   const retry = useCallback(() => {
     setState({ status: 'loading' });
@@ -211,7 +211,7 @@ function SessionContent({
   onStartCheckIn,
 }: {
   session: AttendanceSession;
-  onStartCheckIn: (requiresQr: boolean) => void;
+  onStartCheckIn: () => void;
 }) {
   const formattedSession = formatAttendanceSession(session);
   const isOpen = session.checkInStatus === 'open';
@@ -224,6 +224,9 @@ function SessionContent({
         session={session}
       />
       <AttendanceProgressSteps />
+      {session.attemptStatus === 'failed' ? (
+        <Text style={styles.readOnlyText}>Verification failed. Ask your lecturer for help.</Text>
+      ) : null}
 
       {!isOpen ? (
         <View style={styles.readOnlyNotice}>
@@ -248,7 +251,7 @@ function SessionContent({
         <View style={styles.action}>
           <AppButton
             accessibilityLabel="Start attendance check-in"
-            onPress={() => onStartCheckIn(session.requiresQr)}
+            onPress={onStartCheckIn}
             title="Start Check-In"
           />
         </View>

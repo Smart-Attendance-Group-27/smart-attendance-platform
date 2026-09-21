@@ -10,6 +10,7 @@ import { fireEvent, render } from '@testing-library/react-native';
 import FaceVerificationRoute from '../../../app/(student)/attendance/[sessionId]/face-verification';
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 let mockSearchParams: {
   sessionId?: string | string[];
   requiresQr?: string | string[];
@@ -26,6 +27,7 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockSearchParams,
   useRouter: () => ({
     push: mockPush,
+    replace: mockReplace,
   }),
 }));
 
@@ -59,6 +61,7 @@ jest.mock('../screens/FaceVerificationScreen', () => {
 describe('FaceVerificationRoute', () => {
   beforeEach(() => {
     mockPush.mockClear();
+    mockReplace.mockClear();
     mockSearchParams = {
       sessionId: 'attendance-session-active',
     };
@@ -69,7 +72,7 @@ describe('FaceVerificationRoute', () => {
     };
   });
 
-  test('opens QR scanner with the normalized session ID when QR is required', async () => {
+  test('opens Progress with the normalized session ID after face verification', async () => {
     mockSearchParams = {
       sessionId: [' attendance-session-active ', 'ignored-session'],
       requiresQr: '1',
@@ -82,16 +85,16 @@ describe('FaceVerificationRoute', () => {
       }),
     );
 
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/(student)/attendance/[sessionId]/qr-scanner',
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/(student)/attendance/[sessionId]/progress',
       params: {
         sessionId: 'attendance-session-active',
       },
     });
   });
 
-  test('goes directly to check-in success when QR is not required', async () => {
+  test('uses Progress for sessions without QR too', async () => {
     mockSearchParams = {
       sessionId: 'attendance-session-active',
       requiresQr: '0',
@@ -104,9 +107,9 @@ describe('FaceVerificationRoute', () => {
       }),
     );
 
-    expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: '/(student)/attendance/[sessionId]/check-in-success',
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith({
+      pathname: '/(student)/attendance/[sessionId]/progress',
       params: {
         sessionId: 'attendance-session-active',
       },

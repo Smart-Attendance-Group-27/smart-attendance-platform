@@ -1,20 +1,10 @@
 from dataclasses import dataclass
 from decimal import Decimal
-from uuid import UUID
 
 import asyncpg
 
 AT_RISK_THRESHOLD_PERCENT = 70
 DEFAULT_TREND_WEEKS = 8
-
-# "Present" for reporting purposes always means attendance_records rows, the
-# same present/late/absent vocabulary the rest of the codebase uses (see
-# modules/attendance_verification/manual_review). Nothing outside manual
-# review writes attendance_records yet -- there is no automatic "mark the
-# student present after a successful verification" step anywhere in this
-# codebase. These reports are honest about whatever real rows exist; they do
-# not simulate a finalization step that hasn't been built.
-PRESENT_STATUSES = ("present", "late")
 
 
 @dataclass(frozen=True)
@@ -52,14 +42,20 @@ class AdminInstitutionReportRepository:
             SELECT
                 (
                     SELECT ROUND(
-                        100.0 * COUNT(*) FILTER (WHERE attendance_status IN ('present', 'late'))
+                        100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late'))
                         / NULLIF(COUNT(*), 0),
                         1
                     )
-                    FROM attendance_verification.attendance_records
+                    FROM attendance_session.sessions AS session
+                    JOIN attendance_session.session_students AS roster
+                        ON roster.session_id = session.id
+                    LEFT JOIN attendance_verification.attendance_records AS record
+                        ON record.session_id = session.id AND record.student_id = roster.student_id
+                    WHERE session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
                 ) AS overall_attendance_percent,
                 (
-                    SELECT COUNT(*) FROM attendance_session.sessions WHERE closed_at IS NOT NULL
+                    SELECT COUNT(*) FROM attendance_session.sessions
+                    WHERE closed_at IS NOT NULL AND cancelled_at IS NULL
                 ) AS total_sessions_completed,
                 (
                     SELECT COUNT(*) FROM academic.student_profiles WHERE profile_status = 'active'
@@ -70,11 +66,16 @@ class AdminInstitutionReportRepository:
                 (
                     SELECT COUNT(*) FROM (
                         SELECT
-                            student_id,
-                            100.0 * COUNT(*) FILTER (WHERE attendance_status IN ('present', 'late'))
+                            roster.student_id,
+                            100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late'))
                                 / NULLIF(COUNT(*), 0) AS rate
-                        FROM attendance_verification.attendance_records
-                        GROUP BY student_id
+                        FROM attendance_session.sessions AS session
+                        JOIN attendance_session.session_students AS roster
+                            ON roster.session_id = session.id
+                        LEFT JOIN attendance_verification.attendance_records AS record
+                            ON record.session_id = session.id AND record.student_id = roster.student_id
+                        WHERE session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
+                        GROUP BY roster.student_id
                     ) AS student_rates
                     WHERE rate < $1
                 ) AS students_at_risk_count
@@ -102,9 +103,12 @@ class AdminInstitutionReportRepository:
                     DATE_TRUNC('week', session.scheduled_start_at) AS week_start,
                     COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late')) AS present_count,
                     COUNT(*) AS total_count
-                FROM attendance_verification.attendance_records AS record
-                JOIN attendance_session.sessions AS session
-                    ON session.id = record.session_id
+                FROM attendance_session.sessions AS session
+                JOIN attendance_session.session_students AS roster
+                    ON roster.session_id = session.id
+                LEFT JOIN attendance_verification.attendance_records AS record
+                    ON record.session_id = session.id AND record.student_id = roster.student_id
+                WHERE session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
                 GROUP BY week_start
                 ORDER BY week_start DESC
                 LIMIT $1
@@ -138,9 +142,11 @@ class AdminInstitutionReportRepository:
                     / NULLIF(COUNT(*), 0),
                     1
                 ) AS attendance_rate_percent
-            FROM attendance_verification.attendance_records AS record
-            JOIN attendance_session.sessions AS session
-                ON session.id = record.session_id
+            FROM attendance_session.sessions AS session
+            JOIN attendance_session.session_students AS roster
+                ON roster.session_id = session.id
+            LEFT JOIN attendance_verification.attendance_records AS record
+                ON record.session_id = session.id AND record.student_id = roster.student_id
             JOIN academic.course_offerings AS offering
                 ON offering.id = session.course_offering_id
             JOIN academic.courses AS course
@@ -149,6 +155,7 @@ class AdminInstitutionReportRepository:
                 ON department.id = course.department_id
             JOIN academic.faculties AS faculty
                 ON faculty.id = department.faculty_id
+            WHERE session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
             GROUP BY faculty.faculty_name
             ORDER BY faculty.faculty_name ASC
             """,
@@ -174,16 +181,19 @@ class AdminInstitutionReportRepository:
                 course.course_name,
                 ROUND(
                     100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late'))
-                    / COUNT(*),
+                    / NULLIF(COUNT(*), 0),
                     1
                 ) AS attendance_rate_percent
-            FROM attendance_verification.attendance_records AS record
-            JOIN attendance_session.sessions AS session
-                ON session.id = record.session_id
+            FROM attendance_session.sessions AS session
+            JOIN attendance_session.session_students AS roster
+                ON roster.session_id = session.id
+            LEFT JOIN attendance_verification.attendance_records AS record
+                ON record.session_id = session.id AND record.student_id = roster.student_id
             JOIN academic.course_offerings AS offering
                 ON offering.id = session.course_offering_id
             JOIN academic.courses AS course
                 ON course.id = offering.course_id
+            WHERE session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
             GROUP BY course.id, course.course_code, course.course_name
             HAVING
                 COUNT(*) > 0

@@ -1,11 +1,14 @@
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+from dataclasses import fields
+from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
 
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
 from modules.academic.lecturer_profile.repository import LecturerProfileRecord
+from modules.attendance_verification.attendance_state import FinalAttendanceStatus
+from modules.attendance_verification.manual_attendance.exception import SessionCancelledError
 from modules.attendance_verification.manual_review.exception import (
     VerificationAttemptNotFailedError,
     VerificationAttemptNotFoundError,
@@ -14,6 +17,7 @@ from modules.attendance_verification.manual_review.repository import (
     AttendanceRecordRecord,
     ManualReviewQueueItemRecord,
     ManualReviewRecord,
+    ManualReviewRepository,
     VerificationAttemptDetailRecord,
 )
 from modules.attendance_verification.manual_review.schemas import ManualReviewDecision
@@ -83,10 +87,7 @@ class FakeManualReviewRepository:
         self.queue_item = queue_item
         self.previous_review = previous_review
         self.previous_record = previous_record
-        self.upserted_attendance_records: list[dict] = []
-        self.deleted_attendance_records: list[tuple[UUID, UUID]] = []
         self.upserted_reviews: list[dict] = []
-        self.reset_attempts: list[UUID] = []
 
     async def find_attempt_for_lecturer(
         self,
@@ -104,17 +105,8 @@ class FakeManualReviewRepository:
     async def find_attendance_record(self, connection, session_id: UUID, student_id: UUID):
         return self.previous_record
 
-    async def upsert_attendance_record(self, connection, **kwargs) -> None:
-        self.upserted_attendance_records.append(kwargs)
-
-    async def delete_attendance_record(self, connection, session_id: UUID, student_id: UUID) -> None:
-        self.deleted_attendance_records.append((session_id, student_id))
-
     async def upsert_manual_review(self, connection, **kwargs) -> None:
         self.upserted_reviews.append(kwargs)
-
-    async def reset_attempt_for_retry(self, connection, verification_attempt_id: UUID) -> None:
-        self.reset_attempts.append(verification_attempt_id)
 
     async def find_queue_item_for_lecturer(
         self,
@@ -123,6 +115,19 @@ class FakeManualReviewRepository:
         lecturer_id: UUID,
     ):
         return self.queue_item
+
+
+class FakeManualAttendanceService:
+    """Stands in for ManualAttendanceService and records what review writes."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.calls: list[dict] = []
+
+    async def set_status_in_transaction(self, connection, **kwargs) -> None:
+        if self.error is not None:
+            raise self.error
+        self.calls.append(kwargs)
 
 
 def build_profile() -> LecturerProfileRecord:
@@ -138,19 +143,12 @@ def build_profile() -> LecturerProfileRecord:
     )
 
 
-def build_attempt(
-    *,
-    status: str = "failed",
-    started_at: datetime = CURRENT_TIME,
-    late_after_at: datetime | None = CURRENT_TIME + timedelta(minutes=15),
-) -> VerificationAttemptDetailRecord:
+def build_attempt(*, status: str = "failed") -> VerificationAttemptDetailRecord:
     return VerificationAttemptDetailRecord(
         id=ATTEMPT_ID,
         session_id=SESSION_ID,
         student_id=STUDENT_ID,
         status=status,
-        started_at=started_at,
-        late_after_at=late_after_at,
     )
 
 
@@ -180,11 +178,46 @@ def build_queue_item(review_status: str = "approve") -> ManualReviewQueueItemRec
     )
 
 
-async def test_approve_marks_present_when_before_late_cutoff() -> None:
-    repository = FakeManualReviewRepository(attempt=build_attempt(), queue_item=build_queue_item())
-    service = ManualReviewService(
+def build_service(
+    repository: FakeManualReviewRepository,
+    manual_attendance: FakeManualAttendanceService | None = None,
+) -> ManualReviewService:
+    return ManualReviewService(
         repository=repository,
         lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        manual_attendance_service=manual_attendance or FakeManualAttendanceService(),
+    )
+
+
+async def test_approve_writes_the_status_the_lecturer_chose() -> None:
+    repository = FakeManualReviewRepository(attempt=build_attempt(), queue_item=build_queue_item())
+    manual_attendance = FakeManualAttendanceService()
+    service = build_service(repository, manual_attendance)
+
+    await service.decide_for_user(
+        FakePool(),
+        USER_ID,
+        ATTEMPT_ID,
+        ManualReviewDecision.APPROVE,
+        "late",
+        "looked fine on camera",
+    )
+
+    assert len(manual_attendance.calls) == 1
+    call = manual_attendance.calls[0]
+    assert call["status"] is FinalAttendanceStatus.LATE
+    assert call["session_id"] == SESSION_ID
+    assert call["student_id"] == STUDENT_ID
+    assert call["lecturer_user_id"] == USER_ID
+    assert call["reason"] == "looked fine on camera"
+    assert repository.upserted_reviews[0]["review_status"] == "approve"
+
+
+async def test_approve_as_present_writes_present() -> None:
+    manual_attendance = FakeManualAttendanceService()
+    service = build_service(
+        FakeManualReviewRepository(attempt=build_attempt(), queue_item=build_queue_item()),
+        manual_attendance,
     )
 
     await service.decide_for_user(
@@ -192,96 +225,143 @@ async def test_approve_marks_present_when_before_late_cutoff() -> None:
         USER_ID,
         ATTEMPT_ID,
         ManualReviewDecision.APPROVE,
-        "looked fine on camera",
+        "present",
+        "in the room",
     )
 
-    assert len(repository.upserted_attendance_records) == 1
-    assert repository.upserted_attendance_records[0]["attendance_status"] == "present"
-    assert repository.upserted_reviews[0]["review_status"] == "approve"
+    assert manual_attendance.calls[0]["status"] is FinalAttendanceStatus.PRESENT
 
 
-async def test_approve_marks_late_when_started_after_late_cutoff() -> None:
-    attempt = build_attempt(started_at=CURRENT_TIME + timedelta(minutes=20))
-    repository = FakeManualReviewRepository(attempt=attempt, queue_item=build_queue_item())
-    service = ManualReviewService(
-        repository=repository,
-        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+async def test_approve_needs_an_explicit_status() -> None:
+    repository = FakeManualReviewRepository(attempt=build_attempt())
+    manual_attendance = FakeManualAttendanceService()
+    service = build_service(repository, manual_attendance)
+
+    with pytest.raises(ValueError):
+        await service.decide_for_user(
+            FakePool(),
+            USER_ID,
+            ATTEMPT_ID,
+            ManualReviewDecision.APPROVE,
+            None,
+            "in the room",
+        )
+
+    assert manual_attendance.calls == []
+    assert repository.upserted_reviews == []
+
+
+async def test_approve_cannot_be_used_to_write_absent() -> None:
+    manual_attendance = FakeManualAttendanceService()
+    service = build_service(FakeManualReviewRepository(attempt=build_attempt()), manual_attendance)
+
+    with pytest.raises(ValueError):
+        await service.decide_for_user(
+            FakePool(),
+            USER_ID,
+            ATTEMPT_ID,
+            ManualReviewDecision.APPROVE,
+            "absent",
+            "in the room",
+        )
+
+    assert manual_attendance.calls == []
+
+
+async def test_reject_writes_absent() -> None:
+    repository = FakeManualReviewRepository(
+        attempt=build_attempt(),
+        queue_item=build_queue_item("reject"),
+    )
+    manual_attendance = FakeManualAttendanceService()
+    service = build_service(repository, manual_attendance)
+
+    await service.decide_for_user(
+        FakePool(),
+        USER_ID,
+        ATTEMPT_ID,
+        ManualReviewDecision.REJECT,
+        None,
+        "no show",
     )
 
-    await service.decide_for_user(FakePool(), USER_ID, ATTEMPT_ID, ManualReviewDecision.APPROVE, None)
-
-    assert repository.upserted_attendance_records[0]["attendance_status"] == "late"
-
-
-async def test_reject_marks_absent() -> None:
-    repository = FakeManualReviewRepository(attempt=build_attempt(), queue_item=build_queue_item("reject"))
-    service = ManualReviewService(
-        repository=repository,
-        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
-    )
-
-    await service.decide_for_user(FakePool(), USER_ID, ATTEMPT_ID, ManualReviewDecision.REJECT, "no show")
-
-    assert repository.upserted_attendance_records[0]["attendance_status"] == "absent"
+    assert manual_attendance.calls[0]["status"] is FinalAttendanceStatus.ABSENT
+    assert manual_attendance.calls[0]["reason"] == "no show"
     assert repository.upserted_reviews[0]["review_status"] == "reject"
 
 
-async def test_retry_resets_attempt_and_clears_any_prior_record() -> None:
-    repository = FakeManualReviewRepository(attempt=build_attempt(), queue_item=build_queue_item("retry"))
-    service = ManualReviewService(
-        repository=repository,
-        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
-    )
+async def test_a_refused_attendance_write_leaves_no_review_row() -> None:
+    repository = FakeManualReviewRepository(attempt=build_attempt(), queue_item=build_queue_item())
+    service = build_service(repository, FakeManualAttendanceService(error=SessionCancelledError()))
 
-    await service.decide_for_user(FakePool(), USER_ID, ATTEMPT_ID, ManualReviewDecision.RETRY, None)
+    with pytest.raises(SessionCancelledError):
+        await service.decide_for_user(
+            FakePool(),
+            USER_ID,
+            ATTEMPT_ID,
+            ManualReviewDecision.APPROVE,
+            "present",
+            "in the room",
+        )
 
-    assert repository.reset_attempts == [ATTEMPT_ID]
-    assert repository.deleted_attendance_records == [(SESSION_ID, STUDENT_ID)]
-    assert repository.upserted_attendance_records == []
+    assert repository.upserted_reviews == []
 
 
-async def test_escalate_leaves_attendance_record_untouched() -> None:
-    repository = FakeManualReviewRepository(attempt=build_attempt(), queue_item=build_queue_item("escalate"))
-    service = ManualReviewService(
-        repository=repository,
-        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
-    )
+def test_lateness_is_never_inferred_from_when_the_attempt_started() -> None:
+    field_names = {field.name for field in fields(VerificationAttemptDetailRecord)}
 
-    await service.decide_for_user(FakePool(), USER_ID, ATTEMPT_ID, ManualReviewDecision.ESCALATE, None)
+    assert "started_at" not in field_names
+    assert "late_after_at" not in field_names
 
-    assert repository.upserted_attendance_records == []
-    assert repository.deleted_attendance_records == []
-    assert repository.upserted_reviews[0]["review_status"] == "escalate"
+
+def test_retry_and_escalate_no_longer_exist() -> None:
+    assert {decision.value for decision in ManualReviewDecision} == {"approve", "reject"}
+    assert not hasattr(ManualReviewRepository, "reset_attempt_for_retry")
+    assert not hasattr(ManualReviewRepository, "delete_attendance_record")
+    assert not hasattr(ManualReviewRepository, "upsert_attendance_record")
 
 
 async def test_rejects_missing_verification_attempt() -> None:
-    repository = FakeManualReviewRepository(attempt=None)
-    service = ManualReviewService(
-        repository=repository,
-        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
-    )
+    service = build_service(FakeManualReviewRepository(attempt=None))
 
     with pytest.raises(VerificationAttemptNotFoundError):
-        await service.decide_for_user(FakePool(), USER_ID, ATTEMPT_ID, ManualReviewDecision.APPROVE, None)
+        await service.decide_for_user(
+            FakePool(),
+            USER_ID,
+            ATTEMPT_ID,
+            ManualReviewDecision.APPROVE,
+            "present",
+            "in the room",
+        )
 
 
 async def test_rejects_attempt_that_is_not_failed() -> None:
-    repository = FakeManualReviewRepository(attempt=build_attempt(status="in_progress"))
-    service = ManualReviewService(
-        repository=repository,
-        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
-    )
+    service = build_service(FakeManualReviewRepository(attempt=build_attempt(status="in_progress")))
 
     with pytest.raises(VerificationAttemptNotFailedError):
-        await service.decide_for_user(FakePool(), USER_ID, ATTEMPT_ID, ManualReviewDecision.APPROVE, None)
+        await service.decide_for_user(
+            FakePool(),
+            USER_ID,
+            ATTEMPT_ID,
+            ManualReviewDecision.APPROVE,
+            "present",
+            "in the room",
+        )
 
 
 async def test_rejects_missing_lecturer_profile() -> None:
-    repository = FakeManualReviewRepository(attempt=build_attempt())
     service = ManualReviewService(
-        repository=repository,
+        repository=FakeManualReviewRepository(attempt=build_attempt()),
         lecturer_profile_repository=FakeLecturerProfileRepository(None),
+        manual_attendance_service=FakeManualAttendanceService(),
     )
 
     with pytest.raises(LecturerProfileNotFoundError):
-        await service.decide_for_user(FakePool(), USER_ID, ATTEMPT_ID, ManualReviewDecision.APPROVE, None)
+        await service.decide_for_user(
+            FakePool(),
+            USER_ID,
+            ATTEMPT_ID,
+            ManualReviewDecision.APPROVE,
+            "present",
+            "in the room",
+        )

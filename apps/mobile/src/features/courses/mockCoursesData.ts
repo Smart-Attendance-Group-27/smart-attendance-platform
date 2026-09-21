@@ -3,7 +3,7 @@ export interface Session {
   title: string;
   timeText: string; // e.g., "Today · 10:00–12:00 · Lecture Hall 02 · Lecture"
   type: 'Lecture' | 'Lab' | 'Workshop';
-  status: 'active' | 'upcoming' | 'waiting_qr' | 'marked' | 'missed' | 'closed';
+  status: 'active' | 'upcoming' | 'marked' | 'late' | 'absent' | 'cancelled' | 'awaiting';
   recordedTime?: string; // e.g. "Recorded at 08:06"
   weekHeader?: string; // e.g., "This week", "13–19 July", "6–12 July"
 }
@@ -14,7 +14,7 @@ export interface AttendanceRecord {
   month: string; // "JUL"
   title: string; // "Lecture 05"
   recordedText: string; // "Recorded at 08:06" or "No record found"
-  status: 'Present' | 'Absent';
+  status: 'Present' | 'Late' | 'Absent' | 'Cancelled' | 'Awaiting';
 }
 
 export interface Course {
@@ -71,7 +71,7 @@ export const mockCourses: Course[] = [
         title: 'Team Standup Review',
         timeText: '14 Jul · 09:00–10:00 · Lab 3 · Lab',
         type: 'Lab',
-        status: 'missed',
+        status: 'absent',
         weekHeader: '13–19 July',
       },
       {
@@ -79,8 +79,24 @@ export const mockCourses: Course[] = [
         title: 'Project Kickoff',
         timeText: '9 Jul · 10:00–12:00 · Lecture Hall 02 · Lecture',
         type: 'Lecture',
-        status: 'closed',
+        status: 'late',
         weekHeader: '6–12 July',
+      },
+      {
+        id: 's6',
+        title: 'Cancelled Tutorial',
+        timeText: '7 Jul · 10:00–11:00 · Room B4 · Tutorial',
+        type: 'Lecture',
+        status: 'cancelled',
+        weekHeader: '6–12 July',
+      },
+      {
+        id: 's7',
+        title: 'Awaiting Result',
+        timeText: 'Today · 08:00–09:00 · Room B4 · Lecture',
+        type: 'Lecture',
+        status: 'awaiting',
+        weekHeader: 'This week',
       },
     ],
     attendanceRecords: [
@@ -106,7 +122,7 @@ export const mockCourses: Course[] = [
         month: 'JUL',
         title: 'Lecture 04',
         recordedText: 'Recorded at 09:58',
-        status: 'Present',
+        status: 'Late',
       },
       {
         id: 'r4',
@@ -115,6 +131,14 @@ export const mockCourses: Course[] = [
         title: 'Lecture 03',
         recordedText: 'Recorded at 10:03',
         status: 'Present',
+      },
+      {
+        id: 'r5', day: '07', month: 'JUL', title: 'Cancelled Tutorial',
+        recordedText: 'Session cancelled', status: 'Cancelled',
+      },
+      {
+        id: 'r6', day: '20', month: 'SEP', title: 'Awaiting Result',
+        recordedText: 'Awaiting final attendance', status: 'Awaiting',
       },
     ],
   },
@@ -252,7 +276,7 @@ export const mockCourses: Course[] = [
         title: 'Partial Differential Equations',
         timeText: '11 Jul · 10:00–12:00 · Room C1 · Lecture',
         type: 'Lecture',
-        status: 'missed',
+        status: 'absent',
         weekHeader: '6–12 July',
       },
     ],

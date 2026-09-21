@@ -76,7 +76,6 @@ describe('FaceIntroductionRoute', () => {
         '/(student)/attendance/[sessionId]/face-verification',
       params: {
         sessionId: 'attendance-session-active',
-        requiresQr: undefined,
       },
     });
   });
@@ -109,7 +108,7 @@ describe('FaceIntroductionRoute', () => {
 
     await waitFor(() =>
       expect(mockReplace).toHaveBeenCalledWith({
-        pathname: '/(student)/attendance/[sessionId]/qr-scanner',
+        pathname: '/(student)/attendance/[sessionId]/progress',
         params: { sessionId: 'attendance-session-active' },
       }),
     );

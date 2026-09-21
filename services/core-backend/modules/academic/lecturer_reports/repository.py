@@ -115,14 +115,17 @@ class LecturerReportRepository:
                             1
                         )
                         END
-                    FROM attendance_verification.attendance_records AS record
-                    JOIN attendance_session.sessions AS session
-                        ON session.id = record.session_id
+                    FROM attendance_session.sessions AS session
+                    JOIN attendance_session.session_students AS roster
+                        ON roster.session_id = session.id
+                    LEFT JOIN attendance_verification.attendance_records AS record
+                        ON record.session_id = session.id AND record.student_id = roster.student_id
                     JOIN academic.course_offerings AS offering
                         ON offering.id = session.course_offering_id
                     JOIN academic.course_lecturers AS assignment
                         ON assignment.course_offering_id = offering.id
                     WHERE assignment.lecturer_id = $1
+                      AND session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
                 ) AS average_attendance_rate_percent,
                 (
                     SELECT COUNT(*)
@@ -176,8 +179,16 @@ class LecturerReportRepository:
                     WHERE ar.session_id = session.id AND ar.attendance_status = 'late'
                 ) AS late_count,
                 (
-                    SELECT COUNT(*) FROM attendance_verification.attendance_records ar
-                    WHERE ar.session_id = session.id AND ar.attendance_status = 'absent'
+                    SELECT COUNT(*)
+                    FROM attendance_session.session_students AS roster
+                    LEFT JOIN attendance_verification.attendance_records AS record
+                        ON record.session_id = roster.session_id
+                       AND record.student_id = roster.student_id
+                    WHERE roster.session_id = session.id
+                      AND (record.attendance_status = 'absent' OR (
+                          session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
+                          AND record.id IS NULL
+                      ))
                 ) AS absent_count,
                 (
                     SELECT COUNT(*)
@@ -224,14 +235,17 @@ class LecturerReportRepository:
                     DATE_TRUNC('week', session.scheduled_start_at) AS week_start,
                     COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late')) AS present_count,
                     COUNT(*) AS total_count
-                FROM attendance_verification.attendance_records AS record
-                JOIN attendance_session.sessions AS session
-                    ON session.id = record.session_id
+                FROM attendance_session.sessions AS session
+                JOIN attendance_session.session_students AS roster
+                    ON roster.session_id = session.id
+                LEFT JOIN attendance_verification.attendance_records AS record
+                    ON record.session_id = session.id AND record.student_id = roster.student_id
                 JOIN academic.course_offerings AS offering
                     ON offering.id = session.course_offering_id
                 JOIN academic.course_lecturers AS assignment
                     ON assignment.course_offering_id = offering.id
                 WHERE assignment.lecturer_id = $1
+                  AND session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
                 GROUP BY week_start
                 ORDER BY week_start DESC
                 LIMIT $2
@@ -278,9 +292,11 @@ class LecturerReportRepository:
                 MAX(session.scheduled_start_at) FILTER (
                     WHERE record.attendance_status IN ('present', 'late')
                 ) AS last_attended_at
-            FROM attendance_verification.attendance_records AS record
-            JOIN attendance_session.sessions AS session
-                ON session.id = record.session_id
+            FROM attendance_session.sessions AS session
+            JOIN attendance_session.session_students AS roster
+                ON roster.session_id = session.id
+            LEFT JOIN attendance_verification.attendance_records AS record
+                ON record.session_id = session.id AND record.student_id = roster.student_id
             JOIN academic.course_offerings AS offering
                 ON offering.id = session.course_offering_id
             JOIN academic.course_lecturers AS assignment
@@ -288,8 +304,9 @@ class LecturerReportRepository:
             JOIN academic.courses AS course
                 ON course.id = offering.course_id
             JOIN academic.student_profiles AS student
-                ON student.id = record.student_id
+                ON student.id = roster.student_id
             WHERE assignment.lecturer_id = $1
+              AND session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
             GROUP BY student.id, student.registration_number, full_name, course.course_code
             HAVING
                 COUNT(*) > 0

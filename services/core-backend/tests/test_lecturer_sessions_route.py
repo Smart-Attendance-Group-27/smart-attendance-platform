@@ -18,8 +18,12 @@ from main import create_app
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
 from modules.attendance_sessions.lecturer_sessions.exception import (
     ClassroomGeofenceNotConfiguredError,
+    GeofenceRequiredError,
+    InvalidCancellationReasonError,
     InvalidSessionScheduleError,
     SessionAlreadyActiveError,
+    SessionAlreadyCancelledError,
+    SessionAlreadyClosedError,
     SessionNotActiveError,
     SessionNotFoundError,
     TimetableEntryNotFoundError,
@@ -142,6 +146,13 @@ class StubLecturerSessionService:
 
     async def activate_for_user(self, pool, user_id, session_id):
         self.calls.append("activate")
+        if self.error is not None:
+            raise self.error
+        return self.session
+
+    async def cancel_for_user(self, pool, user_id, session_id, reason, redis_client=None):
+        self.calls.append("cancel")
+        self.cancel_args = (user_id, session_id, reason)
         if self.error is not None:
             raise self.error
         return self.session
@@ -497,3 +508,125 @@ def test_the_service_factory_passes_the_bound_notification_producer_through(monk
     service = get_lecturer_session_service(request)
 
     assert service._notification_producer is producer
+def test_create_session_without_geofence_returns_the_documented_422(
+    jwks_document,
+    make_access_token,
+) -> None:
+    service = StubLecturerSessionService(error=GeofenceRequiredError())
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            SESSIONS_URL,
+            json=build_create_payload(requiresGeofence=False),
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "GEOFENCE_REQUIRED"
+
+
+def test_cancel_session(client: TestClient, service: StubLecturerSessionService, make_access_token) -> None:
+    cancelled = build_session(activated_at=CURRENT_TIME, cancelled_at=CURRENT_TIME)
+    service.session = cancelled
+
+    response = client.post(
+        f"{SESSIONS_URL}/{SESSION_ID}/cancel",
+        json={"reason": "  room flooded  "},
+        headers=authorize(lecturer_token(make_access_token)),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    assert response.json()["id"] == str(SESSION_ID)
+    assert service.calls == ["cancel"]
+    user_id, session_id, reason = service.cancel_args
+    assert user_id == LECTURER_USER_ID
+    assert session_id == SESSION_ID
+    assert reason == "room flooded"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"reason": ""},
+        {"reason": "   "},
+        {"reason": "ab"},
+        {"reason": "x" * 501},
+        {"reason": "room flooded", "status": "closed"},
+    ],
+)
+def test_cancel_rejects_an_invalid_reason_before_reaching_the_service(
+    client: TestClient,
+    service: StubLecturerSessionService,
+    make_access_token,
+    payload: dict,
+) -> None:
+    response = client.post(
+        f"{SESSIONS_URL}/{SESSION_ID}/cancel",
+        json=payload,
+        headers=authorize(lecturer_token(make_access_token)),
+    )
+
+    assert response.status_code == 422
+    assert service.calls == []
+
+
+@pytest.mark.parametrize(
+    ("error", "status_code", "code"),
+    [
+        (SessionAlreadyClosedError(), 409, "SESSION_ALREADY_CLOSED"),
+        (SessionAlreadyCancelledError(), 409, "SESSION_ALREADY_CANCELLED"),
+        (InvalidCancellationReasonError(), 422, "REASON_INVALID"),
+    ],
+)
+def test_cancel_maps_domain_errors_to_the_documented_codes(
+    jwks_document,
+    make_access_token,
+    error: Exception,
+    status_code: int,
+    code: str,
+) -> None:
+    with build_client(jwks_document, StubLecturerSessionService(error=error)) as client:
+        response = client.post(
+            f"{SESSIONS_URL}/{SESSION_ID}/cancel",
+            json={"reason": "room flooded"},
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    assert response.status_code == status_code
+    assert response.json()["detail"]["code"] == code
+
+
+@pytest.mark.parametrize(
+    "error",
+    [SessionNotFoundError(), LecturerProfileNotFoundError()],
+)
+def test_cancel_returns_404_for_a_missing_session_or_profile(
+    jwks_document,
+    make_access_token,
+    error: Exception,
+) -> None:
+    with build_client(jwks_document, StubLecturerSessionService(error=error)) as client:
+        response = client.post(
+            f"{SESSIONS_URL}/{SESSION_ID}/cancel",
+            json={"reason": "room flooded"},
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    assert response.status_code == 404
+
+
+def test_a_student_cannot_cancel_a_session(client: TestClient, make_access_token) -> None:
+    response = client.post(
+        f"{SESSIONS_URL}/{SESSION_ID}/cancel",
+        json={"reason": "room flooded"},
+        headers=authorize(make_access_token(subject=LINKED_STUDENT_SUBJECT, roles=("student",))),
+    )
+
+    assert response.status_code == 403
+
+
+def test_cancel_requires_a_bearer_token(client: TestClient) -> None:
+    response = client.post(f"{SESSIONS_URL}/{SESSION_ID}/cancel", json={"reason": "room flooded"})
+
+    assert response.status_code == 401

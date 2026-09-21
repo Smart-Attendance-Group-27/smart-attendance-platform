@@ -1,4 +1,5 @@
 import {
+  afterEach,
   beforeEach,
   describe,
   expect,
@@ -24,16 +25,6 @@ jest.mock('../../auth/context/AuthContext', () => ({
   }),
 }));
 
-jest.mock('../services/coreApiAttendanceService', () => {
-  const actual = jest.requireActual('../services/mockAttendanceService') as {
-    MockAttendanceService: new () => unknown;
-  };
-
-  return {
-    CoreApiAttendanceService: actual.MockAttendanceService,
-  };
-});
-
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockSearchParams,
   useRouter: () => ({
@@ -44,12 +35,15 @@ jest.mock('expo-router', () => ({
 
 describe('AttendanceSessionDetailsRoute', () => {
   beforeEach(() => {
+    process.env.EXPO_PUBLIC_API_MODE = 'mock';
     mockBack.mockClear();
     mockPush.mockClear();
     mockSearchParams = {
       sessionId: 'attendance-session-active',
     };
   });
+
+  afterEach(() => { delete process.env.EXPO_PUBLIC_API_MODE; });
 
   test('opens location check with the normalized session ID', async () => {
     mockSearchParams = {
@@ -67,9 +61,6 @@ describe('AttendanceSessionDetailsRoute', () => {
       pathname: '/(student)/attendance/[sessionId]/location-check',
       params: {
         sessionId: 'attendance-session-active',
-        // 'attendance-session-active' in mockAttendanceService.ts is seeded
-        // with requiresQr: false.
-        requiresQr: '0',
       },
     });
   });

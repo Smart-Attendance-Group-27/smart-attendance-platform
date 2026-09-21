@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import {
   ActivityIndicator,
   Pressable,
@@ -215,10 +215,10 @@ export function DashboardScreen({
     router.push({
       pathname:
         attendanceSession.checkInStatus === 'completed'
-          ? '/(student)/attendance/[sessionId]/check-in-success'
+          ? '/(student)/attendance/[sessionId]/progress'
           : '/(student)/attendance/[sessionId]',
       params: { sessionId: attendanceSession.id },
-    });
+    } as unknown as Href);
   };
 
   const mapLectureToUpcoming = (lecture: Lecture) => {
@@ -457,7 +457,11 @@ function toDashboardSession(
     startTime: session.scheduledStartAt,
     endTime: session.checkInClosesAt,
     lateThreshold: session.lateAfterAt ?? session.checkInClosesAt,
-    checkInStatus: session.checkInCompleted ? 'completed' : 'open',
+    checkInStatus: session.initialCheckInStatus || session.finalAttendanceStatus
+      ? 'completed' : 'open',
+    initialCheckInStatus: session.initialCheckInStatus,
+    finalAttendanceStatus: session.finalAttendanceStatus,
+    attemptStatus: session.attemptStatus,
     sessionTitle: session.sessionTitle,
     venue: session.venue ?? undefined,
   };

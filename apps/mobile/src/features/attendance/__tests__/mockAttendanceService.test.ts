@@ -1,110 +1,39 @@
-import {
-  describe,
-  expect,
-  test,
-} from '@jest/globals';
+import { beforeEach, describe, expect, test } from '@jest/globals';
 
+import { resetMockAttendanceStore } from '../__fixtures__/mockAttendanceStore';
 import { MockAttendanceService } from '../services/mockAttendanceService';
 
-const ISO_8601_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})$/;
+beforeEach(resetMockAttendanceStore);
 
 describe('MockAttendanceService', () => {
-  test('returns the active session with details for check-in', async () => {
+  test('provides separate initial and final states', async () => {
     const service = new MockAttendanceService();
-
-    const result = await service.getAttendanceSession(
-      'attendance-session-active',
-    );
-
-    expect(result.status).toBe('available');
-
-    if (result.status !== 'available') {
-      throw new Error('Expected the active session to be available');
-    }
-
-    expect(result.session).toEqual(
-      expect.objectContaining({
-        id: 'attendance-session-active',
-        courseCode: 'CS3203',
-        courseName: 'Software Engineering Project',
-        sessionTitle: 'Architecture Review Lecture',
-        lecturerName: 'Dr. N. Perera',
-        venue: 'Level 3 Lab',
-        checkInStatus: 'open',
-      }),
-    );
-    expect(result.session.checkInOpensAt).toBeTruthy();
-    expect(result.session.checkInClosesAt).toBeTruthy();
+    const checkedIn = await service.getMyAttendance('attendance-session-checked-in');
+    const closed = await service.getMyAttendance('attendance-session-closed');
+    expect(checkedIn.status === 'loaded' && checkedIn.attendance.initialCheckIn?.status)
+      .toBe('checked_in');
+    expect(checkedIn.status === 'loaded' && checkedIn.attendance.finalAttendance).toBeNull();
+    expect(closed.status === 'loaded' && closed.attendance.finalAttendance?.status)
+      .toBe('present');
   });
 
-  test('returns a closed session with its display details', async () => {
+  test('recovers a lost check-in hook call using C01', async () => {
     const service = new MockAttendanceService();
-
-    const result = await service.getAttendanceSession(
-      'attendance-session-closed',
-    );
-
-    expect(result.status).toBe('available');
-
-    if (result.status !== 'available') {
-      throw new Error('Expected the closed session to be available');
-    }
-
-    expect(result.session.checkInStatus).toBe('closed');
-    expect(result.session.courseCode).toBeTruthy();
-    expect(result.session.courseName).toBeTruthy();
-    expect(result.session.sessionTitle).toBeTruthy();
-    expect(result.session.lecturerName).toBeTruthy();
-    expect(result.session.venue).toBeTruthy();
-  });
-
-  test('returns unavailable for the explicit unavailable session', async () => {
-    const service = new MockAttendanceService();
-
-    await expect(
-      service.getAttendanceSession('attendance-session-unavailable'),
-    ).resolves.toEqual({
-      status: 'unavailable',
+    await expect(service.checkIn('attendance-session-recovery')).resolves.toEqual({
+      status: 'loaded', outcome: 'checked_in',
+      initialCheckIn: { status: 'checked_in', checkedInAt: '2026-07-20T10:04:00+05:30' },
+      missingRequirements: [],
     });
+    const result = await service.getMyAttendance('attendance-session-recovery');
+    expect(result.status === 'loaded' && result.attendance.initialCheckIn?.status)
+      .toBe('checked_in');
   });
 
-  test('returns unavailable without throwing for an unknown session ID', async () => {
-    const service = new MockAttendanceService();
-
-    await expect(
-      service.getAttendanceSession('unknown-session'),
-    ).resolves.toEqual({
-      status: 'unavailable',
+  test('keeps incomplete evidence from becoming checked in', async () => {
+    const result = await new MockAttendanceService().checkIn('attendance-session-active');
+    expect(result).toEqual({
+      status: 'loaded', outcome: 'incomplete', initialCheckIn: null,
+      missingRequirements: ['geofence'],
     });
-  });
-
-  test('returns session times as valid ISO 8601 strings', async () => {
-    const service = new MockAttendanceService();
-    const sessionIds = [
-      'attendance-session-active',
-      'attendance-session-closed',
-    ];
-
-    for (const sessionId of sessionIds) {
-      const result = await service.getAttendanceSession(sessionId);
-
-      if (result.status !== 'available') {
-        throw new Error(`Expected ${sessionId} to be available`);
-      }
-
-      const timeValues = [
-        result.session.startTime,
-        result.session.endTime,
-        result.session.checkInOpensAt,
-        result.session.checkInClosesAt,
-        result.session.lateThreshold,
-      ];
-
-      for (const timeValue of timeValues) {
-        expect(timeValue).toMatch(ISO_8601_PATTERN);
-        expect(Number.isNaN(Date.parse(timeValue))).toBe(false);
-      }
-    }
   });
 });
