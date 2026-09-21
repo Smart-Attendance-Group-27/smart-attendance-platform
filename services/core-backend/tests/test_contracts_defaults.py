@@ -1,20 +1,19 @@
-"""The composition root and its defaults.
+"""The composition root and its bound providers.
 
-The defaults are what production runs on until each integration pull request
-binds the real implementation, so "safe and boring" is the behaviour under test:
-nothing is created and nothing is configured. The QR evidence provider is the
-exception: INT-1 bound it, so it is tested as the real repository.
+The QR evidence and attendance-policy providers are bound to their real
+repositories. Notifications keep their no-op default until INT-3.
 """
 
 import inspect
 from uuid import uuid4
 
 from modules.attendance_sessions.qr_session.evidence import QrEvidenceRepository
+from modules.academic.attendance_policy.repository import AttendancePolicyRepository
 from modules.attendance_verification.attendance_state import FinalAttendanceStatus
 from modules.contracts import providers
 from modules.contracts.attendance_policy import (
+    AttendancePolicy,
     AttendancePolicyProvider,
-    DefaultAttendancePolicyProvider,
 )
 from modules.contracts.notifications import (
     NoOpNotificationProducer,
@@ -48,10 +47,10 @@ def test_notification_producer_defaults_to_the_no_op_producer():
     assert isinstance(producer, NotificationProducer)
 
 
-def test_attendance_policy_provider_defaults_to_no_policy():
+def test_attendance_policy_provider_is_the_real_repository():
     provider = providers.get_attendance_policy_provider()
 
-    assert isinstance(provider, DefaultAttendancePolicyProvider)
+    assert isinstance(provider, AttendancePolicyRepository)
     assert isinstance(provider, AttendancePolicyProvider)
 
 
@@ -63,10 +62,25 @@ def test_default_providers_are_reused_rather_than_rebuilt():
     )
 
 
-async def test_default_policy_provider_reports_no_policy():
+async def test_bound_policy_provider_reads_active_policy_from_caller_connection():
     provider = providers.get_attendance_policy_provider()
+    class FakeConnection:
+        def __init__(self):
+            self.query = None
 
-    assert await provider.get_active(connection=None) is None
+        async def fetchrow(self, query):
+            self.query = query
+            return {
+                "check_in_window_minutes": 20,
+                "late_threshold_minutes": 8,
+                "qr_default_validity_minutes": 12,
+            }
+
+    connection = FakeConnection()
+
+    assert await provider.get_active(connection) == AttendancePolicy(20, 8, 12)
+    assert "academic.attendance_policies" in connection.query
+    assert "WHERE is_active" in connection.query
 
 
 async def test_no_op_producer_accepts_every_trigger_and_creates_nothing():
