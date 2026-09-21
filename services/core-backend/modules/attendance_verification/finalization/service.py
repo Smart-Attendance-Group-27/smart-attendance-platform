@@ -72,7 +72,13 @@ class AttendanceFinalizationService:
                 ),
                 qr_progress=progress,
             )
-            results.append(FinalizationResult(student_id=student.student_id, status=status))
+            results.append(
+                FinalizationResult(
+                    student_id=student.student_id,
+                    status=status,
+                    student_user_id=student.student_user_id,
+                ),
+            )
 
         await self._repository.upsert_automatic_records(
             connection,

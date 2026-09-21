@@ -15,6 +15,8 @@ class FinalizationResult:
 
     student_id: UUID
     status: FinalAttendanceStatus
+    # The account that receives notifications about this result.
+    student_user_id: UUID | None = None
 
 
 @dataclass(frozen=True)

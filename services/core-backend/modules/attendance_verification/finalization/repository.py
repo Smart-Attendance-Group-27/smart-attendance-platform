@@ -15,6 +15,7 @@ class RosterStudentState:
     verification_attempt_id: UUID | None
     initial_check_in_status: str | None
     has_manual_record: bool
+    student_user_id: UUID | None = None
 
 
 class FinalizationRepository:
@@ -49,6 +50,7 @@ class FinalizationRepository:
             """
             SELECT
                 ss.student_id,
+                student.user_id AS student_user_id,
                 va.id AS verification_attempt_id,
                 va.initial_check_in_status,
                 (
@@ -56,6 +58,8 @@ class FinalizationRepository:
                     AND record.record_source <> 'automatic'
                 ) AS has_manual_record
             FROM attendance_session.session_students AS ss
+            JOIN academic.student_profiles AS student
+                ON student.id = ss.student_id
             LEFT JOIN attendance_verification.verification_attempts AS va
                 ON va.session_id = ss.session_id AND va.student_id = ss.student_id
             LEFT JOIN attendance_verification.attendance_records AS record
@@ -67,6 +71,7 @@ class FinalizationRepository:
         return [
             RosterStudentState(
                 student_id=row["student_id"],
+                student_user_id=row["student_user_id"],
                 verification_attempt_id=row["verification_attempt_id"],
                 initial_check_in_status=row["initial_check_in_status"],
                 has_manual_record=bool(row["has_manual_record"]),

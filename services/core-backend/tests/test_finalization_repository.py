@@ -8,6 +8,7 @@ from modules.attendance_verification.finalization.types import FinalizationResul
 
 SESSION_ID = UUID("40000000-0000-0000-0000-000000000001")
 STUDENT_ID = UUID("23000000-0000-0000-0000-000000000001")
+STUDENT_USER_ID = UUID("20000000-0000-0000-0000-000000000011")
 ATTEMPT_ID = UUID("50000000-0000-0000-0000-000000000001")
 DECIDED_AT = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
 
@@ -42,6 +43,7 @@ async def test_fetch_roster_state_maps_rows() -> None:
         rows=[
             {
                 "student_id": STUDENT_ID,
+                "student_user_id": STUDENT_USER_ID,
                 "verification_attempt_id": ATTEMPT_ID,
                 "initial_check_in_status": "checked_in",
                 "has_manual_record": False,
@@ -53,12 +55,15 @@ async def test_fetch_roster_state_maps_rows() -> None:
 
     assert len(roster) == 1
     assert roster[0].student_id == STUDENT_ID
+    assert roster[0].student_user_id == STUDENT_USER_ID
     assert roster[0].verification_attempt_id == ATTEMPT_ID
     assert roster[0].initial_check_in_status == "checked_in"
     assert roster[0].has_manual_record is False
 
     query, args = connection.fetch_calls[0]
     assert "attendance_session.session_students" in query
+    assert "JOIN academic.student_profiles" in query
+    assert "student.user_id AS student_user_id" in query
     assert "LEFT JOIN attendance_verification.verification_attempts" in query
     assert "LEFT JOIN attendance_verification.attendance_records" in query
     assert args == (SESSION_ID,)
