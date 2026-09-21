@@ -235,6 +235,15 @@ export function getLecturerQrBatches(sessionId: string): Promise<LecturerQrBatch
   return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/qr-batches`);
 }
 
+export function voidLecturerQrBatch(
+  sessionId: string, qrSessionId: string, reason: string,
+): Promise<LecturerQrBatch> {
+  return coreBackendFetch(
+    `/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/qr-batches/${encodeURIComponent(qrSessionId)}/void`,
+    { method: "POST", body: { reason } },
+  );
+}
+
 export function activateLecturerSession(sessionId: string): Promise<ApiLecturerSession> {
   return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${sessionId}/activate`, {
     method: "POST",

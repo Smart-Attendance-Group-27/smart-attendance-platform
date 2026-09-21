@@ -51,7 +51,50 @@ class StudentAttemptRecord:
     checked_in_at: datetime | None
 
 
+@dataclass(frozen=True)
+class QrBatchVoidState:
+    id: UUID
+    voided_at: datetime | None
+
+
 class QrSessionRepository:
+    async def lock_qr_batch_for_void(
+        self, connection: asyncpg.Connection, session_id: UUID, qr_session_id: UUID,
+    ) -> QrBatchVoidState | None:
+        row = await connection.fetchrow(
+            """
+            SELECT id, voided_at
+            FROM attendance_session.qr_token_batches
+            WHERE id = $1 AND session_id = $2
+            FOR UPDATE
+            """,
+            qr_session_id, session_id,
+        )
+        return None if row is None else QrBatchVoidState(id=row["id"], voided_at=row["voided_at"])
+
+    async def void_qr_batch(
+        self, connection: asyncpg.Connection, qr_session_id: UUID,
+        voided_at: datetime, actor_user_id: UUID, reason: str,
+    ) -> None:
+        await connection.execute(
+            """
+            UPDATE attendance_session.qr_token_batches
+            SET voided_at = $2, voided_by = $3, void_reason = $4,
+                status = 'inactive', deactivated_at = COALESCE(deactivated_at, $2)
+            WHERE id = $1
+            """,
+            qr_session_id, voided_at, actor_user_id, reason,
+        )
+
+        await connection.execute(
+            """
+            UPDATE attendance_session.qr_tokens
+            SET revoked_at = COALESCE(revoked_at, $2)
+            WHERE qr_batch_id = $1
+            """,
+            qr_session_id, voided_at,
+        )
+
     async def lock_attendance_session(
         self,
         connection: asyncpg.Connection,
