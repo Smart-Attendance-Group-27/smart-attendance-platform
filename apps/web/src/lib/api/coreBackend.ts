@@ -64,8 +64,11 @@ export async function coreBackendFetch<T>(path: string, options: RequestOptions 
 
 async function readErrorDetail(response: Response): Promise<string> {
   try {
-    const body = (await response.json()) as { detail?: string };
-    return body.detail ?? `core-backend request failed with ${response.status}`;
+    const body = (await response.json()) as { detail?: unknown };
+    if (typeof body.detail === "string") return body.detail;
+    if (body.detail && typeof body.detail === "object" && "message" in body.detail
+      && typeof body.detail.message === "string") return body.detail.message;
+    return `core-backend request failed with ${response.status}`;
   } catch {
     return `core-backend request failed with ${response.status}`;
   }

@@ -1,5 +1,6 @@
 import type {
   ApiLecturerDashboardOverview,
+  ApiFinalizationSummary,
   ApiLecturerSession,
   ApiLecturerTimetableEntry,
   ApiSessionStudent,
@@ -43,6 +44,24 @@ export const mockLecturerSessions: ApiLecturerSession[] = [
     failedVerificationCount: 0, pendingReviewCount: 0, manualCount: 0,
   },
 ];
+
+// C10 returns a summary only when finalization is bound; both outcomes are valid.
+export const mockFinalizationSummary: ApiFinalizationSummary = {
+  enrolledCount: 5, presentCount: 2, lateCount: 1, absentCount: 2,
+  keptManualCount: 1, reconciledCount: 1, deactivatedQrBatchCount: 2,
+  finalizedAt: time(0),
+};
+export const mockCloseSessionWithSummary = {
+  ...activeSession, status: "closed" as const, closedAt: time(0),
+  finalization: mockFinalizationSummary,
+};
+export const mockCloseSessionWithoutSummary = {
+  ...activeSession, status: "closed" as const, closedAt: time(0),
+  finalization: null,
+};
+export const mockCancelSessionResponse: ApiLecturerSession = {
+  ...activeSession, status: "cancelled", closedAt: null,
+};
 
 const baseStudent: ApiSessionStudent = {
   studentId: "student-1", registrationNumber: "2307001", fullName: "Nimali Perera",

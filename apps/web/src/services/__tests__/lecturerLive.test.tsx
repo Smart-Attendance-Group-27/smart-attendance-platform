@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { coreBackendFetch } from "@/lib/api/coreBackend";
-import { getLecturerQrBatches } from "@/lib/api/lecturer";
+import { getLecturerQrBatches, putManualAttendance } from "@/lib/api/lecturer";
 import { getSessionDetail, getSessionList, getSessionQrBatches } from "@/services/lecturerService";
 import { initialCheckInDisplay, liveFinalStatusDisplay, qrProgressLabel } from "@/lib/status";
 import { QrBatchParticipationTable } from "@/components/lecturer/QrBatchParticipationTable";
@@ -74,5 +74,17 @@ describe("lecturer live view", () => {
     expect(batches).toHaveLength(2);
     expect(batches[0]).toMatchObject({ requiredStudentCount: 2, passedStudentCount: 1 });
     expect(coreBackendFetch).not.toHaveBeenCalled();
+  });
+
+  it("sends the C11 manual attendance PUT to the student's roster URL", async () => {
+    vi.stubEnv("WEB_API_MODE", "real");
+    vi.mocked(coreBackendFetch).mockResolvedValue({ status: "late", source: "manual" });
+    await putManualAttendance("session one", "student/two", {
+      status: "late", reason: "Lecturer confirmed arrival",
+    });
+    expect(coreBackendFetch).toHaveBeenCalledWith(
+      "/api/v1/lecturers/me/attendance-sessions/session%20one/students/student%2Ftwo/attendance",
+      { method: "PUT", body: { status: "late", reason: "Lecturer confirmed arrival" } },
+    );
   });
 });

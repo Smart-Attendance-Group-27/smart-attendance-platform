@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { CoreBackendError } from "@/lib/api/coreBackend";
-import { activateLecturerSession, closeLecturerSession, createLecturerSession } from "@/lib/api/lecturer";
+import {
+  activateLecturerSession,
+  cancelLecturerSession,
+  closeLecturerSession,
+  createLecturerSession,
+  type ApiFinalizationSummary,
+} from "@/lib/api/lecturer";
 
 export type CreateSessionInput = {
   timetableEntryId: string;
@@ -64,9 +70,33 @@ export async function activateSession(sessionId: string): Promise<SessionLifecyc
   }
 }
 
-export async function closeSession(sessionId: string): Promise<SessionLifecycleResult> {
+export type CloseSessionResult =
+  | { ok: true; finalization: ApiFinalizationSummary | null }
+  | { ok: false; error: string };
+
+export async function closeSession(sessionId: string): Promise<CloseSessionResult> {
   try {
-    await closeLecturerSession(sessionId);
+    const session = await closeLecturerSession(sessionId);
+    revalidatePath("/lecturer/sessions");
+    revalidatePath(`/lecturer/sessions/${sessionId}`);
+    revalidatePath("/lecturer/dashboard");
+    return { ok: true, finalization: session.finalization };
+  } catch (error) {
+    if (error instanceof CoreBackendError && error.status < 500) {
+      return { ok: false, error: error.message };
+    }
+    return { ok: false, error: "Couldn't close the session. Please try again." };
+  }
+}
+
+export async function cancelSession(sessionId: string, reason: string): Promise<SessionLifecycleResult> {
+  const trimmedReason = typeof reason === "string" ? reason.trim() : "";
+  if (trimmedReason.length < 3 || trimmedReason.length > 500) {
+    return { ok: false, error: "Reason must be between 3 and 500 characters." };
+  }
+
+  try {
+    await cancelLecturerSession(sessionId, trimmedReason);
     revalidatePath("/lecturer/sessions");
     revalidatePath(`/lecturer/sessions/${sessionId}`);
     revalidatePath("/lecturer/dashboard");
@@ -75,6 +105,6 @@ export async function closeSession(sessionId: string): Promise<SessionLifecycleR
     if (error instanceof CoreBackendError && error.status < 500) {
       return { ok: false, error: error.message };
     }
-    return { ok: false, error: "Couldn't close the session. Please try again." };
+    return { ok: false, error: "Couldn't cancel the session. Please try again." };
   }
 }

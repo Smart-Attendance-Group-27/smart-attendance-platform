@@ -35,6 +35,17 @@ export type ApiLecturerTimetableEntry = {
 
 export type ApiSessionStatus = "scheduled" | "active" | "closed" | "cancelled";
 
+export type ApiFinalizationSummary = {
+  enrolledCount: number;
+  presentCount: number;
+  lateCount: number;
+  absentCount: number;
+  keptManualCount: number;
+  reconciledCount: number;
+  deactivatedQrBatchCount: number;
+  finalizedAt: string;
+};
+
 export type ApiLecturerSession = {
   id: string;
   courseOfferingId: string;
@@ -84,6 +95,18 @@ export type ApiSessionStudent = {
   recordSource: "automatic" | "manual" | null;
   manualReason: string | null;
   recordUpdatedAt: string | null;
+};
+
+export type ApiManualAttendanceStatus = "present" | "late" | "absent";
+
+export type ApiManualAttendanceResponse = {
+  sessionId: string;
+  studentId: string;
+  status: ApiManualAttendanceStatus;
+  source: "manual";
+  reason: string;
+  recordedBy: string;
+  updatedAt: string;
 };
 
 export type ApiManualReviewDecisionRequest =
@@ -196,6 +219,17 @@ export function getLecturerSessionStudents(sessionId: string): Promise<ApiSessio
   return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${sessionId}/students`);
 }
 
+export function putManualAttendance(
+  sessionId: string,
+  studentId: string,
+  body: { status: ApiManualAttendanceStatus; reason: string },
+): Promise<ApiManualAttendanceResponse> {
+  return coreBackendFetch(
+    `/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/students/${encodeURIComponent(studentId)}/attendance`,
+    { method: "PUT", body },
+  );
+}
+
 export function getLecturerQrBatches(sessionId: string): Promise<LecturerQrBatch[]> {
   if (isWebMockMode()) return Promise.resolve(mockLecturerQrBatches[sessionId] ?? []);
   return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/qr-batches`);
@@ -207,9 +241,16 @@ export function activateLecturerSession(sessionId: string): Promise<ApiLecturerS
   });
 }
 
-export function closeLecturerSession(sessionId: string): Promise<ApiLecturerSession> {
-  return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${sessionId}/close`, {
+export function closeLecturerSession(sessionId: string): Promise<ApiLecturerSession & { finalization: ApiFinalizationSummary | null }> {
+  return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/close`, {
     method: "POST",
+  });
+}
+
+export function cancelLecturerSession(sessionId: string, reason: string): Promise<ApiLecturerSession> {
+  return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/cancel`, {
+    method: "POST",
+    body: { reason },
   });
 }
 

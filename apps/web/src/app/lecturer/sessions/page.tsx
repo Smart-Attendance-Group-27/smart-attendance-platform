@@ -56,7 +56,12 @@ export default async function LecturerSessionsPage() {
               header: "Status",
               render: (row) => {
                 const display = sessionStatusDisplay(row.status);
-                return <StatusBadge tone={display.tone}>{display.label}</StatusBadge>;
+                return <div>
+                  <StatusBadge tone={display.tone}>{display.label}</StatusBadge>
+                  {row.status === "cancelled" ? (
+                    <span className="mt-1 block text-[10px] text-[var(--muted)]">No final attendance</span>
+                  ) : null}
+                </div>;
               },
             },
             {
@@ -68,7 +73,7 @@ export default async function LecturerSessionsPage() {
                   variant={row.status === "in_progress" ? "primary" : "default"}
                   href={`/lecturer/sessions/${row.sessionId}`}
                 >
-                  {row.status === "in_progress" ? "Monitor" : row.status === "scheduled" ? "Prepare" : "View"}
+                  {row.status === "in_progress" ? "Monitor" : row.status === "scheduled" ? "Prepare" : row.status === "cancelled" ? "View cancelled" : "View"}
                 </LinkButton>
               ),
             },
