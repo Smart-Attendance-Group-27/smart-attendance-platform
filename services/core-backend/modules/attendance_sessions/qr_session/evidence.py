@@ -150,12 +150,12 @@ class QrEvidenceRepository:
                    ($2::timestamptz IS NOT NULL
                     AND batch.activated_at > $2
                     AND batch.voided_at IS NULL) AS required,
-                   EXISTS (
+                   (batch.voided_at IS NULL AND EXISTS (
                        SELECT 1 FROM attendance_verification.qr_validation_attempts AS scan
                        WHERE scan.verification_attempt_id = $3
                          AND scan.qr_batch_id = batch.id
                          AND scan.validation_status = 'accepted'
-                   ) AS passed
+                   )) AS passed
             FROM attendance_session.qr_token_batches AS batch
             WHERE batch.session_id = $1
             ORDER BY batch.activated_at DESC, batch.id DESC

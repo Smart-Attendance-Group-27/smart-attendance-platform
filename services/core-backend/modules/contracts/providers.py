@@ -16,18 +16,18 @@ integration pull request later swaps in the real implementation:
 * ``get_notification_producer`` -> ``NoOpNotificationProducer`` until **INT-3**
   binds Ashen's producer. Trigger call sites run and are tested; nothing is
   created yet.
-* ``get_attendance_policy_provider`` -> ``DefaultAttendancePolicyProvider``
-  until **INT-4** binds Manushan's repository. Consumers keep their current
-  built-in defaults.
+* ``get_attendance_policy_provider`` -> Manushan's
+  ``AttendancePolicyRepository`` (bound by **INT-4**). Session creation and
+  QR batches read the current active policy on their database connection.
 
 Tests never rely on these defaults for behaviour they care about: they inject
 the fakes from ``tests/fakes`` instead.
 """
 
 from modules.attendance_sessions.qr_session.evidence import QrEvidenceRepository
+from modules.academic.attendance_policy.repository import AttendancePolicyRepository
 from modules.contracts.attendance_policy import (
     AttendancePolicyProvider,
-    DefaultAttendancePolicyProvider,
 )
 from modules.contracts.notifications import (
     NoOpNotificationProducer,
@@ -38,7 +38,7 @@ from modules.notification.producer.service import NotificationProducer as RealNo
 
 # All three are stateless, so one shared instance is enough.
 _QR_EVIDENCE_REPOSITORY = QrEvidenceRepository()
-_DEFAULT_ATTENDANCE_POLICY_PROVIDER = DefaultAttendancePolicyProvider()
+_ATTENDANCE_POLICY_REPOSITORY = AttendancePolicyRepository()
 _NOTIFICATION_PRODUCER = RealNotificationProducer()
 
 
@@ -57,8 +57,8 @@ def get_notification_producer() -> NotificationProducer:
 
 
 def get_attendance_policy_provider() -> AttendancePolicyProvider:
-    """Returns the bound attendance policy provider (a default until INT-4)."""
-    return _DEFAULT_ATTENDANCE_POLICY_PROVIDER
+    """Returns the active-policy repository for session and QR defaults."""
+    return _ATTENDANCE_POLICY_REPOSITORY
 
 
 __all__ = [

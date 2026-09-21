@@ -3,9 +3,9 @@
 Manushan owns the policy module and implements this protocol as
 ``modules.academic.attendance_policy.repository.AttendancePolicyRepository``,
 backed by ``academic.attendance_policies``. Session creation and QR batch
-creation only depend on the protocol, so they can be written before that table
-exists: ``DefaultAttendancePolicyProvider`` returns ``None`` until INT-4 binds
-the real repository (see ``providers.py``).
+creation depend only on this protocol; INT-4 binds the real repository in
+``providers.py``. ``DefaultAttendancePolicyProvider`` remains available for
+isolated service tests.
 
 ``None`` means "no policy configured", and every consumer must then keep its
 existing built-in default rather than inventing one here.
@@ -39,11 +39,7 @@ class AttendancePolicyProvider(Protocol):
 
 
 class DefaultAttendancePolicyProvider:
-    """The provider bound in production until the policy table exists (INT-4).
-
-    It reports "no policy configured", which keeps session and QR creation on
-    the defaults they use today.
-    """
+    """Reports no configured policy for isolated consumers and tests."""
 
     async def get_active(
         self,

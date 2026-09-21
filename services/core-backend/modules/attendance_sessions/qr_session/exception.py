@@ -52,3 +52,15 @@ class StudentNotEligibleError(QrSessionError):
 
 class CheckInRequiredError(QrSessionError):
     """Raised when a student scans QR before completing initial check-in."""
+
+
+class QrBatchAlreadyVoidedError(QrSessionError):
+    """Raised when a lecturer tries to void the same batch twice."""
+
+
+class QrBatchVoidSessionError(QrSessionError):
+    """Raised when the containing session no longer permits voiding."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code

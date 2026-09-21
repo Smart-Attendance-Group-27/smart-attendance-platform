@@ -7,6 +7,7 @@ import { initialCheckInDisplay, liveFinalStatusDisplay, qrProgressLabel } from "
 import { QrBatchParticipationTable } from "@/components/lecturer/QrBatchParticipationTable";
 
 vi.mock("server-only", () => ({}));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/lib/auth/dal", () => ({ getCurrentUser: vi.fn(async () => ({ name: "Lecturer" })) }));
 vi.mock("@/lib/api/coreBackend", () => ({ coreBackendFetch: vi.fn() }));
 
@@ -61,7 +62,7 @@ describe("lecturer live view", () => {
       "/api/v1/lecturers/me/attendance-sessions/session%20one/qr-batches",
     );
 
-    render(<QrBatchParticipationTable batches={batches} />);
+    render(<QrBatchParticipationTable batches={batches} sessionId="session one" canVoid={false} />);
     const rows = screen.getAllByRole("row");
     expect(rows[1]).toHaveTextContent("batch-2");
     expect(rows[1]).toHaveTextContent("4/5");
