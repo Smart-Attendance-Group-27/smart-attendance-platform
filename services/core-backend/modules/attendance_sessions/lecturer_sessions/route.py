@@ -32,10 +32,7 @@ from modules.contracts.providers import (
 from modules.attendance_verification.manual_attendance.route import (
     router as manual_attendance_router,
 )
-from modules.contracts.providers import get_qr_evidence_provider
 from modules.identity.auth.dependencies import CurrentLecturer
-from modules.notification.push.expo_provider import ExpoPushProvider
-from modules.notification.push.notification_service import NotificationService
 
 router = APIRouter(prefix="/lecturers/me/attendance-sessions", tags=["lecturer-sessions"])
 router.include_router(manual_attendance_router)
@@ -45,15 +42,9 @@ _SESSION_NOT_FOUND_DETAIL = "The attendance session was not found."
 
 
 def get_lecturer_session_service(http_request: Request) -> LecturerSessionService:
-    """Build a LecturerSessionService, wiring in a NotificationService when
-    a push provider is available on app state (production / docker)."""
-    push_provider = getattr(http_request.app.state, "push_provider", None)
-    notification_service: NotificationService | None = None
-    if isinstance(push_provider, ExpoPushProvider):
-        notification_service = NotificationService(push_provider=push_provider)
+    """Build a LecturerSessionService with bound cross-workstream collaborators."""
     return LecturerSessionService(
         qr_evidence=get_qr_evidence_provider(),
-        notification_service=notification_service,
         notification_producer=get_notification_producer(),
         attendance_policy=get_attendance_policy_provider(),
     )

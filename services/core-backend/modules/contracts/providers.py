@@ -34,11 +34,12 @@ from modules.contracts.notifications import (
     NotificationProducer,
 )
 from modules.contracts.qr_evidence import QrEvidenceProvider
+from modules.notification.producer.service import NotificationProducer as RealNotificationProducer
 
 # All three are stateless, so one shared instance is enough.
 _QR_EVIDENCE_REPOSITORY = QrEvidenceRepository()
 _DEFAULT_ATTENDANCE_POLICY_PROVIDER = DefaultAttendancePolicyProvider()
-_NO_OP_NOTIFICATION_PRODUCER = NoOpNotificationProducer()
+_NOTIFICATION_PRODUCER = RealNotificationProducer()
 
 
 def get_qr_evidence_provider() -> QrEvidenceProvider | None:
@@ -51,8 +52,8 @@ def get_qr_evidence_provider() -> QrEvidenceProvider | None:
 
 
 def get_notification_producer() -> NotificationProducer:
-    """Returns the bound notification producer (a no-op until INT-3)."""
-    return _NO_OP_NOTIFICATION_PRODUCER
+    """Returns the bound notification producer (bound by INT-3)."""
+    return _NOTIFICATION_PRODUCER
 
 
 def get_attendance_policy_provider() -> AttendancePolicyProvider:
