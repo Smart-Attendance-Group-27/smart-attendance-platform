@@ -474,6 +474,9 @@ class FailingNotificationProducer(RecordingNotificationProducer):
     async def session_opened(self, connection, *, session_id):
         raise RuntimeError("notification store unavailable")
 
+    async def session_cancelled(self, connection, *, session_id):
+        raise RuntimeError("notification store unavailable")
+
     async def attendance_finalized(self, connection, *, session_id, results):
         raise RuntimeError("notification store unavailable")
 
@@ -679,6 +682,7 @@ def build_cancel_service(
     *,
     deactivated_batch_ids: list[UUID] | None = None,
     profile: LecturerProfileRecord | None = None,
+    notifications: RecordingNotificationProducer | None = None,
 ):
     repository = FakeLecturerSessionRepository(before, after or before)
     qr_session_repository = FakeQrSessionRepository(deactivated_batch_ids)
@@ -686,6 +690,7 @@ def build_cancel_service(
         repository=repository,
         lecturer_profile_repository=FakeLecturerProfileRepository(profile or build_profile()),
         qr_session_repository=qr_session_repository,
+        notification_producer=notifications,
     )
     return service, repository, qr_session_repository
 
@@ -832,3 +837,76 @@ async def test_a_reason_outside_three_to_five_hundred_characters_is_refused(reas
 
     assert repository.calls == []
     assert pool.connection.executed_queries == []
+
+
+async def test_cancelling_announces_that_the_session_was_cancelled() -> None:
+    notifications = RecordingNotificationProducer()
+    before = build_session(activated_at=CURRENT_TIME)
+    after = build_session(activated_at=CURRENT_TIME, cancelled_at=CURRENT_TIME)
+    service, _, _ = build_cancel_service(before, after, notifications=notifications)
+
+    await service.cancel_for_user(FakePool(), ACTOR_ID, SESSION_ID, "room flooded")
+
+    assert notifications.kinds == ["session_cancelled"]
+    assert notifications.only_call_of("session_cancelled").payload == {"session_id": SESSION_ID}
+
+
+async def test_a_session_that_never_started_can_still_announce_its_cancellation() -> None:
+    notifications = RecordingNotificationProducer()
+    service, _, _ = build_cancel_service(
+        build_session(),
+        build_session(cancelled_at=CURRENT_TIME),
+        notifications=notifications,
+    )
+
+    await service.cancel_for_user(FakePool(), ACTOR_ID, SESSION_ID, "lecturer unwell")
+
+    assert notifications.kinds == ["session_cancelled"]
+
+
+@pytest.mark.parametrize(
+    "before",
+    [
+        build_session(cancelled_at=CURRENT_TIME),
+        build_session(activated_at=CURRENT_TIME, closed_at=CURRENT_TIME),
+        None,
+    ],
+)
+async def test_a_refused_cancellation_announces_nothing(before) -> None:
+    notifications = RecordingNotificationProducer()
+    service, _, _ = build_cancel_service(before, notifications=notifications)
+
+    with pytest.raises(Exception):
+        await service.cancel_for_user(FakePool(), ACTOR_ID, SESSION_ID, "room flooded")
+
+    assert notifications.calls == []
+
+
+async def test_a_reason_that_is_refused_announces_no_cancellation() -> None:
+    notifications = RecordingNotificationProducer()
+    service, _, _ = build_cancel_service(
+        build_session(activated_at=CURRENT_TIME),
+        notifications=notifications,
+    )
+
+    with pytest.raises(InvalidCancellationReasonError):
+        await service.cancel_for_user(FakePool(), ACTOR_ID, SESSION_ID, "ab")
+
+    assert notifications.calls == []
+
+
+async def test_a_failing_producer_does_not_stop_a_session_from_being_cancelled() -> None:
+    before = build_session(activated_at=CURRENT_TIME)
+    after = build_session(activated_at=CURRENT_TIME, cancelled_at=CURRENT_TIME)
+    service, repository, _ = build_cancel_service(
+        before,
+        after,
+        notifications=FailingNotificationProducer(),
+    )
+    pool = FakePool()
+
+    result = await service.cancel_for_user(pool, ACTOR_ID, SESSION_ID, "room flooded")
+
+    assert result == after
+    assert repository.calls == ["cancel"]
+    assert "audit.audit_logs" in pool.connection.executed_queries[0]

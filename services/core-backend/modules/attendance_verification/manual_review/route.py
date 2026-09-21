@@ -8,6 +8,9 @@ from modules.attendance_verification.manual_attendance.exception import (
     ManualAttendanceError,
     SessionCancelledError,
 )
+from modules.attendance_verification.manual_attendance.route import (
+    get_manual_attendance_service,
+)
 from modules.attendance_verification.manual_review.exception import (
     VerificationAttemptNotFailedError,
     VerificationAttemptNotFoundError,
@@ -26,7 +29,9 @@ _ATTEMPT_NOT_FOUND_DETAIL = "The verification attempt was not found."
 
 
 def get_manual_review_service() -> ManualReviewService:
-    return ManualReviewService()
+    # Shares the direct endpoint's factory, so a review decision announces
+    # the attendance change exactly like setting it by hand does.
+    return ManualReviewService(manual_attendance_service=get_manual_attendance_service())
 
 
 @router.get("", response_model=list[ManualReviewQueueItemResponse], status_code=status.HTTP_200_OK)

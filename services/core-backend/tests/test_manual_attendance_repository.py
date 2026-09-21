@@ -8,6 +8,7 @@ from modules.attendance_verification.manual_attendance.repository import (
 
 SESSION_ID = UUID("40000000-0000-0000-0000-000000000001")
 STUDENT_ID = UUID("23000000-0000-0000-0000-000000000001")
+STUDENT_USER_ID = UUID("20000000-0000-0000-0000-000000000011")
 LECTURER_ID = UUID("22000000-0000-0000-0000-000000000001")
 USER_ID = UUID("20000000-0000-0000-0000-000000000002")
 RECORD_ID = UUID("60000000-0000-0000-0000-000000000001")
@@ -61,15 +62,33 @@ async def test_session_lookup_returns_none_for_a_session_the_lecturer_does_not_t
     assert session is None
 
 
-async def test_roster_check_reads_the_session_students_table() -> None:
-    connection = FakeConnection(value=True)
+async def test_the_roster_check_returns_the_students_account() -> None:
+    connection = FakeConnection(value=STUDENT_USER_ID)
 
-    on_roster = await ManualAttendanceRepository().is_on_roster(connection, SESSION_ID, STUDENT_ID)
+    user_id = await ManualAttendanceRepository().find_roster_student_user_id(
+        connection,
+        SESSION_ID,
+        STUDENT_ID,
+    )
 
-    assert on_roster is True
+    assert user_id == STUDENT_USER_ID
     _, query, args = connection.calls[0]
     assert "attendance_session.session_students" in query
+    assert "JOIN academic.student_profiles" in query
+    assert "student.user_id" in query
     assert args == (SESSION_ID, STUDENT_ID)
+
+
+async def test_the_roster_check_returns_nothing_for_a_student_not_on_it() -> None:
+    connection = FakeConnection(value=None)
+
+    user_id = await ManualAttendanceRepository().find_roster_student_user_id(
+        connection,
+        SESSION_ID,
+        STUDENT_ID,
+    )
+
+    assert user_id is None
 
 
 async def test_existing_record_is_locked_so_the_audit_old_value_is_accurate() -> None:
