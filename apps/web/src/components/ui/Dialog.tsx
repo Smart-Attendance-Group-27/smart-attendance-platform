@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect, useRef } from "react";
+import { ReactNode, useEffect, useId, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 
 type DialogProps = {
@@ -12,6 +12,7 @@ type DialogProps = {
 
 export function Dialog({ open, title, onClose, children }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const node = ref.current;
@@ -24,11 +25,11 @@ export function Dialog({ open, title, onClose, children }: DialogProps) {
     <dialog
       ref={ref}
       onClose={onClose}
-      aria-labelledby="dialog-title"
+      aria-labelledby={titleId}
       className="w-full max-w-md border border-[var(--line)] p-0 shadow-lg backdrop:bg-black/40"
     >
       <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
-        <h2 id="dialog-title" className="text-sm font-semibold text-[var(--text)]">
+        <h2 id={titleId} className="text-sm font-semibold text-[var(--text)]">
           {title}
         </h2>
         <button

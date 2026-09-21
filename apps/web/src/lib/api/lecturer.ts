@@ -35,6 +35,17 @@ export type ApiLecturerTimetableEntry = {
 
 export type ApiSessionStatus = "scheduled" | "active" | "closed" | "cancelled";
 
+export type ApiFinalizationSummary = {
+  enrolledCount: number;
+  presentCount: number;
+  lateCount: number;
+  absentCount: number;
+  keptManualCount: number;
+  reconciledCount: number;
+  deactivatedQrBatchCount: number;
+  finalizedAt: string;
+};
+
 export type ApiLecturerSession = {
   id: string;
   courseOfferingId: string;
@@ -230,9 +241,16 @@ export function activateLecturerSession(sessionId: string): Promise<ApiLecturerS
   });
 }
 
-export function closeLecturerSession(sessionId: string): Promise<ApiLecturerSession> {
-  return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${sessionId}/close`, {
+export function closeLecturerSession(sessionId: string): Promise<ApiLecturerSession & { finalization: ApiFinalizationSummary | null }> {
+  return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/close`, {
     method: "POST",
+  });
+}
+
+export function cancelLecturerSession(sessionId: string, reason: string): Promise<ApiLecturerSession> {
+  return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/cancel`, {
+    method: "POST",
+    body: { reason },
   });
 }
 
