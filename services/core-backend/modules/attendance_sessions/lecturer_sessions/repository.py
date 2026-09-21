@@ -9,12 +9,11 @@ from modules.attendance_verification.attendance_state import AttendanceRecordSou
 
 SESSION_SCHEDULED_STATUS = "scheduled"
 
-# Session status is derived from timestamps (activated_at/closed_at/cancelled_at),
-# not a DB enum — attendance_session.sessions.status has no CHECK constraint and
-# existing code only ever compares it to the literal 'active'. See
-# database/migrations/README.md and the Stage-1 repo audit for why a new status
-# enum was deliberately not invented here.
+# Session state is still derived from timestamps (activated_at/closed_at/
+# cancelled_at): attendance_session.sessions.status has no CHECK constraint, and
+# sessions closed before 'closed' was stored still read 'active'.
 SESSION_ACTIVE_STATUS = "active"
+SESSION_CLOSED_STATUS = "closed"
 SESSION_CANCELLED_STATUS = "cancelled"
 
 RECORD_SOURCE_MANUAL = AttendanceRecordSource.MANUAL.value
@@ -262,10 +261,11 @@ class LecturerSessionRepository:
         await connection.execute(
             """
             UPDATE attendance_session.sessions
-            SET closed_at = now(), updated_at = now()
+            SET closed_at = now(), status = $2, updated_at = now()
             WHERE id = $1
             """,
             session_id,
+            SESSION_CLOSED_STATUS,
         )
 
     async def cancel(

@@ -1048,3 +1048,36 @@ async def test_a_failing_producer_does_not_stop_a_session_from_being_cancelled()
     assert result == after
     assert repository.calls == ["cancel"]
     assert "audit.audit_logs" in pool.connection.executed_queries[0]
+
+
+async def test_close_stores_the_closed_state_once() -> None:
+    before = build_session(activated_at=CURRENT_TIME)
+    after = build_session(activated_at=CURRENT_TIME, closed_at=CURRENT_TIME)
+    repository = FakeLecturerSessionRepository(before, after)
+    service = LecturerSessionService(
+        repository=repository,
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        qr_session_repository=FakeQrSessionRepository(),
+    )
+
+    await service.close_for_user(FakePool(), ACTOR_ID, SESSION_ID)
+
+    assert repository.calls.count("close") == 1
+    assert "cancel" not in repository.calls
+
+
+async def test_closing_an_already_closed_session_is_refused_and_writes_nothing() -> None:
+    closed = build_session(activated_at=CURRENT_TIME, closed_at=CURRENT_TIME)
+    repository = FakeLecturerSessionRepository(closed, closed)
+    service = LecturerSessionService(
+        repository=repository,
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        qr_session_repository=FakeQrSessionRepository(),
+    )
+    pool = FakePool()
+
+    with pytest.raises(SessionAlreadyClosedError):
+        await service.close_for_user(pool, ACTOR_ID, SESSION_ID)
+
+    assert repository.calls == []
+    assert pool.connection.executed_queries == []

@@ -175,3 +175,15 @@ async def test_cancel_records_when_why_and_the_cancelled_status() -> None:
     assert connection.args == (SESSION_ID, "room flooded", "cancelled")
     # Cancelling only updates the session; it never touches attendance records.
     assert "attendance_records" not in connection.query
+
+
+async def test_close_records_when_and_the_closed_status() -> None:
+    connection = FakeDatabaseConnection([])
+
+    await LecturerSessionRepository().close(connection, SESSION_ID)
+
+    assert "closed_at = now()" in connection.query
+    assert "status = $2" in connection.query
+    assert "cancelled_at" not in connection.query
+    assert "WHERE id = $1" in connection.query
+    assert connection.args == (SESSION_ID, "closed")
