@@ -295,3 +295,32 @@ async def test_after_commit_is_a_no_op_with_nothing_deactivated() -> None:
     await AttendanceFinalizationService.after_commit(summary, redis_client)
 
     assert redis_client.deleted_keys == []
+
+
+async def test_each_result_carries_the_account_to_notify() -> None:
+    user_id = UUID("20000000-0000-0000-0000-000000000011")
+    roster = [
+        RosterStudentState(
+            student_id=STUDENT_ON_TIME,
+            verification_attempt_id=ATTEMPT_ON_TIME,
+            initial_check_in_status=InitialCheckInStatus.CHECKED_IN.value,
+            has_manual_record=False,
+            student_user_id=user_id,
+        ),
+    ]
+    service = AttendanceFinalizationService(
+        FakeQrEvidenceProvider(),
+        check_in_service=FakeCheckInService(),
+        repository=FakeFinalizationRepository(roster),
+    )
+
+    summary = await service.finalize(
+        None,
+        session_id=SESSION_ID,
+        closed_at=CLOSED_AT,
+        actor_user_id=ACTOR_ID,
+    )
+
+    assert summary.results[0].student_id == STUDENT_ON_TIME
+    assert summary.results[0].student_user_id == user_id
+

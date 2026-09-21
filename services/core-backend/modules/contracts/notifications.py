@@ -70,7 +70,14 @@ class NotificationProducer(Protocol):
         session_id: UUID,
         results: Sequence[tuple[UUID, FinalAttendanceStatus]],
     ) -> list[UUID]:
-        """The session closed; each student is told their final attendance."""
+        """The session closed; each student is told their final attendance.
+
+        ``results`` pairs each student's *user* id (``identity.users.id``, the
+        account that receives the notification, not the student profile id)
+        with the status that was decided. It holds only the automatic
+        decisions: a student whose attendance a lecturer already set by hand
+        was told through ``attendance_changed`` when that happened.
+        """
         ...
 
     async def attendance_changed(

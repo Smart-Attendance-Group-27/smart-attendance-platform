@@ -500,6 +500,14 @@ def test_the_service_factory_passes_the_bound_qr_provider_through(monkeypatch) -
     assert service._notification_service is None
 
 
+def test_the_service_factory_passes_the_bound_notification_producer_through(monkeypatch) -> None:
+    producer = object()
+    monkeypatch.setattr(lecturer_route, "get_notification_producer", lambda: producer)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+
+    service = get_lecturer_session_service(request)
+
+    assert service._notification_producer is producer
 def test_create_session_without_geofence_returns_the_documented_422(
     jwks_document,
     make_access_token,

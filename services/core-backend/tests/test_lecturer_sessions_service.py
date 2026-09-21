@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pytest
 
+from fakes import FakeQrEvidenceProvider, RecordingNotificationProducer
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
 from modules.academic.lecturer_profile.repository import LecturerProfileRecord
 from modules.attendance_sessions.lecturer_sessions.exception import (
@@ -24,6 +25,8 @@ from modules.attendance_sessions.lecturer_sessions.repository import (
     TimetableEntryForSessionRecord,
 )
 from modules.attendance_sessions.lecturer_sessions.service import LecturerSessionService
+from modules.attendance_verification.attendance_state import FinalAttendanceStatus, InitialCheckInStatus
+from modules.attendance_verification.finalization.repository import RosterStudentState
 
 ACTOR_ID = UUID("20000000-0000-0000-0000-000000000002")
 LECTURER_ID = UUID("22000000-0000-0000-0000-000000000001")
@@ -48,6 +51,7 @@ class FakeConnection:
         self.executed_args: list[tuple] = []
 
     def transaction(self) -> FakeTransaction:
+        self.transactions_opened = getattr(self, "transactions_opened", 0) + 1
         return FakeTransaction()
 
     async def execute(self, query: str, *args) -> None:
@@ -466,6 +470,201 @@ async def test_create_rejects_missing_lecturer_profile() -> None:
         await service.create_for_user(FakePool(), ACTOR_ID, **build_create_kwargs())
 
 
+class FailingNotificationProducer(RecordingNotificationProducer):
+    async def session_opened(self, connection, *, session_id):
+        raise RuntimeError("notification store unavailable")
+
+    async def attendance_finalized(self, connection, *, session_id, results):
+        raise RuntimeError("notification store unavailable")
+
+
+class FakeCheckInForClose:
+    async def reconcile_before_close(self, connection, session_id, closed_at, *, session=None):
+        return []
+
+
+class FakeFinalizationRepository:
+    def __init__(self, roster: list[RosterStudentState]) -> None:
+        self.roster = roster
+
+    async def lock_session_attempts(self, connection, session_id):
+        return None
+
+    async def fetch_roster_state(self, connection, session_id):
+        return self.roster
+
+    async def upsert_automatic_records(self, connection, session_id, results, decided_at):
+        return None
+
+
+STUDENT_ONE = UUID("23000000-0000-0000-0000-000000000001")
+STUDENT_TWO = UUID("23000000-0000-0000-0000-000000000002")
+STUDENT_ONE_USER = UUID("20000000-0000-0000-0000-000000000011")
+STUDENT_TWO_USER = UUID("20000000-0000-0000-0000-000000000012")
+
+
+def checked_in(student_id: UUID, user_id: UUID | None) -> RosterStudentState:
+    return RosterStudentState(
+        student_id=student_id,
+        verification_attempt_id=None,
+        initial_check_in_status=InitialCheckInStatus.CHECKED_IN.value,
+        has_manual_record=False,
+        student_user_id=user_id,
+    )
+
+
+def never_arrived(student_id: UUID, user_id: UUID | None) -> RosterStudentState:
+    return RosterStudentState(
+        student_id=student_id,
+        verification_attempt_id=None,
+        initial_check_in_status=None,
+        has_manual_record=False,
+        student_user_id=user_id,
+    )
+
+
+def build_closing_service(
+    producer: RecordingNotificationProducer,
+    roster: list[RosterStudentState] | None = None,
+    *,
+    with_qr_provider: bool = True,
+) -> LecturerSessionService:
+    before = build_session(activated_at=CURRENT_TIME)
+    after = build_session(activated_at=CURRENT_TIME, closed_at=CURRENT_TIME)
+    return LecturerSessionService(
+        repository=FakeLecturerSessionRepository(before, after),
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        qr_evidence=FakeQrEvidenceProvider() if with_qr_provider else None,
+        qr_session_repository=FakeQrSessionRepository(),
+        check_in_service=FakeCheckInForClose(),
+        finalization_repository=FakeFinalizationRepository(roster or []),
+        notification_producer=producer,
+    )
+
+
+async def test_activating_announces_that_the_session_opened() -> None:
+    producer = RecordingNotificationProducer()
+    before = build_session()
+    after = build_session(activated_at=CURRENT_TIME)
+    service = LecturerSessionService(
+        repository=FakeLecturerSessionRepository(before, after),
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        notification_producer=producer,
+    )
+
+    await service.activate_for_user(FakePool(), ACTOR_ID, SESSION_ID)
+
+    assert producer.kinds == ["session_opened"]
+    assert producer.only_call_of("session_opened").payload == {"session_id": SESSION_ID}
+
+
+async def test_a_refused_activation_announces_nothing() -> None:
+    producer = RecordingNotificationProducer()
+    already_active = build_session(activated_at=CURRENT_TIME)
+    service = LecturerSessionService(
+        repository=FakeLecturerSessionRepository(already_active, already_active),
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        notification_producer=producer,
+    )
+
+    with pytest.raises(SessionAlreadyActiveError):
+        await service.activate_for_user(FakePool(), ACTOR_ID, SESSION_ID)
+
+    assert producer.calls == []
+
+
+async def test_the_announcement_runs_in_a_savepoint_inside_the_activation() -> None:
+    producer = RecordingNotificationProducer()
+    service = LecturerSessionService(
+        repository=FakeLecturerSessionRepository(
+            build_session(),
+            build_session(activated_at=CURRENT_TIME),
+        ),
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        notification_producer=producer,
+    )
+    pool = FakePool()
+
+    await service.activate_for_user(pool, ACTOR_ID, SESSION_ID)
+
+    # The activation's own transaction, plus the savepoint around the announcement.
+    assert pool.connection.transactions_opened == 2
+
+
+async def test_a_failing_producer_does_not_stop_a_session_from_activating() -> None:
+    after = build_session(activated_at=CURRENT_TIME)
+    service = LecturerSessionService(
+        repository=FakeLecturerSessionRepository(build_session(), after),
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        notification_producer=FailingNotificationProducer(),
+    )
+    pool = FakePool()
+
+    result = await service.activate_for_user(pool, ACTOR_ID, SESSION_ID)
+
+    assert result == after
+    assert "audit.audit_logs" in pool.connection.executed_queries[0]
+
+
+async def test_closing_tells_each_student_their_final_attendance() -> None:
+    producer = RecordingNotificationProducer()
+    roster = [
+        checked_in(STUDENT_ONE, STUDENT_ONE_USER),
+        never_arrived(STUDENT_TWO, STUDENT_TWO_USER),
+    ]
+    service = build_closing_service(producer, roster)
+
+    await service.close_for_user(FakePool(), ACTOR_ID, SESSION_ID)
+
+    payload = producer.only_call_of("attendance_finalized").payload
+    assert payload["session_id"] == SESSION_ID
+    assert payload["results"] == [
+        (STUDENT_ONE_USER, FinalAttendanceStatus.PRESENT),
+        (STUDENT_TWO_USER, FinalAttendanceStatus.ABSENT),
+    ]
+
+
+async def test_a_student_with_no_account_to_notify_is_left_out() -> None:
+    producer = RecordingNotificationProducer()
+    roster = [checked_in(STUDENT_ONE, STUDENT_ONE_USER), checked_in(STUDENT_TWO, None)]
+    service = build_closing_service(producer, roster)
+
+    await service.close_for_user(FakePool(), ACTOR_ID, SESSION_ID)
+
+    results = producer.only_call_of("attendance_finalized").payload["results"]
+    assert results == [(STUDENT_ONE_USER, FinalAttendanceStatus.PRESENT)]
+
+
+async def test_closing_without_finalization_announces_nothing() -> None:
+    producer = RecordingNotificationProducer()
+    service = build_closing_service(producer, with_qr_provider=False)
+
+    _, summary = await service.close_for_user(FakePool(), ACTOR_ID, SESSION_ID)
+
+    assert summary is None
+    assert producer.calls == []
+
+
+async def test_closing_an_empty_roster_announces_nothing() -> None:
+    producer = RecordingNotificationProducer()
+    service = build_closing_service(producer, [])
+
+    await service.close_for_user(FakePool(), ACTOR_ID, SESSION_ID)
+
+    assert producer.calls == []
+
+
+async def test_a_failing_producer_does_not_stop_a_session_from_closing() -> None:
+    roster = [checked_in(STUDENT_ONE, STUDENT_ONE_USER)]
+    service = build_closing_service(FailingNotificationProducer(), roster)
+    pool = FakePool()
+
+    session, summary = await service.close_for_user(pool, ACTOR_ID, SESSION_ID)
+
+    assert session.closed_at is not None
+    assert summary is not None
+    assert summary.present == 1
+    assert "audit.audit_logs" in pool.connection.executed_queries[-1]
 class RecordingRedis:
     def __init__(self) -> None:
         self.deleted_keys: list[str] = []
