@@ -35,6 +35,10 @@ from modules.attendance_verification.finalization.service import AttendanceFinal
 from modules.attendance_verification.finalization.types import FinalizationSummary
 from modules.audit.repository import write_audit_log
 from modules.contracts.announce import announce
+from modules.contracts.attendance_policy import (
+    AttendancePolicyProvider,
+    DefaultAttendancePolicyProvider,
+)
 from modules.contracts.notifications import NoOpNotificationProducer, NotificationProducer
 from modules.contracts.qr_evidence import QrEvidenceProvider
 from modules.notification.push.notification_service import NotificationService
@@ -64,6 +68,7 @@ class LecturerSessionService:
         notification_service: NotificationService | None = None,
         notification_producer: NotificationProducer | None = None,
         finalization_repository: FinalizationRepository | None = None,
+        attendance_policy: AttendancePolicyProvider | None = None,
     ) -> None:
         self._repository = repository or LecturerSessionRepository()
         self._lecturer_profile_repository = (
@@ -75,6 +80,7 @@ class LecturerSessionService:
         self._notification_service = notification_service
         self._notification_producer = notification_producer or NoOpNotificationProducer()
         self._finalization_repository = finalization_repository
+        self._attendance_policy = attendance_policy or DefaultAttendancePolicyProvider()
 
     async def list_for_user(
         self,
@@ -185,22 +191,22 @@ class LecturerSessionService:
         if scheduled_end_at <= scheduled_start_at:
             raise InvalidSessionScheduleError("scheduledEndAt must be after scheduledStartAt.")
 
-        resolved_check_in_opens_at = check_in_opens_at or scheduled_start_at
-        resolved_check_in_closes_at = check_in_closes_at or scheduled_end_at
-        resolved_late_after_at = late_after_at or (
-            scheduled_start_at + timedelta(minutes=DEFAULT_LATE_AFTER_MINUTES)
-        )
-
-        if resolved_check_in_closes_at <= resolved_check_in_opens_at:
-            raise InvalidSessionScheduleError("checkInClosesAt must be after checkInOpensAt.")
-        if not (resolved_check_in_opens_at <= resolved_late_after_at <= resolved_check_in_closes_at):
-            raise InvalidSessionScheduleError(
-                "lateAfterAt must fall between checkInOpensAt and checkInClosesAt."
-            )
-
         session_id = uuid4()
 
         async with pool.acquire() as connection, connection.transaction():
+            (
+                resolved_check_in_opens_at,
+                resolved_check_in_closes_at,
+                resolved_late_after_at,
+            ) = await self._resolve_check_in_times(
+                connection,
+                scheduled_start_at=scheduled_start_at,
+                scheduled_end_at=scheduled_end_at,
+                check_in_opens_at=check_in_opens_at,
+                check_in_closes_at=check_in_closes_at,
+                late_after_at=late_after_at,
+            )
+
             lecturer_id = await self._resolve_active_lecturer_id(connection, user_id)
 
             entry = await self._repository.find_timetable_entry_for_lecturer(
@@ -487,6 +493,58 @@ class LecturerSessionService:
             ),
             label="attendance_finalized",
         )
+
+    async def _resolve_check_in_times(
+        self,
+        connection: asyncpg.Connection,
+        *,
+        scheduled_start_at: datetime,
+        scheduled_end_at: datetime,
+        check_in_opens_at: datetime | None,
+        check_in_closes_at: datetime | None,
+        late_after_at: datetime | None,
+    ) -> tuple[datetime, datetime, datetime]:
+        """Fills in the check-in times a request left out.
+
+        A value in the request always wins. What is left comes from the active
+        attendance policy, and from the built-in defaults when there is none.
+        """
+
+        opens = check_in_opens_at or scheduled_start_at
+
+        # Nothing to look up when the request already says everything.
+        policy = None
+        if check_in_closes_at is None or late_after_at is None:
+            policy = await self._attendance_policy.get_active(connection)
+
+        if check_in_closes_at is not None:
+            closes = check_in_closes_at
+        elif policy is not None:
+            closes = min(
+                opens + timedelta(minutes=policy.check_in_window_minutes),
+                scheduled_end_at,
+            )
+        else:
+            closes = scheduled_end_at
+
+        if late_after_at is not None:
+            late_after = late_after_at
+        elif policy is not None:
+            late_after = min(
+                scheduled_start_at + timedelta(minutes=policy.late_threshold_minutes),
+                closes,
+            )
+        else:
+            late_after = scheduled_start_at + timedelta(minutes=DEFAULT_LATE_AFTER_MINUTES)
+
+        if closes <= opens:
+            raise InvalidSessionScheduleError("checkInClosesAt must be after checkInOpensAt.")
+        if not (opens <= late_after <= closes):
+            raise InvalidSessionScheduleError(
+                "lateAfterAt must fall between checkInOpensAt and checkInClosesAt."
+            )
+
+        return opens, closes, late_after
 
     async def _resolve_active_lecturer_id(
         self,
