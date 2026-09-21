@@ -4,7 +4,11 @@ from uuid import UUID
 
 import pytest
 
-from fakes import FakeQrEvidenceProvider, RecordingNotificationProducer
+from fakes import (
+    FakeAttendancePolicyProvider,
+    FakeQrEvidenceProvider,
+    RecordingNotificationProducer,
+)
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
 from modules.academic.lecturer_profile.repository import LecturerProfileRecord
 from modules.attendance_sessions.lecturer_sessions.exception import (
@@ -25,6 +29,7 @@ from modules.attendance_sessions.lecturer_sessions.repository import (
     TimetableEntryForSessionRecord,
 )
 from modules.attendance_sessions.lecturer_sessions.service import LecturerSessionService
+from modules.contracts.attendance_policy import AttendancePolicy
 from modules.attendance_verification.attendance_state import FinalAttendanceStatus, InitialCheckInStatus
 from modules.attendance_verification.finalization.repository import RosterStudentState
 
@@ -839,6 +844,139 @@ async def test_a_reason_outside_three_to_five_hundred_characters_is_refused(reas
     assert pool.connection.executed_queries == []
 
 
+def build_policy(window: int = 20, threshold: int = 5) -> AttendancePolicy:
+    return AttendancePolicy(
+        check_in_window_minutes=window,
+        late_threshold_minutes=threshold,
+        qr_default_validity_minutes=5,
+    )
+
+
+async def create_with_policy(
+    policy: AttendancePolicy | None,
+    **request_overrides,
+) -> tuple[dict, FakeAttendancePolicyProvider]:
+    provider = FakeAttendancePolicyProvider(policy)
+    created = build_session()
+    repository = FakeLecturerSessionRepository(
+        created,
+        created,
+        timetable_entry=build_timetable_entry(),
+    )
+    service = LecturerSessionService(
+        repository=repository,
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        attendance_policy=provider,
+    )
+
+    await service.create_for_user(FakePool(), ACTOR_ID, **build_create_kwargs(**request_overrides))
+
+    return repository.create_session_kwargs, provider
+
+
+async def test_a_policy_fills_in_the_window_and_the_late_threshold() -> None:
+    kwargs, _ = await create_with_policy(build_policy(window=20, threshold=5))
+
+    assert kwargs["check_in_opens_at"] == CURRENT_TIME
+    assert kwargs["check_in_closes_at"] == CURRENT_TIME + timedelta(minutes=20)
+    assert kwargs["late_after_at"] == CURRENT_TIME + timedelta(minutes=5)
+
+
+async def test_a_window_longer_than_the_session_is_capped_at_its_end() -> None:
+    kwargs, _ = await create_with_policy(build_policy(window=90, threshold=5))
+
+    assert kwargs["check_in_closes_at"] == CURRENT_TIME + timedelta(hours=1)
+
+
+async def test_a_late_threshold_longer_than_the_window_is_capped_at_the_close() -> None:
+    kwargs, _ = await create_with_policy(build_policy(window=20, threshold=30))
+
+    assert kwargs["check_in_closes_at"] == CURRENT_TIME + timedelta(minutes=20)
+    assert kwargs["late_after_at"] == CURRENT_TIME + timedelta(minutes=20)
+
+
+async def test_an_explicit_close_wins_and_the_threshold_is_measured_against_it() -> None:
+    explicit_close = CURRENT_TIME + timedelta(minutes=8)
+
+    kwargs, _ = await create_with_policy(
+        build_policy(window=20, threshold=30),
+        check_in_closes_at=explicit_close,
+    )
+
+    assert kwargs["check_in_closes_at"] == explicit_close
+    assert kwargs["late_after_at"] == explicit_close
+
+
+async def test_an_explicit_late_time_wins() -> None:
+    explicit_late = CURRENT_TIME + timedelta(minutes=12)
+
+    kwargs, _ = await create_with_policy(
+        build_policy(window=20, threshold=5),
+        late_after_at=explicit_late,
+    )
+
+    assert kwargs["late_after_at"] == explicit_late
+    assert kwargs["check_in_closes_at"] == CURRENT_TIME + timedelta(minutes=20)
+
+
+async def test_an_explicit_opening_time_is_what_the_window_counts_from() -> None:
+    explicit_open = CURRENT_TIME - timedelta(minutes=10)
+
+    kwargs, _ = await create_with_policy(
+        build_policy(window=20, threshold=5),
+        check_in_opens_at=explicit_open,
+    )
+
+    assert kwargs["check_in_opens_at"] == explicit_open
+    assert kwargs["check_in_closes_at"] == CURRENT_TIME + timedelta(minutes=10)
+    # the late threshold still counts from the scheduled start
+    assert kwargs["late_after_at"] == CURRENT_TIME + timedelta(minutes=5)
+
+
+async def test_the_policy_is_not_read_when_the_request_already_says_everything() -> None:
+    kwargs, provider = await create_with_policy(
+        build_policy(),
+        check_in_closes_at=CURRENT_TIME + timedelta(minutes=30),
+        late_after_at=CURRENT_TIME + timedelta(minutes=10),
+    )
+
+    assert provider.read_count == 0
+    assert kwargs["check_in_closes_at"] == CURRENT_TIME + timedelta(minutes=30)
+
+
+async def test_the_policy_is_read_once() -> None:
+    _, provider = await create_with_policy(build_policy())
+
+    assert provider.read_count == 1
+
+
+async def test_with_no_policy_the_built_in_defaults_are_kept() -> None:
+    kwargs, provider = await create_with_policy(None)
+
+    assert provider.read_count == 1
+    assert kwargs["check_in_closes_at"] == CURRENT_TIME + timedelta(hours=1)
+    assert kwargs["late_after_at"] == CURRENT_TIME + timedelta(minutes=10)
+
+
+async def test_a_policy_that_produces_an_impossible_window_is_refused_before_anything_is_written() -> None:
+    created = build_session()
+    repository = FakeLecturerSessionRepository(
+        created,
+        created,
+        timetable_entry=build_timetable_entry(),
+    )
+    service = LecturerSessionService(
+        repository=repository,
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        attendance_policy=FakeAttendancePolicyProvider(build_policy(window=0, threshold=0)),
+    )
+    pool = FakePool()
+
+    with pytest.raises(InvalidSessionScheduleError):
+        await service.create_for_user(pool, ACTOR_ID, **build_create_kwargs())
+
+    assert repository.calls == []
+    assert pool.connection.executed_queries == []
 async def test_cancelling_announces_that_the_session_was_cancelled() -> None:
     notifications = RecordingNotificationProducer()
     before = build_session(activated_at=CURRENT_TIME)
