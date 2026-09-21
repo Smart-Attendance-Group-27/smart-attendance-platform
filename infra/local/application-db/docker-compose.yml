@@ -15,8 +15,12 @@ services:
       - ../../../database/smart_attendance_db_clean.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
       - ../../../database/migrations/0001_add_keycloak_user_id.sql:/docker-entrypoint-initdb.d/002_keycloak_user.sql:ro
       - ../../../database/migrations/0002_add_session_geofence_snapshot.sql:/docker-entrypoint-initdb.d/003_geofence_snapshot.sql:ro
-      - ../../../database/smart_attendance_seed.sql:/docker-entrypoint-initdb.d/004_seed.sql:ro
-      - ./demo_seed.sql:/docker-entrypoint-initdb.d/005_geofence_demo.sql:ro
+      - ../../../database/migrations/20260814_add_qr_batch_mode.sql:/docker-entrypoint-initdb.d/004_qr_batch_mode.sql:ro
+      - ../../../database/migrations/20260920_01_attendance_lifecycle_columns.sql:/docker-entrypoint-initdb.d/005_attendance_lifecycle_columns.sql:ro
+      - ../../../database/migrations/20260920_02_attendance_check_in_state.sql:/docker-entrypoint-initdb.d/006_attendance_check_in_state.sql:ro
+      - ../../../database/migrations/20260920_03_final_attendance_constraints.sql:/docker-entrypoint-initdb.d/007_final_attendance_constraints.sql:ro
+      - ../../../database/smart_attendance_seed.sql:/docker-entrypoint-initdb.d/008_seed.sql:ro
+      - ./demo_seed.sql:/docker-entrypoint-initdb.d/009_geofence_demo.sql:ro
     healthcheck:
       test:
         [

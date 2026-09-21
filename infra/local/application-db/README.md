@@ -10,8 +10,12 @@ On the first start of an empty Docker volume, PostgreSQL applies:
 1. `database/smart_attendance_db_clean.sql`
 2. `database/migrations/0001_add_keycloak_user_id.sql`
 3. `database/migrations/0002_add_session_geofence_snapshot.sql`
-4. `database/smart_attendance_seed.sql`
-5. `infra/local/application-db/demo_seed.sql`
+4. `database/migrations/20260814_add_qr_batch_mode.sql`
+5. `database/migrations/20260920_01_attendance_lifecycle_columns.sql`
+6. `database/migrations/20260920_02_attendance_check_in_state.sql`
+7. `database/migrations/20260920_03_final_attendance_constraints.sql`
+8. `database/smart_attendance_seed.sql`
+9. `infra/local/application-db/demo_seed.sql`
 
 The demo overlay does not insert geofence attempts or phone coordinates. It
 creates two active sessions from the real seeded relationship chain:
@@ -52,6 +56,10 @@ docker compose --env-file infra/local/application-db/.env -f infra/local/applica
 
 Initialization scripts run only when the Docker volume is empty. Starting an
 existing volume preserves its data and does not re-run migrations or seeds.
+
+A volume created before the attendance lifecycle migrations were added to this
+list is missing those columns, and check-in fails against it. Recreate it with
+the reset command below to pick them up; this deletes only the local data.
 
 ## Connect The Backend
 
