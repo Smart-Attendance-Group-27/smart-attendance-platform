@@ -164,7 +164,6 @@ class SessionStudentResponse(BaseModel):
     face_status: str | None = Field(alias="faceStatus")
     face_similarity_score: float | None = Field(alias="faceSimilarityScore")
     face_liveness_passed: bool | None = Field(alias="faceLivenessPassed")
-    qr_status: str | None = Field(alias="qrStatus")  # deprecated, kept until INT-5
     attendance_status: str | None = Field(alias="attendanceStatus")
     review_status: str | None = Field(alias="reviewStatus")
     checked_in_at: datetime | None = Field(alias="checkedInAt")

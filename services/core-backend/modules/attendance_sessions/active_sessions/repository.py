@@ -22,7 +22,6 @@ class ActiveAttendanceSessionRecord:
     requires_face_verification: bool
     requires_geofence: bool
     requires_qr: bool
-    check_in_completed: bool
     attempt_status: str | None
     initial_check_in_status: str | None
     checked_in_at: datetime | None
@@ -70,7 +69,6 @@ class ActiveAttendanceSessionRepository:
                 session.requires_face_verification,
                 session.requires_geofence,
                 session.requires_qr,
-                bool_or(attendance_record.id IS NOT NULL) AS check_in_completed,
                 MAX(attempt.status) AS attempt_status,
                 MAX(attempt.initial_check_in_status) AS initial_check_in_status,
                 MAX(attempt.checked_in_at) AS checked_in_at,
@@ -152,7 +150,6 @@ class ActiveAttendanceSessionRepository:
                 requires_face_verification=bool(row["requires_face_verification"]),
                 requires_geofence=bool(row["requires_geofence"]),
                 requires_qr=bool(row["requires_qr"]),
-                check_in_completed=bool(row["check_in_completed"]),
                 attempt_status=row["attempt_status"],
                 initial_check_in_status=row["initial_check_in_status"],
                 checked_in_at=row["checked_in_at"],

@@ -113,7 +113,6 @@ def build_student(**overrides) -> SessionStudentRecord:
         face_status=None,
         face_similarity_score=None,
         face_liveness_passed=None,
-        qr_status=None,
         initial_check_in_status="checked_in",
         checked_in_at=None,
         attendance_status=None,

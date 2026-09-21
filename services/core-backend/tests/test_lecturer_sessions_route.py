@@ -101,7 +101,6 @@ def build_student(**overrides) -> SessionStudentRecord:
         face_status=None,
         face_similarity_score=None,
         face_liveness_passed=None,
-        qr_status=None,
         initial_check_in_status=None,
         checked_in_at=None,
         attendance_status=None,
@@ -664,3 +663,13 @@ def test_the_service_factory_uses_the_bound_policy_repository() -> None:
     service = get_lecturer_session_service(request)
 
     assert isinstance(service._attendance_policy, AttendancePolicyRepository)
+
+
+def test_the_roster_no_longer_reports_the_old_qr_status(client: TestClient, make_access_token) -> None:
+    response = client.get(
+        f"{SESSIONS_URL}/{SESSION_ID}/students",
+        headers=authorize(lecturer_token(make_access_token)),
+    )
+
+    assert response.status_code == 200
+    assert "qrStatus" not in response.json()[0]

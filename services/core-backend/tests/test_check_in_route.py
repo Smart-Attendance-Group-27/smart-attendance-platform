@@ -195,3 +195,12 @@ def test_requires_bearer_token(client: TestClient) -> None:
     response = client.post(CHECK_IN_URL)
 
     assert response.status_code == 401
+
+
+def test_the_old_complete_check_in_endpoint_is_gone(client: TestClient, make_access_token) -> None:
+    response = client.post(
+        f"/api/v1/attendance-sessions/{SESSION_ID}/complete-check-in",
+        headers=authorize(student_token(make_access_token)),
+    )
+
+    assert response.status_code == 404
