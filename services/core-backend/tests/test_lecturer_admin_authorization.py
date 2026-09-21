@@ -24,6 +24,7 @@ from conftest import (
     default_connection,
     generate_rsa_key,
 )
+from modules.academic.attendance_policy.route import router as attendance_policy_router
 from modules.identity.auth.dependencies import (
     CurrentAdministrator,
     CurrentLecturer,
@@ -34,6 +35,7 @@ from modules.identity.auth.dependencies import (
 
 def _build_probe_app() -> FastAPI:
     app = FastAPI()
+    app.include_router(attendance_policy_router, prefix="/api/v1")
 
     @app.get("/probe/student-only")
     async def student_only(current_user: CurrentStudent):
@@ -139,6 +141,21 @@ def test_student_cannot_call_a_lecturer_only_route(client, make_access_token) ->
 def test_student_cannot_call_an_administrator_only_route(client, make_access_token) -> None:
     token = make_access_token(subject=LINKED_STUDENT_SUBJECT, roles=("student",))
     response = client.get("/probe/administrator-only", headers=authorize(token))
+    assert response.status_code == 403
+
+
+def test_lecturer_cannot_change_attendance_policy(client, make_access_token) -> None:
+    token = make_access_token(subject=LINKED_LECTURER_SUBJECT, roles=("lecturer",))
+    response = client.put(
+        "/api/v1/administrators/me/attendance-policy",
+        headers=authorize(token),
+        json={
+            "checkInWindowMinutes": 15,
+            "lateThresholdMinutes": 10,
+            "qrDefaultValidityMinutes": 5,
+            "faceConfidenceThresholdPercent": 75,
+        },
+    )
     assert response.status_code == 403
 
 
