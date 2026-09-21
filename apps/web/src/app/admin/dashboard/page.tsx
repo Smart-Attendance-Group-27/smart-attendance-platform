@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { ActivityList } from "@/components/ui/ActivityList";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
+import Link from "next/link";
 import { ClassroomGeofencePanel } from "@/components/admin/ClassroomGeofencePanel";
 import { AttendancePolicyForm } from "@/components/admin/AttendancePolicyForm";
 import { getAdminDashboard } from "@/services/adminService";
@@ -18,11 +19,7 @@ export default async function AdminDashboardPage() {
       <PageHeader
         title="Administration"
         description="Institutional user, academic-source, classroom, geofence, and attendance-policy controls."
-        actions={
-          <Button variant="primary" title="Available once the policy configuration API is integrated" disabled>
-            Save changes
-          </Button>
-        }
+        actions={<Link href="/admin/policies" className="text-xs text-[var(--link)] hover:underline">Edit attendance policy</Link>}
       />
 
       <Notice variant="warning" title="Administrator-only controls.">
@@ -53,7 +50,7 @@ export default async function AdminDashboardPage() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="lg:col-span-7">
-          <AttendancePolicyForm policy={policy} />
+          <AttendancePolicyForm policy={policy} readOnly />
         </div>
 
         <div className="lg:col-span-5">

@@ -15,6 +15,7 @@ from conftest import (
     default_connection,
 )
 from fakes.notifications import RecordingNotificationProducer
+from fakes.attendance_policy import FakeAttendancePolicyProvider
 from main import create_app
 from modules.attendance_sessions.qr_session.exception import (
     ActiveStudentProfileNotFoundError,
@@ -54,9 +55,14 @@ def student_token(make_access_token) -> str:
 
 def test_qr_session_factory_wires_the_notification_producer(monkeypatch) -> None:
     notifications = RecordingNotificationProducer()
+    policy_provider = FakeAttendancePolicyProvider()
     monkeypatch.setattr(
         "modules.attendance_sessions.qr_session.route.get_notification_producer",
         lambda: notifications,
+    )
+    monkeypatch.setattr(
+        "modules.attendance_sessions.qr_session.route.get_attendance_policy_provider",
+        lambda: policy_provider,
     )
     request = Request({
         "type": "http",
@@ -66,6 +72,7 @@ def test_qr_session_factory_wires_the_notification_producer(monkeypatch) -> None
     service = get_qr_session_service(request)
 
     assert service._notification_producer is notifications
+    assert service._attendance_policy_provider is policy_provider
 
 
 class SuccessfulQrSessionService:

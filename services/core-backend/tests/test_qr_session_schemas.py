@@ -3,7 +3,6 @@ from pydantic import ValidationError
 
 from modules.attendance_sessions.qr_session.schemas import (
     DEFAULT_DYNAMIC_QR_REFRESH_INTERVAL_SECONDS,
-    DEFAULT_QR_VALIDITY_SECONDS,
     MAX_QR_VALIDITY_SECONDS,
     MIN_QR_VALIDITY_SECONDS,
     CreateQrSessionRequest,
@@ -11,11 +10,11 @@ from modules.attendance_sessions.qr_session.schemas import (
 )
 
 
-def test_create_qr_session_request_uses_default_validity() -> None:
+def test_create_qr_session_request_preserves_omitted_validity_for_policy_resolution() -> None:
     payload = CreateQrSessionRequest()
 
     assert payload.mode == "static"
-    assert payload.valid_for_seconds == DEFAULT_QR_VALIDITY_SECONDS
+    assert payload.valid_for_seconds is None
     assert payload.refresh_interval_seconds is None
 
 
@@ -23,6 +22,11 @@ def test_create_qr_session_request_accepts_camel_case_alias() -> None:
     payload = CreateQrSessionRequest(validForSeconds=MIN_QR_VALIDITY_SECONDS)
 
     assert payload.valid_for_seconds == MIN_QR_VALIDITY_SECONDS
+
+
+def test_create_qr_session_request_rejects_explicit_null_validity() -> None:
+    with pytest.raises(ValidationError):
+        CreateQrSessionRequest(validForSeconds=None)
 
 
 def test_create_qr_session_request_accepts_explicit_static_mode() -> None:

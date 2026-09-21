@@ -33,7 +33,7 @@ from modules.attendance_sessions.qr_session.service import (
     CurrentDynamicQrSession,
     SSE_RECONNECT_RETRY_MS,
 )
-from modules.contracts.providers import get_notification_producer
+from modules.contracts.providers import get_attendance_policy_provider, get_notification_producer
 from modules.identity.auth.dependencies import CurrentLecturer, CurrentStudent
 
 router = APIRouter(tags=["qr-sessions"])
@@ -59,6 +59,7 @@ def get_qr_session_service(request: Request) -> QrSessionService:
         qr_batch_cache=QrBatchMetadataCache(redis_client),
         dynamic_qr_hmac_secret=dynamic_qr_hmac_secret,
         notification_producer=get_notification_producer(),
+        attendance_policy_provider=get_attendance_policy_provider(),
     )
 
 

@@ -10,6 +10,7 @@ import {
   AcademicData,
   AdministratorAccount,
   AdminDashboardData,
+  AttendancePolicy,
   AuditLogEntry,
   LecturerAccount,
   ReferenceFaceRecord,
@@ -17,7 +18,16 @@ import {
   UserDirectoryData,
 } from "@/types/admin";
 
-export const MOCK_ADMIN_DASHBOARD: AdminDashboardData = {
+export const MOCK_ATTENDANCE_POLICY: AttendancePolicy = {
+  checkInWindowMinutes: 10,
+  lateThresholdMinutes: 5,
+  qrDefaultValidityMinutes: 15,
+  faceConfidenceThresholdPercent: 75,
+  updatedAt: "2026-08-01T00:00:00Z",
+  updatedByName: "Demo administrator",
+};
+
+export const MOCK_ADMIN_DASHBOARD: Omit<AdminDashboardData, "policy"> = {
   summary: {
     activeUsersCount: 4286,
     configuredClassroomsCount: 28,
@@ -32,13 +42,6 @@ export const MOCK_ADMIN_DASHBOARD: AdminDashboardData = {
     { classroomId: "room-lt-204", classroomCode: "LT-204", room: "LT-204", building: "CSE Building", buildingId: "building-cse", floorNumber: 2, capacity: 90, latitude: 6.7960, longitude: 79.9005, defaultGeofenceRadiusMeters: 30, assignedCoursesCount: 2, status: "active", rawStatus: "active" },
     { classroomId: "room-ai-lab-02", classroomCode: "AI-LAB-02", room: "AI-Lab-02", building: "Innovation Hub", buildingId: "building-innovation-hub", floorNumber: 1, capacity: 40, latitude: 6.7965, longitude: 79.9012, defaultGeofenceRadiusMeters: 20, assignedCoursesCount: 2, status: "needs_review", rawStatus: "inactive" },
   ],
-  policy: {
-    checkInWindowMinutes: 10,
-    lateThresholdMinutes: 5,
-    faceConfidenceThresholdPercent: 75,
-    dynamicQrPolicyLabel: "Optional and lecturer-controlled",
-    qrWindowMinutes: 15,
-  },
   academicSync: [
     { id: "sync-1", time: "—", title: "Course catalogue", detail: "No external academic source configured", status: "review" },
     { id: "sync-2", time: "—", title: "Student enrolments", detail: "Managed locally until a source is connected", status: "review" },
