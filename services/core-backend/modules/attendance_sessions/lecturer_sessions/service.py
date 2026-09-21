@@ -26,9 +26,12 @@ from modules.attendance_sessions.lecturer_sessions.repository import (
 )
 from modules.attendance_sessions.qr_session.repository import QrSessionRepository
 from modules.attendance_verification.check_in.service import CheckInService
+from modules.attendance_verification.finalization.repository import FinalizationRepository
 from modules.attendance_verification.finalization.service import AttendanceFinalizationService
 from modules.attendance_verification.finalization.types import FinalizationSummary
 from modules.audit.repository import write_audit_log
+from modules.contracts.announce import announce
+from modules.contracts.notifications import NoOpNotificationProducer, NotificationProducer
 from modules.contracts.qr_evidence import QrEvidenceProvider
 from modules.notification.push.notification_service import NotificationService
 from modules.notification.push.provider import PushProvider
@@ -53,6 +56,8 @@ class LecturerSessionService:
         qr_session_repository: QrSessionRepository | None = None,
         check_in_service: CheckInService | None = None,
         notification_service: NotificationService | None = None,
+        notification_producer: NotificationProducer | None = None,
+        finalization_repository: FinalizationRepository | None = None,
     ) -> None:
         self._repository = repository or LecturerSessionRepository()
         self._lecturer_profile_repository = (
@@ -62,6 +67,8 @@ class LecturerSessionService:
         self._qr_session_repository = qr_session_repository or QrSessionRepository()
         self._check_in_service = check_in_service or CheckInService()
         self._notification_service = notification_service
+        self._notification_producer = notification_producer or NoOpNotificationProducer()
+        self._finalization_repository = finalization_repository
 
     async def list_for_user(
         self,
@@ -122,6 +129,15 @@ class LecturerSessionService:
                 entity_id=session_id,
                 old_values={"activatedAt": None},
                 new_values={"activatedAt": updated.activated_at.isoformat()},
+            )
+
+            await announce(
+                connection,
+                lambda: self._notification_producer.session_opened(
+                    connection,
+                    session_id=session_id,
+                ),
+                label="session_opened",
             )
 
         # Fire push notifications to all enrolled students.
@@ -297,6 +313,7 @@ class LecturerSessionService:
                 finalization_service = AttendanceFinalizationService(
                     self._qr_evidence,
                     self._check_in_service,
+                    self._finalization_repository,
                 )
                 summary = await finalization_service.finalize(
                     connection,
@@ -308,6 +325,9 @@ class LecturerSessionService:
                     summary,
                     deactivated_qr_batch_ids=tuple(deactivated_qr_batch_ids),
                 )
+
+            if summary is not None:
+                await self._announce_finalization(connection, session_id, summary)
 
             audit_new_values: dict[str, object] = {"closedAt": closed_at.isoformat()}
             if summary is not None:
@@ -366,6 +386,32 @@ class LecturerSessionService:
                 else student
                 for student in students
             ]
+
+    async def _announce_finalization(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+        summary: FinalizationSummary,
+    ) -> None:
+        # Only the automatic decisions: a student whose attendance a lecturer
+        # set by hand was already told when that happened.
+        results = [
+            (result.student_user_id, result.status)
+            for result in summary.results
+            if result.student_user_id is not None
+        ]
+        if not results:
+            return
+
+        await announce(
+            connection,
+            lambda: self._notification_producer.attendance_finalized(
+                connection,
+                session_id=session_id,
+                results=results,
+            ),
+            label="attendance_finalized",
+        )
 
     async def _resolve_active_lecturer_id(
         self,

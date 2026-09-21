@@ -487,3 +487,13 @@ def test_the_service_factory_passes_the_bound_qr_provider_through(monkeypatch) -
 
     assert service._qr_evidence is provider
     assert service._notification_service is None
+
+
+def test_the_service_factory_passes_the_bound_notification_producer_through(monkeypatch) -> None:
+    producer = object()
+    monkeypatch.setattr(lecturer_route, "get_notification_producer", lambda: producer)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+
+    service = get_lecturer_session_service(request)
+
+    assert service._notification_producer is producer
