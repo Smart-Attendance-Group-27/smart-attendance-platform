@@ -31,9 +31,6 @@ from modules.attendance_sessions.lecturer_sessions.route import (
 )
 from modules.attendance_sessions.qr_session.route import router as qr_session_router
 from modules.attendance_verification.check_in.route import router as check_in_router
-from modules.attendance_verification.completion.route import (
-    router as completion_router,
-)
 from modules.attendance_verification.face.route import router as face_router
 from modules.attendance_verification.geofence.route import router as geofence_router
 from modules.attendance_verification.manual_review.route import (
@@ -105,7 +102,6 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
     app.include_router(geofence_router, prefix="/api/v1")
     app.include_router(face_router, prefix="/api/v1")
     app.include_router(check_in_router, prefix="/api/v1")
-    app.include_router(completion_router, prefix="/api/v1")
     app.include_router(lecturer_courses_router, prefix="/api/v1")
     app.include_router(lecturer_sessions_router, prefix="/api/v1")
     app.include_router(manual_review_router, prefix="/api/v1")
