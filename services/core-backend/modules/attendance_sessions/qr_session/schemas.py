@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator, model_validator
 
 from modules.attendance_sessions.qr_session.evidence import QrBatchParticipation, StudentQrBatch
 from modules.attendance_sessions.qr_session.service import DEFAULT_QR_VALIDITY_SECONDS, StudentQrProgress
@@ -173,3 +173,17 @@ class LecturerQrBatchResponse(BaseModel):
             required_student_count=batch.required_student_count,
             passed_student_count=batch.passed_student_count,
         )
+
+
+class VoidQrBatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: StrictStr = Field(min_length=3, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def trim_reason(cls, value: str) -> str:
+        reason = value.strip()
+        if len(reason) < 3:
+            raise ValueError("A reason of at least three characters is required.")
+        return reason

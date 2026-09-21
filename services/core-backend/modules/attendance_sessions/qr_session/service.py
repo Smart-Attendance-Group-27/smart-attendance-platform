@@ -17,6 +17,8 @@ from modules.attendance_sessions.qr_session.exception import (
     DynamicQrSessionUnavailableError,
     LecturerSessionAccessError,
     QrNotRequiredError,
+    QrBatchAlreadyVoidedError,
+    QrBatchVoidSessionError,
     QrSessionNotFoundError,
     StudentNotEligibleError,
 )
@@ -184,6 +186,52 @@ class QrSessionService:
             return await self._evidence_repository.batch_participation_for_session(
                 connection, session_id,
             )
+
+    async def void_qr_batch(
+        self, pool: asyncpg.Pool, session_id: UUID, qr_session_id: UUID,
+        lecturer_user_id: UUID, reason: str,
+    ) -> QrBatchParticipation:
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                session = await self._repository.lock_attendance_session(connection, session_id)
+                if session is None:
+                    raise LecturerSessionAccessError()
+                await self._authorize_lecturer_for_session(connection, session_id, lecturer_user_id)
+                if session.status == "closed" or session.closed_at is not None:
+                    raise QrBatchVoidSessionError("SESSION_ALREADY_CLOSED")
+                if session.status == "cancelled" or session.cancelled_at is not None:
+                    raise QrBatchVoidSessionError("SESSION_CANCELLED")
+                if session.status != ACTIVE_STATUS:
+                    raise QrBatchVoidSessionError("SESSION_NOT_ACTIVE")
+
+                batch = await self._repository.lock_qr_batch_for_void(
+                    connection, session_id, qr_session_id,
+                )
+                if batch is None:
+                    raise QrSessionNotFoundError()
+                if batch.voided_at is not None:
+                    raise QrBatchAlreadyVoidedError()
+
+                voided_at = self._ensure_utc(self._clock())
+                await self._repository.void_qr_batch(
+                    connection, qr_session_id, voided_at, lecturer_user_id, reason,
+                )
+                await write_audit_log(
+                    connection,
+                    actor_user_id=lecturer_user_id,
+                    actor_type=ACTOR_TYPE_LECTURER,
+                    action="qr_session.void",
+                    entity_type=AUDIT_ENTITY_TYPE,
+                    entity_id=qr_session_id,
+                    new_values={"attendanceSessionId": str(session_id), "reason": reason},
+                )
+                batches = await self._evidence_repository.batch_participation_for_session(
+                    connection, session_id,
+                )
+                result = next(batch for batch in batches if batch.qr_session_id == qr_session_id)
+
+        await self._delete_cached_qr_batches([qr_session_id])
+        return result
 
     async def create_static_qr_session(
         self,

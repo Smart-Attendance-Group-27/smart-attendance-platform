@@ -45,7 +45,10 @@ export default async function LecturerSessionQrPage(props: PageProps<"/lecturer/
         sessionId={session.sessionId}
       />
       {session.status === "in_progress" ? <SessionLiveRefresh /> : null}
-      <QrBatchParticipationTable batches={batches} />
+      <QrBatchParticipationTable
+        batches={batches} sessionId={id}
+        canVoid={session.status === "in_progress" && !isWebMockMode()}
+      />
     </div>
   );
 }

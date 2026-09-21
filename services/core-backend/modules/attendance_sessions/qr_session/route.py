@@ -15,6 +15,8 @@ from modules.attendance_sessions.qr_session.exception import (
     DynamicQrSessionUnavailableError,
     LecturerSessionAccessError,
     QrNotRequiredError,
+    QrBatchAlreadyVoidedError,
+    QrBatchVoidSessionError,
     QrSessionNotFoundError,
     StudentNotEligibleError,
 )
@@ -27,6 +29,7 @@ from modules.attendance_sessions.qr_session.schemas import (
     StudentQrProgressResponse,
     VerifyQrSessionRequest,
     VerifyQrSessionResponse,
+    VoidQrBatchRequest,
 )
 from modules.attendance_sessions.qr_session.service import QrSessionService
 from modules.attendance_sessions.qr_session.service import (
@@ -254,6 +257,40 @@ async def list_lecturer_qr_batches(
             detail=_SESSION_NOT_FOUND_DETAIL,
         ) from error
     return [LecturerQrBatchResponse.from_domain(batch) for batch in batches]
+
+
+@lecturer_qr_batches_router.post(
+    "/{qr_session_id}/void", response_model=LecturerQrBatchResponse,
+)
+async def void_lecturer_qr_batch(
+    session_id: UUID,
+    qr_session_id: UUID,
+    http_request: Request,
+    payload: VoidQrBatchRequest,
+    current_lecturer: CurrentLecturer,
+    qr_session_service: QrSessionService = Depends(get_qr_session_service),
+) -> LecturerQrBatchResponse:
+    try:
+        batch = await qr_session_service.void_qr_batch(
+            http_request.app.state.db_pool, session_id, qr_session_id,
+            current_lecturer.user_id, payload.reason,
+        )
+    except (LecturerSessionAccessError, QrSessionNotFoundError) as error:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            {"code": "BATCH_NOT_FOUND", "message": "QR batch was not found."},
+        ) from error
+    except QrBatchAlreadyVoidedError as error:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"code": "BATCH_ALREADY_VOIDED", "message": "QR batch is already voided."},
+        ) from error
+    except QrBatchVoidSessionError as error:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            {"code": error.code, "message": "This session no longer permits voiding QR batches."},
+        ) from error
+    return LecturerQrBatchResponse.from_domain(batch)
 
 
 @verify_qr_session_router.get(
