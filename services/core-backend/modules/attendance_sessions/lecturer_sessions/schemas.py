@@ -33,10 +33,10 @@ class CancelSessionRequest(BaseModel):
 def derive_session_status(record: LecturerSessionRecord) -> str:
     """Derives a status string from timestamps rather than a DB enum.
 
-    attendance_session.sessions.status has no CHECK constraint and existing
-    code only ever checks for the literal 'active' — cancelled_at/closed_at/
-    activated_at are the real source of truth, so status is computed from
-    them here instead of trusting the raw column.
+    attendance_session.sessions.status has no CHECK constraint, and sessions
+    closed before 'closed' was stored still read 'active'. cancelled_at/
+    closed_at/activated_at are the source of truth, so status is computed
+    from them here instead of trusting the raw column.
     """
     if record.cancelled_at is not None:
         return "cancelled"

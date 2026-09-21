@@ -109,7 +109,8 @@ def derive_session_state(
     closed_at: datetime | None,
     cancelled_at: datetime | None,
 ) -> SessionState:
-    # status stays 'active' after close today, so closed_at/cancelled_at decide.
+    # Sessions closed before 'closed' was stored still have status 'active',
+    # so closed_at/cancelled_at decide first.
     if cancelled_at is not None:
         return SessionState.CANCELLED
     if closed_at is not None:

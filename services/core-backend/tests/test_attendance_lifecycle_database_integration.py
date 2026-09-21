@@ -338,6 +338,13 @@ def lecturer_service():
     return get_lecturer_session_service(SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace())))
 
 
+async def session_status_of(pool: asyncpg.Pool, session_id: UUID) -> str:
+    return await pool.fetchval(
+        "SELECT status FROM attendance_session.sessions WHERE id = $1",
+        session_id,
+    )
+
+
 async def records_of(pool: asyncpg.Pool, session_id: UUID) -> dict[UUID, asyncpg.Record]:
     rows = await pool.fetch(
         """
@@ -354,6 +361,8 @@ async def test_closing_decides_every_students_attendance_from_the_real_evidence(
     pool: asyncpg.Pool,
     lecture: Lecture,
 ) -> None:
+    assert await session_status_of(pool, lecture.session_id) == "active"
+
     session, summary = await lecturer_service().close_for_user(
         pool,
         LECTURER_USER_ID,
@@ -361,6 +370,7 @@ async def test_closing_decides_every_students_attendance_from_the_real_evidence(
     )
 
     assert session.closed_at is not None
+    assert await session_status_of(pool, lecture.session_id) == "closed"
     assert summary is not None
     assert summary.enrolled == 6
     assert summary.present == 1  # on time, and scanned the batch

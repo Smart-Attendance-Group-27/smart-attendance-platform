@@ -20,8 +20,8 @@ def test_a_cancelled_session_is_cancelled_even_if_it_was_also_closed() -> None:
     assert state is SessionState.CANCELLED
 
 
-def test_a_closed_session_is_closed_even_though_status_stays_active() -> None:
-    # status is never updated to 'closed' today; closed_at is the real signal.
+def test_a_session_closed_before_the_closed_status_was_stored_is_still_closed() -> None:
+    # Older closed sessions still have status 'active'; closed_at decides.
     state = derive_session_state(
         status="active",
         closed_at=WINDOW_OPENS,
@@ -29,6 +29,26 @@ def test_a_closed_session_is_closed_even_though_status_stays_active() -> None:
     )
 
     assert state is SessionState.CLOSED
+
+
+def test_a_session_stored_as_closed_is_closed() -> None:
+    state = derive_session_state(
+        status="closed",
+        closed_at=WINDOW_OPENS,
+        cancelled_at=None,
+    )
+
+    assert state is SessionState.CLOSED
+
+
+def test_a_cancelled_session_stays_cancelled_with_the_closed_status_stored() -> None:
+    state = derive_session_state(
+        status="closed",
+        closed_at=WINDOW_OPENS,
+        cancelled_at=WINDOW_OPENS,
+    )
+
+    assert state is SessionState.CANCELLED
 
 
 def test_an_active_session_with_no_closed_or_cancelled_at_is_active() -> None:
