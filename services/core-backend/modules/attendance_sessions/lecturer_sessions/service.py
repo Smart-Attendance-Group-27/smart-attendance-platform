@@ -431,6 +431,15 @@ class LecturerSessionService:
                 },
             )
 
+            await announce(
+                connection,
+                lambda: self._notification_producer.session_cancelled(
+                    connection,
+                    session_id=session_id,
+                ),
+                label="session_cancelled",
+            )
+
         cache = QrBatchMetadataCache(redis_client)
         for batch_id in deactivated_qr_batch_ids:
             await cache.delete_qr_batch_cache(batch_id)

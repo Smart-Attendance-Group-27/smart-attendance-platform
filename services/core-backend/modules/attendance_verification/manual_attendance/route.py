@@ -16,6 +16,7 @@ from modules.attendance_verification.manual_attendance.schemas import (
     SetManualAttendanceRequest,
 )
 from modules.attendance_verification.manual_attendance.service import ManualAttendanceService
+from modules.contracts.providers import get_notification_producer
 from modules.identity.auth.dependencies import CurrentLecturer
 
 # Included into the lecturer sessions router, which supplies the
@@ -24,7 +25,7 @@ router = APIRouter(tags=["manual-attendance"])
 
 
 def get_manual_attendance_service() -> ManualAttendanceService:
-    return ManualAttendanceService()
+    return ManualAttendanceService(notification_producer=get_notification_producer())
 
 
 def _error(code: str, message: str) -> dict[str, str]:

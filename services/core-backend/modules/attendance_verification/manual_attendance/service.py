@@ -21,6 +21,8 @@ from modules.attendance_verification.manual_attendance.repository import (
     ManualAttendanceRepository,
 )
 from modules.audit.repository import write_audit_log
+from modules.contracts.announce import announce
+from modules.contracts.notifications import NoOpNotificationProducer, NotificationProducer
 
 ACTIVE_PROFILE_STATUS = "active"
 ACTOR_TYPE_LECTURER = "lecturer"
@@ -52,11 +54,13 @@ class ManualAttendanceService:
         self,
         repository: ManualAttendanceRepository | None = None,
         lecturer_profile_repository: LecturerProfileRepository | None = None,
+        notification_producer: NotificationProducer | None = None,
     ) -> None:
         self._repository = repository or ManualAttendanceRepository()
         self._lecturer_profile_repository = (
             lecturer_profile_repository or LecturerProfileRepository()
         )
+        self._notification_producer = notification_producer or NoOpNotificationProducer()
 
     async def set_status(
         self,
@@ -108,7 +112,12 @@ class ManualAttendanceService:
         if session.activated_at is None:
             raise SessionNotStartedError()
 
-        if not await self._repository.is_on_roster(connection, session_id, student_id):
+        student_user_id = await self._repository.find_roster_student_user_id(
+            connection,
+            session_id,
+            student_id,
+        )
+        if student_user_id is None:
             raise StudentNotOnRosterError()
 
         previous = await self._repository.find_existing_record(
@@ -147,6 +156,17 @@ class ManualAttendanceService:
                 "reason": reason,
             },
             metadata={"studentId": str(student_id)},
+        )
+
+        await announce(
+            connection,
+            lambda: self._notification_producer.attendance_changed(
+                connection,
+                session_id=session_id,
+                student_user_id=student_user_id,
+                status=status,
+            ),
+            label="attendance_changed",
         )
 
         return ManualAttendanceResult(
