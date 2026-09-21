@@ -96,7 +96,7 @@ async def test_register_accepts_expo_prefix():
         pool,
         user_id=USER_ID,
         expo_push_token=VALID_TOKEN_NEW_FORMAT,
-        platform="ios",
+        platform="android",
     )
     assert result.expo_push_token == VALID_TOKEN_NEW_FORMAT
 
@@ -106,21 +106,21 @@ async def test_register_accepts_expo_prefix():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("platform", ["windows", "ios", "web", "macos", ""])
 @pytest.mark.asyncio
-async def test_register_rejects_unknown_platform():
+async def test_register_rejects_non_android_platform(platform: str):
     service = DeviceTokenService()
     pool = AsyncMock()
     with pytest.raises(UnsupportedPlatformError):
         await service.register(
-            pool, user_id=USER_ID, expo_push_token=VALID_TOKEN, platform="windows"
+            pool, user_id=USER_ID, expo_push_token=VALID_TOKEN, platform=platform
         )
 
 
-@pytest.mark.parametrize("platform", ["android", "ios", "web"])
 @pytest.mark.asyncio
-async def test_register_accepts_supported_platforms(platform: str):
+async def test_register_accepts_android_platform():
     repo = AsyncMock()
-    repo.upsert.return_value = _make_record(platform=platform)
+    repo.upsert.return_value = _make_record(platform="android")
     service = DeviceTokenService(repository=repo)
 
     conn = AsyncMock()
@@ -131,9 +131,9 @@ async def test_register_accepts_supported_platforms(platform: str):
     pool.acquire.return_value = ctx
 
     result = await service.register(
-        pool, user_id=USER_ID, expo_push_token=VALID_TOKEN, platform=platform
+        pool, user_id=USER_ID, expo_push_token=VALID_TOKEN, platform="android"
     )
-    assert result.platform == platform
+    assert result.platform == "android"
 
 
 # ---------------------------------------------------------------------------
@@ -161,3 +161,35 @@ async def test_register_lowercases_platform():
     repo.upsert.assert_called_once()
     call_kwargs = repo.upsert.call_args.kwargs
     assert call_kwargs["platform"] == "android"
+
+
+# ---------------------------------------------------------------------------
+# Token revocation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_revoke_accepts_valid_token():
+    repo = AsyncMock()
+    repo.revoke.return_value = True
+    service = DeviceTokenService(repository=repo)
+
+    conn = AsyncMock()
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=conn)
+    ctx.__aexit__ = AsyncMock(return_value=None)
+    pool = MagicMock()
+    pool.acquire.return_value = ctx
+
+    revoked = await service.revoke(pool, user_id=USER_ID, expo_push_token=VALID_TOKEN)
+    assert revoked is True
+    repo.revoke.assert_called_once_with(conn, user_id=USER_ID, expo_push_token=VALID_TOKEN)
+
+
+@pytest.mark.asyncio
+async def test_revoke_rejects_malformed_token():
+    service = DeviceTokenService()
+    pool = AsyncMock()
+    with pytest.raises(InvalidExpoPushTokenError):
+        await service.revoke(pool, user_id=USER_ID, expo_push_token="bad-token")
+

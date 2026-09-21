@@ -240,3 +240,9 @@ seed, without connecting to Supabase. The following all held:
 - The rollback removed only the three snapshot columns and six checks. Session
   geofence rows and verification-attempt tables remained intact.
 - The migration re-applied successfully after rollback.
+
+### What The 20260921_02 Notification Indexes and Types Confirmed
+
+`20260921_02` adds the `ATTENDANCE_SESSION_CANCELLED` notification type and performance indexes
+for active Android device tokens, visible student notifications, and queued delivery attempts.
+

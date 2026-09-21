@@ -110,6 +110,54 @@ class DeviceTokenRepository:
             token_id,
         )
 
+    async def revoke(
+        self,
+        connection: asyncpg.Connection,
+        *,
+        user_id: UUID,
+        expo_push_token: str,
+    ) -> bool:
+        """Mark a token as revoked for the specific user.
+
+        Sets is_active = false and revoked_at = now().
+        Returns True if a matching active token was revoked.
+        """
+        result = await connection.execute(
+            """
+            UPDATE notification.device_tokens
+            SET is_active = false,
+                revoked_at = COALESCE(revoked_at, now())
+            WHERE expo_push_token = $1
+              AND user_id = $2
+              AND is_active IS TRUE
+            """,
+            expo_push_token,
+            user_id,
+        )
+        return result == "UPDATE 1"
+
+    async def revoke_by_id(
+        self,
+        connection: asyncpg.Connection,
+        *,
+        user_id: UUID,
+        token_id: UUID,
+    ) -> bool:
+        """Mark a token as revoked by primary key ID for the specific user."""
+        result = await connection.execute(
+            """
+            UPDATE notification.device_tokens
+            SET is_active = false,
+                revoked_at = COALESCE(revoked_at, now())
+            WHERE id = $1
+              AND user_id = $2
+              AND is_active IS TRUE
+            """,
+            token_id,
+            user_id,
+        )
+        return result == "UPDATE 1"
+
 
 def _row_to_record(row: asyncpg.Record) -> DeviceTokenRecord:
     return DeviceTokenRecord(

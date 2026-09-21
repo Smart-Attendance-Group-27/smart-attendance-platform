@@ -66,6 +66,11 @@ function toNotificationItem(value: unknown): NotificationItem | null {
     isRead: response.isRead,
     relatedId:
       typeof response.relatedId === 'string' ? response.relatedId : undefined,
+    relatedEntityType:
+      typeof response.relatedEntityType === 'string'
+        ? response.relatedEntityType
+        : undefined,
+    code: typeof response.code === 'string' ? response.code : undefined,
   };
 }
 

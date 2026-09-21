@@ -19,7 +19,7 @@ _EXPO_TOKEN_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-SUPPORTED_PLATFORMS = frozenset({"android", "ios", "web"})
+SUPPORTED_PLATFORMS = frozenset({"android"})
 
 
 class DeviceTokenService:
@@ -55,6 +55,23 @@ class DeviceTokenService:
                 user_id=user_id,
                 expo_push_token=expo_push_token,
                 platform=platform.lower(),
+            )
+
+    async def revoke(
+        self,
+        pool: asyncpg.Pool,
+        *,
+        user_id: UUID,
+        expo_push_token: str,
+    ) -> bool:
+        """Validate and revoke an active device push token for the user."""
+        _validate_token(expo_push_token)
+
+        async with pool.acquire() as connection:
+            return await self._repository.revoke(
+                connection,
+                user_id=user_id,
+                expo_push_token=expo_push_token,
             )
 
 

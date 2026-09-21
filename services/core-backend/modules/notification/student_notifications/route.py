@@ -42,9 +42,11 @@ async def list_my_notifications(
             title=notification.title,
             message=notification.message,
             type=notification.type,
+            code=notification.code,
             created_at=notification.created_at,
             is_read=notification.is_read,
             related_id=notification.related_id,
+            related_entity_type=notification.related_entity_type,
         )
         for notification in notifications
     ]

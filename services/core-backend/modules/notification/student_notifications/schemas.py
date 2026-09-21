@@ -11,6 +11,8 @@ class StudentNotificationResponse(BaseModel):
     title: str
     message: str
     type: str
+    code: str
     created_at: datetime = Field(alias="createdAt")
     is_read: bool = Field(alias="isRead")
-    related_id: UUID | None = Field(alias="relatedId")
+    related_id: UUID | None = Field(default=None, alias="relatedId")
+    related_entity_type: str | None = Field(default=None, alias="relatedEntityType")
