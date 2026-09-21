@@ -7,6 +7,7 @@ import { AttendanceProgressScreen } from '../../../../features/attendance/screen
 import { createAttendanceServices } from '../../../../features/attendance/services/createAttendanceServices';
 import { useAuth } from '../../../../features/auth/context/AuthContext';
 import { CoreApiClient } from '../../../../services/api/coreApiClient';
+import { createQrProgressService } from '../../../../features/qr/services/createQrServices';
 
 export default function AttendanceProgressRoute() {
   const router = useRouter();
@@ -17,19 +18,23 @@ export default function AttendanceProgressRoute() {
   const attendanceService = useMemo(() => createAttendanceServices(
     new CoreApiClient({ getAccessToken: () => accessToken }),
   ), [accessToken]);
+  const qrProgressService = useMemo(() => createQrProgressService(
+    new CoreApiClient({ getAccessToken: () => accessToken }),
+  ), [accessToken]);
 
   if (session.status !== 'authenticated') return null;
   if (!sessionId) return <ScreenContainer><Text>Attendance session link is incomplete.</Text></ScreenContainer>;
 
   return <AttendanceProgressScreen
     attendanceService={attendanceService}
-    onOpenQrScanner={() => router.push({
-      pathname: '/(student)/attendance/[sessionId]/qr-scanner', params: { sessionId },
+    onOpenQrScanner={(qrSessionId) => router.push({
+      pathname: '/(student)/attendance/[sessionId]/qr-scanner', params: { sessionId, qrSessionId },
     } as Href)}
     onReturnHome={() => router.replace('/(student)/(tabs)')}
     onStartCheckIn={() => router.push({
       pathname: '/(student)/attendance/[sessionId]/location-check', params: { sessionId },
     })}
+    qrProgressService={qrProgressService}
     sessionId={sessionId}
   />;
 }

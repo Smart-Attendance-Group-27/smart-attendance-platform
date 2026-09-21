@@ -29,6 +29,8 @@ import type { ProfileService } from '../../profile/services/profile.service';
 import { MockProfileService } from '../../profile/services/mockProfileService';
 import type { CourseService } from '../../courses/services/courseService';
 import type { Course } from '../../courses/mockCoursesData';
+import type { QrProgress } from '../../qr/types/qrProgress';
+import type { QrProgressService } from '../../qr/services/qrProgressService';
 
 type DashboardScreenProps = {
   activeSessionService?: ActiveAttendanceSessionService;
@@ -40,6 +42,7 @@ type DashboardScreenProps = {
   courseService?: CourseService;
   onReadinessCheckPress?: () => void;
   profileService?: ProfileService;
+  qrProgressService?: QrProgressService;
   onSignOutPress?: () => void;
 };
 
@@ -51,6 +54,7 @@ export function DashboardScreen({
   onReadinessCheckPress,
   onSignOutPress,
   profileService,
+  qrProgressService,
 }: DashboardScreenProps) {
   const router = useRouter();
   const service = useMemo(() => dashboardService ?? new MockDashboardService(), [dashboardService]);
@@ -63,6 +67,7 @@ export function DashboardScreen({
   const [error, setError] = useState<string | null>(null);
   const [lectures, setLectures] = useState<Lecture[]>([]);
   const [activeSessions, setActiveSessions] = useState<AttendanceSession[]>([]);
+  const [qrProgressBySession, setQrProgressBySession] = useState<Record<string, QrProgress>>({});
   const [courseCards, setCourseCards] = useState<CourseSummary[]>([]);
   const [requiresReadinessCheck, setRequiresReadinessCheck] = useState(false);
   const [userName, setUserName] = useState<string>('');
@@ -209,6 +214,24 @@ export function DashboardScreen({
     }, [activeSessionService, faceVerificationApiService]),
   );
 
+  useEffect(() => {
+    if (!qrProgressService) return;
+    let active = true;
+    const checkedIn = activeSessions.filter((item) => item.checkInStatus === 'completed');
+    void Promise.all(checkedIn.map(async (item) => ({
+      id: item.id,
+      result: await qrProgressService.getQrProgress(item.id),
+    }))).then((results) => {
+      if (!active) return;
+      const next: Record<string, QrProgress> = {};
+      for (const { id, result } of results) {
+        if (result.status === 'loaded') next[id] = result.progress;
+      }
+      setQrProgressBySession(next);
+    }).catch(() => { if (active) setQrProgressBySession({}); });
+    return () => { active = false; };
+  }, [activeSessions, qrProgressService]);
+
   const handleSessionAction = (attendanceSession: AttendanceSession) => {
     if (!attendanceSession.id) return;
 
@@ -276,6 +299,7 @@ export function DashboardScreen({
               <ActiveSessionCard
                 key={activeSession.id}
                 onStart={() => handleSessionAction(activeSession)}
+                qrProgress={qrProgressBySession[activeSession.id]}
                 session={activeSession}
               />
             ))}

@@ -48,6 +48,9 @@ describe('CoreApiQrVerificationService', () => {
         qrSessionId: 'qr-session-1',
         status: 'accepted',
         verifiedAt: '2026-08-07T10:30:00Z',
+        batchPassed: true,
+        alreadyPassed: false,
+        requiredForStudent: true,
       }),
     );
 
@@ -60,6 +63,9 @@ describe('CoreApiQrVerificationService', () => {
       qrSessionId: 'qr-session-1',
       status: 'accepted',
       verifiedAt: '2026-08-07T10:30:00Z',
+      batchPassed: true,
+      alreadyPassed: false,
+      requiredForStudent: true,
     });
     expect(fetchMock).toHaveBeenCalledWith(
       'http://10.0.2.2:8000/api/v1/qr-sessions/qr-session-1/verify',
@@ -101,7 +107,16 @@ describe('CoreApiQrVerificationService', () => {
         qrSessionId: 'qr-session-1',
         qrValue: 'raw-secret-qr-value',
       }),
-    ).rejects.toThrow('QR verification request failed.');
+    ).rejects.toThrow('forbidden');
+  });
+
+  test('preserves CHECK_IN_REQUIRED from C07', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      jsonResponse(409, { detail: { code: 'CHECK_IN_REQUIRED' } }),
+    );
+    await expect(buildService().verifyQrSession({
+      qrSessionId: 'qr-session-1', qrValue: 'raw-secret-qr-value',
+    })).rejects.toThrow('check-in-required');
   });
 
   test('does not call the backend without an access token', async () => {
@@ -112,7 +127,7 @@ describe('CoreApiQrVerificationService', () => {
         qrSessionId: 'qr-session-1',
         qrValue: 'raw-secret-qr-value',
       }),
-    ).rejects.toThrow('QR verification request failed.');
+    ).rejects.toThrow('unavailable');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

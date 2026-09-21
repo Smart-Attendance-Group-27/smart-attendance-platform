@@ -9,6 +9,7 @@ import { MockActiveAttendanceSessionService } from '../../../features/dashboard/
 import { FaceVerificationApiService } from '../../../features/face-verification/services/faceVerificationApiService';
 import { CoreApiProfileService } from '../../../features/profile/services/coreApiProfileService';
 import { CoreApiClient } from '../../../services/api/coreApiClient';
+import { createQrProgressService } from '../../../features/qr/services/createQrServices';
 
 export default function StudentHomeRoute() {
   const router = useRouter();
@@ -44,6 +45,9 @@ export default function StudentHomeRoute() {
       }),
     [accessToken],
   );
+  const qrProgressService = useMemo(() => createQrProgressService(
+    new CoreApiClient({ getAccessToken: () => accessToken }),
+  ), [accessToken]);
 
   if (session.status !== 'authenticated') {
     return null;
@@ -59,6 +63,7 @@ export default function StudentHomeRoute() {
       }
       onSignOutPress={signOut}
       profileService={profileService}
+      qrProgressService={qrProgressService}
     />
   );
 }

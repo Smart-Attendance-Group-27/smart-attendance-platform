@@ -14,6 +14,7 @@ import {
 
 import { QrScannerScreen } from '../screens/QrScannerScreen';
 import type { QrVerificationService } from '../services/qrVerificationService';
+import { QrVerificationError } from '../services/qrVerificationService';
 
 const mockRequestPermission = jest.fn();
 let mockPermissionState: { granted: boolean } | null = { granted: true };
@@ -62,6 +63,9 @@ describe('QrScannerScreen', () => {
         qrSessionId: 'qr-session-1',
         status: 'accepted',
         verifiedAt: '2026-08-07T10:30:00Z',
+        batchPassed: true,
+        alreadyPassed: false,
+        requiredForStudent: true,
       }),
     );
     const onQrVerified = jest.fn();
@@ -93,6 +97,9 @@ describe('QrScannerScreen', () => {
       qrSessionId: 'qr-session-1',
       status: 'accepted',
       verifiedAt: '2026-08-07T10:30:00Z',
+      batchPassed: true,
+      alreadyPassed: false,
+      requiredForStudent: true,
     });
     expect(await findByText('QR verified')).toBeTruthy();
     expect(queryByText('decoded-qr-value')).toBeNull();
@@ -122,6 +129,9 @@ describe('QrScannerScreen', () => {
         qrSessionId: 'qr-session-from-route',
         status: 'invalid',
         verifiedAt: '2026-08-07T10:30:00Z',
+        batchPassed: false,
+        alreadyPassed: false,
+        requiredForStudent: true,
       }),
     );
     const { findByText } = await render(
@@ -181,5 +191,21 @@ describe('QrScannerScreen', () => {
     fireEvent.press(getByLabelText('Allow camera access'));
 
     expect(mockRequestPermission).toHaveBeenCalledTimes(1);
+  });
+
+  test('shows check-in required without reporting a passed QR', async () => {
+    const onQrVerified = jest.fn();
+    const screen = await render(<QrScannerScreen
+      onBack={jest.fn()}
+      onQrVerified={onQrVerified}
+      qrSessionId="qr-session-1"
+      qrVerificationService={{ verifyQrSession: async () => {
+        throw new QrVerificationError('check-in-required');
+      } }}
+      sessionId="session-1"
+    />);
+    await act(async () => { mockBarcodeHandler?.({ data: 'raw-value' }); });
+    expect(await screen.findByText('Check in first')).toBeTruthy();
+    expect(onQrVerified).not.toHaveBeenCalled();
   });
 });

@@ -4,6 +4,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { myAttendanceFixtures } from '../__fixtures__/myAttendance';
 import { AttendanceProgressScreen } from '../screens/AttendanceProgressScreen';
 import type { AttendanceService } from '../services/attendanceService';
+import type { QrProgressService } from '../../qr/services/qrProgressService';
 
 jest.mock('expo-router', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -47,6 +48,41 @@ describe('AttendanceProgressScreen', () => {
 
     expect(await screen.findByText('Final: Absent')).toBeTruthy();
     expect(screen.getByText('Set by your lecturer')).toBeTruthy();
+  });
+
+  test('shows a voided batch without counting it as required or passed', async () => {
+    const attendanceService: AttendanceService = {
+      ...serviceFor('attendance-session-checked-in'),
+      async getMyAttendance() {
+        return { status: 'loaded', attendance: {
+          ...myAttendanceFixtures['attendance-session-checked-in'], qrEnabled: true,
+        } };
+      },
+    };
+    const qrProgressService: QrProgressService = {
+      async getQrProgress(sessionId) {
+        return { status: 'loaded', progress: {
+          sessionId, qrEnabled: true, checkedInAt: '2026-07-20T10:02:00+05:30',
+          requiredCount: 0, passedCount: 0, activeBatch: null,
+          batches: [{
+            qrSessionId: 'batch-1', mode: 'static', activatedAt: '2026-07-20T10:05:00+05:30',
+            deactivatedAt: '2026-07-20T10:07:00+05:30', expiresAt: '2026-07-20T10:10:00+05:30',
+            voided: true, required: false, passed: false,
+          }],
+        } };
+      },
+    };
+    const screen = await render(<AttendanceProgressScreen
+      attendanceService={attendanceService}
+      qrProgressService={qrProgressService}
+      onReturnHome={jest.fn()}
+      onStartCheckIn={jest.fn()}
+      sessionId="attendance-session-checked-in"
+    />);
+
+    expect(await screen.findByText('0/0 required batches passed')).toBeTruthy();
+    expect(screen.getByText('Batch 1: Voided')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Scan QR' })).toBeNull();
   });
 
   test('retries C01 once after complete evidence and refreshes C02', async () => {

@@ -6,13 +6,16 @@ import { AppButton } from '../../../components/ui';
 import { lightColors, spacing, typography } from '../../../theme';
 import type { AttendanceService } from '../services/attendanceService';
 import type { MyAttendance } from '../types/myAttendance';
+import type { QrProgress } from '../../qr/types/qrProgress';
+import type { QrProgressService } from '../../qr/services/qrProgressService';
 
 type Props = {
   sessionId: string;
   attendanceService: AttendanceService;
+  qrProgressService?: QrProgressService;
   onReturnHome: () => void;
   onStartCheckIn: () => void;
-  onOpenQrScanner?: () => void;
+  onOpenQrScanner?: (qrSessionId: string) => void;
 };
 
 function canRecover(state: MyAttendance): boolean {
@@ -28,12 +31,14 @@ function formatTime(value: string): string {
 }
 
 export function AttendanceProgressScreen({
-  sessionId, attendanceService, onReturnHome, onStartCheckIn, onOpenQrScanner,
+  sessionId, attendanceService, qrProgressService, onReturnHome, onStartCheckIn, onOpenQrScanner,
 }: Props) {
   const [attendance, setAttendance] = useState<MyAttendance | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [qrProgress, setQrProgress] = useState<QrProgress | null>(null);
+  const [qrError, setQrError] = useState(false);
   const recoveryAttempted = useRef<string | null>(null);
   const requestId = useRef(0);
 
@@ -52,6 +57,21 @@ export function AttendanceProgressScreen({
       if (result.status === 'loaded') {
         setAttendance(result.attendance);
         setError(null);
+        if (result.attendance.qrEnabled && qrProgressService) {
+          try {
+            const qrResult = await qrProgressService.getQrProgress(sessionId);
+            if (request !== requestId.current) return;
+            setQrProgress(qrResult.status === 'loaded' ? qrResult.progress : null);
+            setQrError(qrResult.status !== 'loaded');
+          } catch {
+            if (request !== requestId.current) return;
+            setQrProgress(null);
+            setQrError(true);
+          }
+        } else {
+          setQrProgress(null);
+          setQrError(false);
+        }
       } else {
         setError(result.status === 'not-found'
           ? 'This attendance session is unavailable.'
@@ -65,7 +85,7 @@ export function AttendanceProgressScreen({
         setRefreshing(false);
       }
     }
-  }, [attendanceService, sessionId]);
+  }, [attendanceService, qrProgressService, sessionId]);
 
   useFocusEffect(useCallback(() => {
     void load();
@@ -130,13 +150,45 @@ export function AttendanceProgressScreen({
                   ? 'Session cancelled' : 'Awaiting final attendance'}</Text>
               )}
             </View>
+            {attendance.qrEnabled ? (
+              <View style={styles.card}>
+                <Text style={styles.heading}>QR progress</Text>
+                {qrError ? <Text>Could not load QR progress. Pull down to retry.</Text> : null}
+                {qrProgress ? (
+                  <>
+                    <Text style={styles.outcome}>
+                      {qrProgress.passedCount}/{qrProgress.requiredCount} required batches passed
+                    </Text>
+                    {qrProgress.activeBatch ? (
+                      <>
+                        <Text>Active batch</Text>
+                        {!attendance.initialCheckIn ? <Text>Check in first to scan QR</Text>
+                          : !qrProgress.activeBatch.required ? <Text>Not required for you</Text>
+                            : qrProgress.activeBatch.passed ? <Text>Already passed</Text>
+                              : attendance.sessionState === 'active' && onOpenQrScanner ? (
+                                <AppButton title="Scan QR" variant="secondary"
+                                  onPress={() => onOpenQrScanner(qrProgress.activeBatch!.qrSessionId)} />
+                              ) : null}
+                      </>
+                    ) : <Text>No active QR batch</Text>}
+                    {qrProgress.batches.length ? (
+                      <View style={styles.batchList}>
+                        <Text style={styles.heading}>Batches</Text>
+                        {qrProgress.batches.map((batch, index) => (
+                          <Text key={batch.qrSessionId}>
+                            Batch {index + 1}: {batch.voided ? 'Voided' : !batch.required
+                              ? 'Not required' : batch.passed ? 'Passed' : 'Required'}
+                          </Text>
+                        ))}
+                      </View>
+                    ) : null}
+                  </>
+                ) : null}
+              </View>
+            ) : null}
             {attendance.canStartCheckIn && !attendance.initialCheckIn ? (
               <AppButton title="Start check-in" onPress={onStartCheckIn} />
             ) : null}
-            {attendance.qrEnabled && attendance.initialCheckIn &&
-              attendance.sessionState === 'active' && onOpenQrScanner ? (
-                <AppButton title="Scan QR" onPress={onOpenQrScanner} variant="secondary" />
-              ) : null}
             <AppButton title="Return home" onPress={onReturnHome} variant="secondary" />
           </>
         ) : null}
@@ -155,4 +207,5 @@ const styles = StyleSheet.create({
     borderRadius: 12, borderWidth: 1, borderColor: lightColors.border },
   heading: { ...typography.sectionTitle, color: lightColors.textPrimary },
   outcome: { ...typography.body, color: lightColors.textPrimary, fontWeight: '700' },
+  batchList: { gap: spacing.xs, marginTop: spacing.sm },
 });

@@ -5,6 +5,9 @@ import { DashboardScreen } from '../screens/DashboardScreen';
 import type { ActiveAttendanceSessionService } from '../services/activeAttendanceSessionService';
 import type { DashboardService } from '../services/dashboardService';
 import type { FaceVerificationApiService } from '../../face-verification/services/faceVerificationApiService';
+import { MockQrProgressService } from '../../qr/services/mockQrProgressService';
+import { resetMockQrStore } from '../../qr/__fixtures__/mockQrStore';
+import { resetMockAttendanceStore } from '../../attendance/__fixtures__/mockAttendanceStore';
 
 const mockPush = jest.fn();
 let mockFocusCallback:
@@ -214,6 +217,30 @@ describe('DashboardScreen', () => {
     expect(
       screen.queryByRole('button', { name: 'Start attendance' }),
     ).toBeNull();
+  });
+
+  test('shows the C08 QR badge for a checked-in active session', async () => {
+    resetMockAttendanceStore();
+    resetMockQrStore();
+    const sessionId = 'attendance-session-checked-in';
+    const dashboardService: DashboardService = {
+      async getUpcomingLectures() { return []; },
+      async getActiveAttendanceSession() {
+        return {
+          id: sessionId, lectureId: sessionId, courseCode: 'CS3203',
+          courseName: 'Software Engineering Project',
+          startTime: '2026-07-20T10:00:00Z', endTime: '2026-07-20T12:00:00Z',
+          lateThreshold: '2026-07-20T10:10:00Z', checkInStatus: 'completed' as const,
+          initialCheckInStatus: 'checked_in' as const,
+        };
+      },
+    };
+    const screen = await render(<DashboardScreen
+      dashboardService={dashboardService}
+      qrProgressService={new MockQrProgressService()}
+    />);
+    expect(await screen.findByText('QR check active — scan now')).toBeTruthy();
+    expect(screen.getByText('QR: 0/2 required batches passed')).toBeTruthy();
   });
 
   test('refreshes a completed check-in when the dashboard regains focus', async () => {
