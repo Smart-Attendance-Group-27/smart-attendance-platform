@@ -34,6 +34,7 @@ from modules.attendance_sessions.lecturer_sessions.repository import (
 )
 from modules.attendance_sessions.lecturer_sessions import route as lecturer_route
 from modules.attendance_sessions.qr_session.evidence import QrEvidenceRepository
+from modules.contracts.attendance_policy import DefaultAttendancePolicyProvider
 from modules.attendance_sessions.lecturer_sessions.route import get_lecturer_session_service
 from modules.attendance_verification.finalization.types import (
     FinalizationResult,
@@ -646,3 +647,21 @@ def test_the_service_factory_is_wired_to_the_real_qr_evidence_by_default() -> No
     service = get_lecturer_session_service(request)
 
     assert isinstance(service._qr_evidence, QrEvidenceRepository)
+
+
+def test_the_service_factory_passes_the_bound_attendance_policy_through(monkeypatch) -> None:
+    provider = object()
+    monkeypatch.setattr(lecturer_route, "get_attendance_policy_provider", lambda: provider)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+
+    service = get_lecturer_session_service(request)
+
+    assert service._attendance_policy is provider
+
+
+def test_until_a_policy_is_bound_the_factory_uses_the_default_provider() -> None:
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+
+    service = get_lecturer_session_service(request)
+
+    assert isinstance(service._attendance_policy, DefaultAttendancePolicyProvider)

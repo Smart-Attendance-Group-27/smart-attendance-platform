@@ -24,7 +24,11 @@ from modules.attendance_sessions.lecturer_sessions.schemas import (
     SessionStudentResponse,
 )
 from modules.attendance_sessions.lecturer_sessions.service import LecturerSessionService
-from modules.contracts.providers import get_notification_producer, get_qr_evidence_provider
+from modules.contracts.providers import (
+    get_attendance_policy_provider,
+    get_notification_producer,
+    get_qr_evidence_provider,
+)
 from modules.attendance_verification.manual_attendance.route import (
     router as manual_attendance_router,
 )
@@ -51,6 +55,7 @@ def get_lecturer_session_service(http_request: Request) -> LecturerSessionServic
         qr_evidence=get_qr_evidence_provider(),
         notification_service=notification_service,
         notification_producer=get_notification_producer(),
+        attendance_policy=get_attendance_policy_provider(),
     )
 
 
