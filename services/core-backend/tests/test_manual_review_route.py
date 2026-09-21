@@ -21,6 +21,7 @@ from modules.attendance_verification.manual_review.exception import (
     VerificationAttemptNotFoundError,
 )
 from modules.attendance_verification.manual_review.repository import ManualReviewQueueItemRecord
+from modules.attendance_verification.manual_attendance import route as manual_route
 from modules.attendance_verification.manual_review.route import get_manual_review_service
 from modules.identity.auth.dependencies import get_authentication_service
 
@@ -262,3 +263,12 @@ def test_requires_bearer_token(client: TestClient) -> None:
     response = client.get(QUEUE_URL)
 
     assert response.status_code == 401
+
+
+def test_a_review_decision_announces_through_the_same_producer_as_a_direct_edit(monkeypatch) -> None:
+    producer = object()
+    monkeypatch.setattr(manual_route, "get_notification_producer", lambda: producer)
+
+    review_service = get_manual_review_service()
+
+    assert review_service._manual_attendance_service._notification_producer is producer

@@ -51,24 +51,24 @@ class ManualAttendanceRepository:
             cancelled_at=row["cancelled_at"],
         )
 
-    async def is_on_roster(
+    async def find_roster_student_user_id(
         self,
         connection: asyncpg.Connection,
         session_id: UUID,
         student_id: UUID,
-    ) -> bool:
-        return bool(
-            await connection.fetchval(
-                """
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM attendance_session.session_students
-                    WHERE session_id = $1 AND student_id = $2
-                )
-                """,
-                session_id,
-                student_id,
-            ),
+    ) -> UUID | None:
+        """The student's account id if they are on the roster, else ``None``."""
+
+        return await connection.fetchval(
+            """
+            SELECT student.user_id
+            FROM attendance_session.session_students AS roster
+            JOIN academic.student_profiles AS student
+                ON student.id = roster.student_id
+            WHERE roster.session_id = $1 AND roster.student_id = $2
+            """,
+            session_id,
+            student_id,
         )
 
     async def find_existing_record(

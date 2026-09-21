@@ -3,6 +3,7 @@ from uuid import UUID
 
 import pytest
 
+from fakes import RecordingNotificationProducer
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
 from modules.academic.lecturer_profile.repository import LecturerProfileRecord
 from modules.attendance_verification.attendance_state import (
@@ -26,6 +27,7 @@ USER_ID = UUID("20000000-0000-0000-0000-000000000002")
 LECTURER_ID = UUID("22000000-0000-0000-0000-000000000001")
 SESSION_ID = UUID("40000000-0000-0000-0000-000000000001")
 STUDENT_ID = UUID("23000000-0000-0000-0000-000000000001")
+STUDENT_USER_ID = UUID("20000000-0000-0000-0000-000000000011")
 NOW = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
 
 
@@ -97,8 +99,8 @@ class FakeManualAttendanceRepository:
     async def find_session_for_lecturer(self, connection, session_id, lecturer_id):
         return self.session
 
-    async def is_on_roster(self, connection, session_id, student_id):
-        return self.on_roster
+    async def find_roster_student_user_id(self, connection, session_id, student_id):
+        return STUDENT_USER_ID if self.on_roster else None
 
     async def find_existing_record(self, connection, session_id, student_id):
         return self.existing
@@ -130,13 +132,20 @@ def build_session(**overrides) -> SessionForManualAttendance:
 def build_service(
     repository: FakeManualAttendanceRepository,
     profile: LecturerProfileRecord | None = None,
+    notifications: RecordingNotificationProducer | None = None,
 ) -> ManualAttendanceService:
     return ManualAttendanceService(
         repository=repository,
         lecturer_profile_repository=FakeLecturerProfileRepository(
             profile if profile is not None else build_profile(),
         ),
+        notification_producer=notifications,
     )
+
+
+class FailingNotificationProducer(RecordingNotificationProducer):
+    async def attendance_changed(self, connection, *, session_id, student_user_id, status):
+        raise RuntimeError("notification store unavailable")
 
 
 async def set_status(service: ManualAttendanceService, pool=None, **overrides):
@@ -313,7 +322,8 @@ async def test_set_status_opens_its_own_transaction() -> None:
 
     await set_status(build_service(FakeManualAttendanceRepository(session=build_session())), pool)
 
-    assert pool.connection.transactions_opened == 1
+    # Its own transaction, plus the savepoint around the announcement.
+    assert pool.connection.transactions_opened == 2
 
 
 async def test_set_status_in_transaction_uses_the_callers_transaction() -> None:
@@ -329,5 +339,72 @@ async def test_set_status_in_transaction_uses_the_callers_transaction() -> None:
         reason="not in the room",
     )
 
-    assert connection.transactions_opened == 0
+    # Only the announcement's savepoint: no transaction of its own.
+    assert connection.transactions_opened == 1
     assert len(connection.executed) == 1
+
+
+async def test_the_student_is_told_their_attendance_changed() -> None:
+    notifications = RecordingNotificationProducer()
+    repository = FakeManualAttendanceRepository(session=build_session())
+
+    await set_status(
+        build_service(repository, notifications=notifications),
+        status=FinalAttendanceStatus.LATE,
+    )
+
+    assert notifications.kinds == ["attendance_changed"]
+    assert notifications.only_call_of("attendance_changed").payload == {
+        "session_id": SESSION_ID,
+        "student_user_id": STUDENT_USER_ID,
+        "status": FinalAttendanceStatus.LATE,
+    }
+
+
+@pytest.mark.parametrize(
+    "refusal",
+    [
+        {"session": None},
+        {"session": "cancelled"},
+        {"session": "not_started"},
+        {"session": "ok", "on_roster": False},
+    ],
+)
+async def test_a_refused_change_announces_nothing(refusal: dict) -> None:
+    notifications = RecordingNotificationProducer()
+    sessions = {
+        None: None,
+        "cancelled": build_session(cancelled_at=NOW),
+        "not_started": build_session(activated_at=None),
+        "ok": build_session(),
+    }
+    repository = FakeManualAttendanceRepository(
+        session=sessions[refusal["session"]],
+        on_roster=refusal.get("on_roster", True),
+    )
+
+    with pytest.raises(Exception):
+        await set_status(build_service(repository, notifications=notifications))
+
+    assert notifications.calls == []
+    assert repository.written == []
+
+
+async def test_a_reason_that_is_refused_announces_nothing() -> None:
+    notifications = RecordingNotificationProducer()
+    repository = FakeManualAttendanceRepository(session=build_session())
+
+    with pytest.raises(ManualReasonInvalidError):
+        await set_status(build_service(repository, notifications=notifications), reason="ab")
+
+    assert notifications.calls == []
+
+
+async def test_a_failing_producer_does_not_stop_the_attendance_being_recorded() -> None:
+    repository = FakeManualAttendanceRepository(session=build_session())
+    service = build_service(repository, notifications=FailingNotificationProducer())
+
+    result = await set_status(service)
+
+    assert result.status is FinalAttendanceStatus.LATE
+    assert len(repository.written) == 1

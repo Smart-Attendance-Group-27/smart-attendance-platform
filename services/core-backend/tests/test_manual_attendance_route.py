@@ -23,6 +23,7 @@ from modules.attendance_verification.manual_attendance.exception import (
     SessionNotStartedError,
     StudentNotOnRosterError,
 )
+from modules.attendance_verification.manual_attendance import route as manual_route
 from modules.attendance_verification.manual_attendance.route import (
     get_manual_attendance_service,
 )
@@ -195,3 +196,12 @@ def test_requires_bearer_token(client: TestClient) -> None:
     response = client.put(URL, json={"status": "present", "reason": "trust me"})
 
     assert response.status_code == 401
+
+
+def test_the_service_factory_passes_the_bound_notification_producer_through(monkeypatch) -> None:
+    producer = object()
+    monkeypatch.setattr(manual_route, "get_notification_producer", lambda: producer)
+
+    service = get_manual_attendance_service()
+
+    assert service._notification_producer is producer
