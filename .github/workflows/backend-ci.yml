@@ -60,5 +60,4 @@ jobs:
       # stray DB_URI here would override those values and fail
       # face-verification's URL-building tests.
       - name: Run tests
-        run: pytest -q
-
+        run: python -m pytest -q
