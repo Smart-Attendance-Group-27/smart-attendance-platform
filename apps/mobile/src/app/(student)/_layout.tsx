@@ -5,6 +5,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native'
 
 import { useAuth } from '../../features/auth/context/AuthContext'
 import { registerForPushNotifications } from '../../features/notifications/services/pushNotificationService'
+import { installNotificationNavigation } from '../../features/notifications/services/notificationNavigation'
 import { CoreApiClient, resolveCoreApiBaseUrl } from '../../services/api/coreApiClient'
 import { lightColors } from '../../theme'
 
@@ -13,13 +14,15 @@ export default function StudentLayout() {
   const router = useRouter()
   const hasRegistered = useRef(false)
 
-  // Listen for user tapping on a push notification
   useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener(() => {
-      router.push('/(student)/(tabs)/notifications')
-    })
-    return () => subscription.remove()
-  }, [router])
+    if (session.status !== 'authenticated') {
+      return undefined
+    }
+    return installNotificationNavigation(
+      (destination) => router.push(destination),
+      Notifications,
+    )
+  }, [router, session.status])
 
   // Register device push token once after the student authenticates.
   // Fire-and-forget: a registration failure never blocks navigation.

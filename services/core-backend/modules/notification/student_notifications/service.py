@@ -75,6 +75,7 @@ def _map_notification_type(value: str | None) -> str:
     if value in {
         "ATTENDANCE_SESSION_STARTED",
         "ATTENDANCE_SESSION_OPENED",
+        "ATTENDANCE_SESSION_CANCELLED",
         "UPCOMING_CLASS",
         "UPCOMING_SESSION_REMINDER",
     }:

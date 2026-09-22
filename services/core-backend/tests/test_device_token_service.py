@@ -193,3 +193,32 @@ async def test_revoke_rejects_malformed_token():
     with pytest.raises(InvalidExpoPushTokenError):
         await service.revoke(pool, user_id=USER_ID, expo_push_token="bad-token")
 
+
+@pytest.mark.asyncio
+async def test_upsert_transfers_token_ownership_without_touching_other_tokens():
+    from modules.notification.device_tokens.repository import DeviceTokenRepository
+
+    new_user_id = uuid4()
+    connection = AsyncMock()
+    connection.fetchrow.return_value = {
+        "id": TOKEN_ID,
+        "user_id": new_user_id,
+        "expo_push_token": VALID_TOKEN,
+        "platform": "android",
+        "is_active": True,
+        "registered_at": datetime(2026, 1, 1, tzinfo=UTC),
+        "last_used_at": datetime(2026, 1, 2, tzinfo=UTC),
+        "revoked_at": None,
+    }
+
+    record = await DeviceTokenRepository().upsert(
+        connection,
+        user_id=new_user_id,
+        expo_push_token=VALID_TOKEN,
+        platform="android",
+    )
+
+    assert record.user_id == new_user_id
+    query = connection.fetchrow.call_args.args[0]
+    assert "user_id      = EXCLUDED.user_id" in query
+    assert "UPDATE notification.device_tokens" not in query

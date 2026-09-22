@@ -221,5 +221,17 @@ class NotificationProducer(NotificationProducerProtocol):
             priority="normal",
         )
 
+    async def upcoming_class_reminders(
+        self,
+        connection: asyncpg.Connection,
+        *,
+        lead_minutes: int,
+    ) -> int:
+        """Idempotently enqueue reminders for scheduled sessions in the window."""
+        return await self._repository.enqueue_upcoming_class_reminders(
+            connection,
+            lead_minutes=lead_minutes,
+        )
+
 
 __all__ = ["NotificationProducer"]
