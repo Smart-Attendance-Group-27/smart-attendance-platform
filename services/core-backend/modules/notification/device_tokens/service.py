@@ -42,9 +42,8 @@ class DeviceTokenService:
         The user_id comes from the verified JWT, not from the request body,
         so it is always the authenticated user's own ID.
 
-        If the same token was previously registered (by any user) it is
-        reactivated and its last_used_at is refreshed.  The owner (user_id)
-        is NOT changed on reactivation — see repository.upsert for rationale.
+        A token presented by a different authenticated user is transferred to
+        that user. Other registered devices remain active.
         """
         _validate_token(expo_push_token)
         _validate_platform(platform)
