@@ -14,6 +14,7 @@ from fastapi import (
 )
 
 from core.config import Settings, get_settings
+from core.errors import error_detail
 from modules.attendance_verification.check_in.exception import CheckInServiceError
 from modules.attendance_verification.check_in.route import get_check_in_service
 from modules.attendance_verification.check_in.schemas import InitialCheckInPayload
@@ -81,7 +82,9 @@ def get_face_verification_service_client(
     if settings.face_verification_service_url is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Face verification is unavailable.",
+            detail=error_detail(
+                "FACE_VERIFICATION_UNAVAILABLE", "Face verification is unavailable.",
+            ),
         )
 
     return FaceVerificationServiceClient(
@@ -118,7 +121,9 @@ async def verify_attendance_face(
     if image.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="Only JPEG and PNG images are supported",
+            detail=error_detail(
+                "UNSUPPORTED_IMAGE_TYPE", "Only JPEG and PNG images are supported",
+            ),
         )
 
     try:
@@ -129,12 +134,12 @@ async def verify_attendance_face(
     if not captured_image:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="The uploaded image is empty",
+            detail=error_detail("EMPTY_IMAGE", "The uploaded image is empty"),
         )
     if len(captured_image) > MAX_IMAGE_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail="The uploaded image is too large",
+            detail=error_detail("IMAGE_TOO_LARGE", "The uploaded image is too large"),
         )
 
     authorization = request.headers.get("authorization", "")
@@ -151,17 +156,17 @@ async def verify_attendance_face(
     except FaceVerificationServiceRejectedError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(error),
+            detail=error_detail("FACE_VERIFICATION_REJECTED", str(error)),
         ) from error
     except FaceVerificationServiceInvalidRequestError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(error),
+            detail=error_detail("FACE_VERIFICATION_INVALID_REQUEST", str(error)),
         ) from error
     except FaceVerificationServiceError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(error),
+            detail=error_detail("FACE_VERIFICATION_SERVICE_ERROR", str(error)),
         ) from error
 
     initial_check_in = None

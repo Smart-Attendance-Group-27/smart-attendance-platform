@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from core.errors import error_detail
 from modules.identity.auth.dependencies import CurrentStudent
 from modules.notification.preferences.schemas import (
     NotificationPreferenceResponse,
@@ -54,6 +55,9 @@ async def update_notification_preferences(
     except InvalidNotificationPreferenceError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Notification type '{error.type_code}' is not configurable.",
+            detail=error_detail(
+                "INVALID_NOTIFICATION_PREFERENCE",
+                f"Notification type '{error.type_code}' is not configurable.",
+            ),
         ) from error
     return [NotificationPreferenceResponse.from_record(record) for record in records]

@@ -305,6 +305,10 @@ def test_get_missing_session_returns_404(jwks_document, make_access_token) -> No
         )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "SESSION_NOT_FOUND",
+        "message": "The attendance session was not found.",
+    }
 
 
 def build_create_payload(**overrides) -> dict:
@@ -354,6 +358,10 @@ def test_create_session_missing_timetable_entry_returns_404(jwks_document, make_
         )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "TIMETABLE_ENTRY_NOT_FOUND",
+        "message": "The timetable entry was not found for this lecturer.",
+    }
 
 
 def test_create_session_invalid_schedule_returns_422(jwks_document, make_access_token) -> None:
@@ -366,6 +374,10 @@ def test_create_session_invalid_schedule_returns_422(jwks_document, make_access_
         )
 
     assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "INVALID_SESSION_SCHEDULE",
+        "message": "bad schedule",
+    }
 
 
 def test_create_session_geofence_not_configured_returns_422(jwks_document, make_access_token) -> None:
@@ -378,6 +390,10 @@ def test_create_session_geofence_not_configured_returns_422(jwks_document, make_
         )
 
     assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "CLASSROOM_GEOFENCE_NOT_CONFIGURED",
+        "message": "no geofence",
+    }
 
 
 def test_activate_session(client: TestClient, service: StubLecturerSessionService, make_access_token) -> None:
@@ -399,6 +415,10 @@ def test_activate_already_active_session_returns_409(jwks_document, make_access_
         )
 
     assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "SESSION_NOT_ACTIVATABLE",
+        "message": "This session cannot be activated in its current state.",
+    }
 
 
 def test_close_session(client: TestClient, service: StubLecturerSessionService, make_access_token) -> None:
@@ -465,6 +485,10 @@ def test_close_inactive_session_returns_409(jwks_document, make_access_token) ->
         )
 
     assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "SESSION_NOT_CLOSABLE",
+        "message": "This session cannot be closed in its current state.",
+    }
 
 
 def test_lists_students_without_leaking_biometric_data(client: TestClient, make_access_token) -> None:
@@ -527,6 +551,10 @@ def test_missing_lecturer_profile_returns_404(jwks_document, make_access_token) 
         response = client.get(SESSIONS_URL, headers=authorize(lecturer_token(make_access_token)))
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "LECTURER_PROFILE_NOT_FOUND",
+        "message": "An active lecturer profile was not found for this account.",
+    }
 
 
 def test_requires_bearer_token(client: TestClient) -> None:

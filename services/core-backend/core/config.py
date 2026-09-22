@@ -112,12 +112,6 @@ class Settings(BaseSettings):
     geofence_max_future_skew_seconds: float = Field(default=5, ge=0)
     geofence_max_attempts: int = Field(default=3, ge=1)
 
-    # Deprecated: the pre-Keycloak development token secret. It is no longer
-    # read by any code path and is never used to validate Keycloak tokens.
-    # Kept only so that existing local .env files do not fail to load.
-    # TODO: remove once every environment has dropped TOKEN_SECRET.
-    token_secret: SecretStr | None = None
-
     model_config = SettingsConfigDict(
         env_file=ENV_FILE_PATH,
         env_file_encoding="utf-8",

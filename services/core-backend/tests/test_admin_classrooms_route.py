@@ -166,6 +166,10 @@ def test_get_missing_classroom_returns_404(jwks_document, make_access_token) -> 
         )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "CLASSROOM_NOT_FOUND",
+        "message": "The classroom was not found.",
+    }
 
 
 def test_creates_classroom(client: TestClient, service: StubAdminClassroomService, make_access_token) -> None:
@@ -200,6 +204,10 @@ def test_create_classroom_missing_building_returns_404(jwks_document, make_acces
         )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "BUILDING_NOT_FOUND",
+        "message": "The referenced building was not found.",
+    }
 
 
 def test_updates_classroom(client: TestClient, service: StubAdminClassroomService, make_access_token) -> None:

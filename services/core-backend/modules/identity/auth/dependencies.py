@@ -5,6 +5,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from core.config import ConfigurationError, Settings, get_settings
+from core.errors import error_detail
 from modules.identity.auth.exception import (
     InactiveUserError,
     InsufficientRoleError,
@@ -73,7 +74,7 @@ def get_authentication_service(request: Request) -> AuthenticationService:
     except ConfigurationError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(error),
+            detail=error_detail("AUTHENTICATION_SERVICE_UNAVAILABLE", str(error)),
         ) from error
 
     request.app.state.authentication_service = service
@@ -101,29 +102,33 @@ async def get_current_user(
     except MissingAccessTokenError as error:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="A bearer access token is required.",
+            detail=error_detail("BEARER_TOKEN_REQUIRED", "A bearer access token is required."),
             headers=BEARER_CHALLENGE,
         ) from error
     except InvalidAccessTokenError as error:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=error.message,
+            detail=error_detail("INVALID_ACCESS_TOKEN", error.message),
             headers=BEARER_CHALLENGE,
         ) from error
     except UserNotLinkedError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No application user is linked to this Keycloak account.",
+            detail=error_detail(
+                "USER_NOT_LINKED", "No application user is linked to this Keycloak account.",
+            ),
         ) from error
     except InactiveUserError as error:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This application account is not active.",
+            detail=error_detail("ACCOUNT_INACTIVE", "This application account is not active."),
         ) from error
     except KeycloakUnavailableError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Could not reach Keycloak to verify the access token.",
+            detail=error_detail(
+                "KEYCLOAK_UNAVAILABLE", "Could not reach Keycloak to verify the access token.",
+            ),
         ) from error
 
 
@@ -140,7 +145,9 @@ def require_realm_role(
             error = InsufficientRoleError(required_role)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"The '{required_role}' role is required.",
+                detail=error_detail(
+                    "INSUFFICIENT_ROLE", f"The '{required_role}' role is required.",
+                ),
             ) from error
 
         return current_user

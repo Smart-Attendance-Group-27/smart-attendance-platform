@@ -26,7 +26,6 @@ def test_settings_normalizes_blank_redis_url() -> None:
         db_user="postgres",
         db_password="password",
         redis_url=" ",
-        token_secret="secret",
         _env_file=None,
     )
 
@@ -39,7 +38,6 @@ def test_settings_normalizes_blank_dynamic_qr_hmac_secret() -> None:
         db_user="postgres",
         db_password="password",
         dynamic_qr_hmac_secret=" ",
-        token_secret="secret",
         _env_file=None,
     )
 
@@ -189,12 +187,6 @@ def test_issuer_trailing_slash_is_normalized() -> None:
     )
 
     assert settings.keycloak_expected_issuer == "http://localhost:8080/realms/uniattend"
-
-
-def test_deprecated_token_secret_is_optional() -> None:
-    settings = build_settings()
-
-    assert settings.token_secret is None
 
 
 def test_keycloak_admin_configuration_is_validated_lazily() -> None:

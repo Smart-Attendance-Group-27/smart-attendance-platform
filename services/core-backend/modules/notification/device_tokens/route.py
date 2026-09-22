@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from core.errors import error_detail
 from modules.identity.auth.dependencies import CurrentUser
 from modules.notification.device_tokens.exception import (
     InvalidExpoPushTokenError,
@@ -51,12 +52,12 @@ async def register_device(
     except InvalidExpoPushTokenError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=error.message,
+            detail=error_detail("INVALID_EXPO_PUSH_TOKEN", error.message),
         ) from error
     except UnsupportedPlatformError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=error.message,
+            detail=error_detail("UNSUPPORTED_PLATFORM", error.message),
         ) from error
 
     return DeviceTokenResponse(
@@ -94,7 +95,7 @@ async def revoke_device(
     except InvalidExpoPushTokenError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=error.message,
+            detail=error_detail("INVALID_EXPO_PUSH_TOKEN", error.message),
         ) from error
 
     return {"ok": True, "revoked": revoked}

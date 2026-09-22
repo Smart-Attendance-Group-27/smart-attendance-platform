@@ -38,7 +38,10 @@ async def read_my_student_profile(
     except StudentProfileNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="A student profile was not found for this account.",
+            detail={
+                "code": "STUDENT_PROFILE_NOT_FOUND",
+                "message": "A student profile was not found for this account.",
+            },
         ) from error
 
     return StudentProfileResponse(

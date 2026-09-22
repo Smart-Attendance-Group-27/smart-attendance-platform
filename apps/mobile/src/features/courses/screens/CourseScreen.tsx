@@ -4,13 +4,13 @@ import { ActivityIndicator, Text, View } from 'react-native';
 
 import { AppButton, ScreenContainer } from '../../../components/ui';
 import { spacing } from '../../../theme';
-import { mockCourses, type Course } from '../mockCoursesData';
+import type { Course } from '../mockCoursesData';
 import type { CourseService } from '../services/courseService';
 import { CourseListScreen } from './CourseListScreen';
 import { CourseDetailsScreen } from './CourseDetailsScreen';
 
 type CourseScreenProps = {
-  courseService?: CourseService;
+  courseService: CourseService;
 };
 
 type CourseScreenState =
@@ -18,7 +18,7 @@ type CourseScreenState =
   | { status: 'ready'; courses: Course[] }
   | { status: 'error'; message: string };
 
-export function CourseScreen({ courseService }: CourseScreenProps = {}) {
+export function CourseScreen({ courseService }: CourseScreenProps) {
   const router = useRouter();
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [requestNumber, setRequestNumber] = useState(0);
@@ -29,11 +29,7 @@ export function CourseScreen({ courseService }: CourseScreenProps = {}) {
   useEffect(() => {
     let mounted = true;
 
-    const coursesRequest = courseService
-      ? courseService.listMyCourses()
-      : Promise.resolve({ status: 'loaded' as const, courses: mockCourses });
-
-    coursesRequest
+    courseService.listMyCourses()
       .then((result) => {
         if (!mounted) {
           return;

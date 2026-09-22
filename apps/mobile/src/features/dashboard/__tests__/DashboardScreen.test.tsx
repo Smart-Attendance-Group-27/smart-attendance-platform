@@ -5,9 +5,16 @@ import { DashboardScreen } from '../screens/DashboardScreen';
 import type { ActiveAttendanceSessionService } from '../services/activeAttendanceSessionService';
 import type { DashboardService } from '../services/dashboardService';
 import type { FaceVerificationApiService } from '../../face-verification/services/faceVerificationApiService';
+import type { ProfileService } from '../../profile/services/profile.service';
 import { MockQrProgressService } from '../../qr/services/mockQrProgressService';
 import { resetMockQrStore } from '../../qr/__fixtures__/mockQrStore';
 import { resetMockAttendanceStore } from '../../attendance/__fixtures__/mockAttendanceStore';
+
+const fakeProfileService: ProfileService = {
+  async getMyStudentProfile() {
+    return { status: 'missing' };
+  },
+};
 
 const mockPush = jest.fn();
 let mockFocusCallback:
@@ -55,7 +62,7 @@ describe('DashboardScreen', () => {
       },
     };
 
-    const { findByText } = await render(<DashboardScreen dashboardService={fakeService} />);
+    const { findByText } = await render(<DashboardScreen profileService={fakeProfileService} dashboardService={fakeService} />);
 
     expect(await findByText(/CS101.*Intro/)).toBeTruthy();
   });
@@ -70,7 +77,7 @@ describe('DashboardScreen', () => {
       },
     };
 
-    const { findByText } = await render(<DashboardScreen dashboardService={fakeService} />);
+    const { findByText } = await render(<DashboardScreen profileService={fakeProfileService} dashboardService={fakeService} />);
 
     expect(await findByText('No upcoming attendance')).toBeTruthy();
   });
@@ -85,7 +92,7 @@ describe('DashboardScreen', () => {
       },
     };
 
-    const { findByText, findByLabelText } = await render(<DashboardScreen dashboardService={fakeService} />);
+    const { findByText, findByLabelText } = await render(<DashboardScreen profileService={fakeProfileService} dashboardService={fakeService} />);
 
     expect(await findByText('Dashboard could not be loaded')).toBeTruthy();
     expect(await findByLabelText('Retry dashboard')).toBeTruthy();
@@ -110,7 +117,7 @@ describe('DashboardScreen', () => {
       },
     };
 
-    const { findByRole } = await render(<DashboardScreen dashboardService={fakeService} />);
+    const { findByRole } = await render(<DashboardScreen profileService={fakeProfileService} dashboardService={fakeService} />);
 
     const startButton = await findByRole('button', { name: 'Start attendance' });
 
@@ -154,6 +161,7 @@ describe('DashboardScreen', () => {
 
     const { findAllByRole, findByText } = await render(
       <DashboardScreen
+        profileService={fakeProfileService}
         activeSessionService={activeSessionService}
         dashboardService={dashboardService}
       />,
@@ -198,6 +206,7 @@ describe('DashboardScreen', () => {
 
     const screen = await render(
       <DashboardScreen
+        profileService={fakeProfileService}
         activeSessionService={activeSessionService}
         dashboardService={createEmptyDashboardService()}
       />,
@@ -236,6 +245,7 @@ describe('DashboardScreen', () => {
       },
     };
     const screen = await render(<DashboardScreen
+        profileService={fakeProfileService}
       dashboardService={dashboardService}
       qrProgressService={new MockQrProgressService()}
     />);
@@ -272,6 +282,7 @@ describe('DashboardScreen', () => {
       });
     const screen = await render(
       <DashboardScreen
+        profileService={fakeProfileService}
         activeSessionService={{ listMyActiveSessions }}
         dashboardService={createEmptyDashboardService()}
       />,
@@ -318,6 +329,7 @@ describe('DashboardScreen', () => {
 
     const { findByText, queryByText } = await render(
       <DashboardScreen
+        profileService={fakeProfileService}
         activeSessionService={activeSessionService}
         dashboardService={dashboardService}
       />,
@@ -333,6 +345,7 @@ describe('DashboardScreen', () => {
 
     const { findByRole } = await render(
       <DashboardScreen
+        profileService={fakeProfileService}
         dashboardService={createEmptyDashboardService()}
         faceVerificationApiService={faceVerificationApiService}
         onReadinessCheckPress={onReadinessCheckPress}
@@ -355,6 +368,7 @@ describe('DashboardScreen', () => {
 
     const { findByText, queryByRole } = await render(
       <DashboardScreen
+        profileService={fakeProfileService}
         dashboardService={createEmptyDashboardService()}
         faceVerificationApiService={faceVerificationApiService}
       />,
@@ -390,6 +404,7 @@ describe('DashboardScreen', () => {
       });
     const screen = await render(
       <DashboardScreen
+        profileService={fakeProfileService}
         dashboardService={createEmptyDashboardService()}
         faceVerificationApiService={{ getReadinessStatus }}
       />,
@@ -425,7 +440,7 @@ describe('DashboardScreen', () => {
       },
     };
 
-    const { findByRole } = await render(<DashboardScreen dashboardService={fakeService} />);
+    const { findByRole } = await render(<DashboardScreen profileService={fakeProfileService} dashboardService={fakeService} />);
 
     fireEvent.press(await findByRole('button', { name: 'Open student profile' }));
 

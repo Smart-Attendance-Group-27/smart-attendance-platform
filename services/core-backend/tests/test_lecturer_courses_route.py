@@ -125,6 +125,10 @@ def test_courses_missing_profile_returns_404(jwks_document, make_access_token) -
         response = client.get(COURSES_URL, headers=authorize(lecturer_token(make_access_token)))
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "LECTURER_PROFILE_NOT_FOUND",
+        "message": "An active lecturer profile was not found for this account.",
+    }
 
 
 def test_requires_bearer_token(client: TestClient) -> None:

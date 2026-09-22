@@ -66,7 +66,10 @@ def test_rejects_a_request_without_a_token(client) -> None:
     response = client.get("/api/v1/me")
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "A bearer access token is required."
+    assert response.json()["detail"] == {
+        "code": "BEARER_TOKEN_REQUIRED",
+        "message": "A bearer access token is required.",
+    }
 
 
 def test_rejects_a_malformed_authorization_header(client) -> None:
@@ -93,7 +96,9 @@ def test_rejects_a_token_with_an_invalid_signature(client, make_access_token) ->
     response = client.get("/api/v1/me", headers=authorize(forged_token))
 
     assert response.status_code == 401
-    assert "signature" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert detail["code"] == "INVALID_ACCESS_TOKEN"
+    assert "signature" in detail["message"]
 
 
 def test_rejects_an_expired_token(client, make_access_token) -> None:
@@ -103,7 +108,9 @@ def test_rejects_an_expired_token(client, make_access_token) -> None:
     )
 
     assert response.status_code == 401
-    assert "expired" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert detail["code"] == "INVALID_ACCESS_TOKEN"
+    assert "expired" in detail["message"]
 
 
 def test_rejects_a_token_from_the_wrong_issuer(client, make_access_token) -> None:
@@ -113,7 +120,9 @@ def test_rejects_a_token_from_the_wrong_issuer(client, make_access_token) -> Non
     )
 
     assert response.status_code == 401
-    assert "issuer" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert detail["code"] == "INVALID_ACCESS_TOKEN"
+    assert "issuer" in detail["message"]
 
 
 def test_rejects_a_token_with_the_wrong_audience(client, make_access_token) -> None:
@@ -123,7 +132,9 @@ def test_rejects_a_token_with_the_wrong_audience(client, make_access_token) -> N
     )
 
     assert response.status_code == 401
-    assert "audience" in response.json()["detail"]
+    detail = response.json()["detail"]
+    assert detail["code"] == "INVALID_ACCESS_TOKEN"
+    assert "audience" in detail["message"]
 
 
 def test_returns_404_for_an_unlinked_keycloak_user(client, make_access_token) -> None:
@@ -178,5 +189,6 @@ def test_returns_503_when_keycloak_settings_are_missing(make_access_token) -> No
 
     assert response.status_code == 503
     detail = response.json()["detail"]
-    assert "KEYCLOAK_EXPECTED_ISSUER" in detail
-    assert "KEYCLOAK_JWKS_URL" in detail
+    assert detail["code"] == "AUTHENTICATION_SERVICE_UNAVAILABLE"
+    assert "KEYCLOAK_EXPECTED_ISSUER" in detail["message"]
+    assert "KEYCLOAK_JWKS_URL" in detail["message"]
