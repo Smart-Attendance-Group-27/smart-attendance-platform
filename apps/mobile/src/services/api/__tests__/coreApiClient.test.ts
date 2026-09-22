@@ -7,9 +7,19 @@ import {
   test,
 } from '@jest/globals';
 
-import { CoreApiClient, resolveCoreApiBaseUrl } from '../coreApiClient';
+import {
+  CoreApiClient,
+  resolveCoreApiBaseUrl,
+  setDefaultAccessTokenRefresher,
+} from '../coreApiClient';
 
 const accessToken = 'header.payload.signature';
+const refreshedAccessToken = 'refreshed.payload.signature';
+
+function authorizationOf(call: unknown[]): string | undefined {
+  const init = call[1] as { headers?: Record<string, string> } | undefined;
+  return init?.headers?.Authorization;
+}
 
 function jsonResponse(status: number, body: unknown): Response {
   return {
@@ -33,6 +43,9 @@ describe('CoreApiClient', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+    // The refresher is module-level state; a leak would silently change how
+    // every later test handles a 401.
+    setDefaultAccessTokenRefresher(undefined);
   });
 
   test('attaches the bearer token to the request', async () => {
@@ -225,6 +238,185 @@ describe('CoreApiClient', () => {
 
     await expect(client.get('/api/v1/me')).resolves.toEqual({
       status: 'unauthenticated',
+    });
+  });
+
+  describe('refreshing on 401', () => {
+    test('refreshes and retries once with the new token', async () => {
+      const fetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValueOnce(jsonResponse(401, { detail: 'expired' }))
+        .mockResolvedValueOnce(jsonResponse(200, { id: 'profile-1' }));
+      const refreshAccessToken = jest
+        .fn<() => Promise<string | undefined>>()
+        .mockResolvedValue(refreshedAccessToken);
+
+      const result = await new CoreApiClient({
+        baseUrl: 'http://10.0.2.2:8000',
+        getAccessToken: () => accessToken,
+        refreshAccessToken,
+      }).get('/api/v1/students/me/profile');
+
+      expect(result).toEqual({ status: 'ok', data: { id: 'profile-1' } });
+      expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(authorizationOf(fetchMock.mock.calls[0])).toBe(`Bearer ${accessToken}`);
+      expect(authorizationOf(fetchMock.mock.calls[1])).toBe(
+        `Bearer ${refreshedAccessToken}`,
+      );
+    });
+
+    test('retries at most once when the fresh token is also rejected', async () => {
+      const fetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(jsonResponse(401, { detail: 'expired' }));
+      const refreshAccessToken = jest
+        .fn<() => Promise<string | undefined>>()
+        .mockResolvedValue(refreshedAccessToken);
+
+      const result = await new CoreApiClient({
+        baseUrl: 'http://10.0.2.2:8000',
+        getAccessToken: () => accessToken,
+        refreshAccessToken,
+      }).get('/api/v1/me');
+
+      expect(result).toEqual({ status: 'unauthenticated' });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not retry when the refresh yields no token', async () => {
+      const fetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(jsonResponse(401, { detail: 'expired' }));
+      const refreshAccessToken = jest
+        .fn<() => Promise<string | undefined>>()
+        .mockResolvedValue(undefined);
+
+      const result = await new CoreApiClient({
+        baseUrl: 'http://10.0.2.2:8000',
+        getAccessToken: () => accessToken,
+        refreshAccessToken,
+      }).get('/api/v1/me');
+
+      expect(result).toEqual({ status: 'unauthenticated' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not retry when the refresh returns the same token', async () => {
+      const fetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(jsonResponse(401, { detail: 'expired' }));
+      const refreshAccessToken = jest
+        .fn<() => Promise<string | undefined>>()
+        .mockResolvedValue(accessToken);
+
+      const result = await new CoreApiClient({
+        baseUrl: 'http://10.0.2.2:8000',
+        getAccessToken: () => accessToken,
+        refreshAccessToken,
+      }).get('/api/v1/me');
+
+      expect(result).toEqual({ status: 'unauthenticated' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test('reports the original 401 when the refresher throws', async () => {
+      const fetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(jsonResponse(401, { detail: 'expired' }));
+      const refreshAccessToken = jest
+        .fn<() => Promise<string | undefined>>()
+        .mockRejectedValue(new Error('keycloak unreachable'));
+
+      const result = await new CoreApiClient({
+        baseUrl: 'http://10.0.2.2:8000',
+        getAccessToken: () => accessToken,
+        refreshAccessToken,
+      }).get('/api/v1/me');
+
+      expect(result).toEqual({ status: 'unauthenticated' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test('uses the refresher registered by AuthProvider when none is passed in', async () => {
+      const fetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValueOnce(jsonResponse(401, { detail: 'expired' }))
+        .mockResolvedValueOnce(jsonResponse(200, { id: 'profile-1' }));
+      const refreshAccessToken = jest
+        .fn<() => Promise<string | undefined>>()
+        .mockResolvedValue(refreshedAccessToken);
+      setDefaultAccessTokenRefresher(refreshAccessToken);
+
+      const result = await buildClient().get('/api/v1/students/me/profile');
+
+      expect(result).toEqual({ status: 'ok', data: { id: 'profile-1' } });
+      expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+      expect(authorizationOf(fetchMock.mock.calls[1])).toBe(
+        `Bearer ${refreshedAccessToken}`,
+      );
+    });
+
+    test('leaves a 401 alone when no refresher is available', async () => {
+      const fetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(jsonResponse(401, { detail: 'expired' }));
+
+      const result = await buildClient().get('/api/v1/me');
+
+      expect(result).toEqual({ status: 'unauthenticated' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not refresh on a non-401 failure', async () => {
+      jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse(403, {}));
+      const refreshAccessToken = jest
+        .fn<() => Promise<string | undefined>>()
+        .mockResolvedValue(refreshedAccessToken);
+      setDefaultAccessTokenRefresher(refreshAccessToken);
+
+      const result = await buildClient().get('/api/v1/me');
+
+      expect(result).toEqual({ status: 'forbidden' });
+      expect(refreshAccessToken).not.toHaveBeenCalled();
+    });
+
+    test('replays a multipart body on the retry', async () => {
+      const fetchMock = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValueOnce(jsonResponse(401, { detail: 'expired' }))
+        .mockResolvedValueOnce(jsonResponse(200, { status: 'passed' }));
+      const refreshAccessToken = jest
+        .fn<() => Promise<string | undefined>>()
+        .mockResolvedValue(refreshedAccessToken);
+      setDefaultAccessTokenRefresher(refreshAccessToken);
+      const formData = new FormData();
+      formData.append('image', 'camera-image');
+
+      const result = await buildClient().postFormData('/api/v1/readiness', formData);
+
+      expect(result).toEqual({ status: 'ok', data: { status: 'passed' } });
+      const retryInit = fetchMock.mock.calls[1][1] as { body?: unknown };
+      expect(retryInit.body).toBe(formData);
+    });
+
+    test('never writes either token to the log while retrying', async () => {
+      const warnMock = jest
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValueOnce(jsonResponse(401, { detail: 'expired' }))
+        .mockResolvedValueOnce(jsonResponse(200, {}));
+      setDefaultAccessTokenRefresher(async () => refreshedAccessToken);
+
+      await buildClient().get('/api/v1/me');
+
+      const loggedText = warnMock.mock.calls.flat().join(' ');
+      expect(loggedText).not.toContain(accessToken);
+      expect(loggedText).not.toContain(refreshedAccessToken);
+      expect(loggedText).not.toContain('Bearer');
     });
   });
 
