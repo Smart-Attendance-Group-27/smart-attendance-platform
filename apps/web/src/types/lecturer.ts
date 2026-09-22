@@ -58,6 +58,7 @@ export type LiveSessionDetail = {
   room: string;
   status: SessionStatus;
   startedAtLabel: string;
+  cancellationReason: string | null;
   checkInWindow: string;
   lateThreshold: string;
   lecturerName: string;

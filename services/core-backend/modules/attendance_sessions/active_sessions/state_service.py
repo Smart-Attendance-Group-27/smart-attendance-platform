@@ -55,6 +55,8 @@ class StudentAttendanceState:
     session_title: str | None
     session_type: str | None
     session_state: SessionState
+    cancelled_at: datetime | None
+    cancellation_reason: str | None
     scheduled_start_at: datetime
     scheduled_end_at: datetime
     check_in_opens_at: datetime | None
@@ -78,6 +80,7 @@ class StudentSessionRow:
     status: str | None
     closed_at: datetime | None
     cancelled_at: datetime | None
+    cancellation_reason: str | None
     scheduled_start_at: datetime
     scheduled_end_at: datetime
     check_in_opens_at: datetime | None
@@ -161,6 +164,7 @@ class StudentAttendanceStateRepository:
                 session.status,
                 session.closed_at,
                 session.cancelled_at,
+                session.cancellation_reason,
                 session.scheduled_start_at,
                 session.scheduled_end_at,
                 session.check_in_opens_at,
@@ -191,6 +195,7 @@ class StudentAttendanceStateRepository:
             status=row["status"],
             closed_at=row["closed_at"],
             cancelled_at=row["cancelled_at"],
+            cancellation_reason=row["cancellation_reason"],
             scheduled_start_at=row["scheduled_start_at"],
             scheduled_end_at=row["scheduled_end_at"],
             check_in_opens_at=row["check_in_opens_at"],
@@ -378,6 +383,8 @@ class StudentAttendanceStateService:
             session_title=session_row.session_title,
             session_type=session_row.session_type,
             session_state=session_state,
+            cancelled_at=session_row.cancelled_at,
+            cancellation_reason=session_row.cancellation_reason,
             scheduled_start_at=session_row.scheduled_start_at,
             scheduled_end_at=session_row.scheduled_end_at,
             check_in_opens_at=session_row.check_in_opens_at,
