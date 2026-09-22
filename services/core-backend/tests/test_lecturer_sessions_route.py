@@ -227,6 +227,44 @@ def test_get_session_returns_derived_status_for_active_session(
     assert response.json()["status"] == "active"
 
 
+def test_get_session_reports_the_cancellation_reason(
+    jwks_document,
+    make_access_token,
+) -> None:
+    cancelled_at = CURRENT_TIME + timedelta(minutes=10)
+    session = build_session(
+        cancelled_at=cancelled_at,
+        cancellation_reason="The lecturer is unwell.",
+    )
+    service = StubLecturerSessionService(session=session)
+    with build_client(jwks_document, service) as client:
+        response = client.get(
+            f"{SESSIONS_URL}/{SESSION_ID}",
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    body = response.json()
+    assert body["status"] == "cancelled"
+    assert body["cancelledAt"] == cancelled_at.isoformat().replace("+00:00", "Z")
+    assert body["cancellationReason"] == "The lecturer is unwell."
+
+
+def test_an_active_session_has_no_cancellation_fields(
+    jwks_document,
+    make_access_token,
+) -> None:
+    service = StubLecturerSessionService(session=build_session(activated_at=CURRENT_TIME))
+    with build_client(jwks_document, service) as client:
+        response = client.get(
+            f"{SESSIONS_URL}/{SESSION_ID}",
+            headers=authorize(lecturer_token(make_access_token)),
+        )
+
+    body = response.json()
+    assert body["cancelledAt"] is None
+    assert body["cancellationReason"] is None
+
+
 def test_get_session_reports_the_new_roster_counts(
     jwks_document,
     make_access_token,

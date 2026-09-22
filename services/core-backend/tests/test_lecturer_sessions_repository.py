@@ -55,6 +55,7 @@ def build_session_row() -> dict[str, Any]:
         "activated_at": CURRENT_TIME,
         "closed_at": None,
         "cancelled_at": None,
+        "cancellation_reason": None,
         "requires_face_verification": True,
         "requires_geofence": True,
         "requires_qr": False,

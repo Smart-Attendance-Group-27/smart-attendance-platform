@@ -53,6 +53,9 @@ class LecturerSessionRecord:
     check_in_opens_at_explicit: bool = False
     check_in_closes_at_explicit: bool = False
     late_after_at_explicit: bool = False
+    # Added for Phase 2 cancellation-reason exposure. Defaulted, same
+    # reasoning as the fields immediately above.
+    cancellation_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -107,6 +110,7 @@ _SESSION_COLUMNS = f"""
     session.activated_at,
     session.closed_at,
     session.cancelled_at,
+    session.cancellation_reason,
     session.requires_face_verification,
     session.requires_geofence,
     session.requires_qr,
@@ -202,6 +206,7 @@ def _row_to_record(row: asyncpg.Record) -> LecturerSessionRecord:
         activated_at=row["activated_at"],
         closed_at=row["closed_at"],
         cancelled_at=row["cancelled_at"],
+        cancellation_reason=row["cancellation_reason"],
         requires_face_verification=bool(row["requires_face_verification"]),
         requires_geofence=bool(row["requires_geofence"]),
         requires_qr=bool(row["requires_qr"]),

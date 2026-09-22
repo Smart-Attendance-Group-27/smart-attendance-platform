@@ -43,6 +43,8 @@ def build_state(**overrides) -> StudentAttendanceState:
         session_title="Week 7",
         session_type="lecture",
         session_state=SessionState.ACTIVE,
+        cancelled_at=None,
+        cancellation_reason=None,
         scheduled_start_at=CURRENT_TIME - timedelta(minutes=5),
         scheduled_end_at=CURRENT_TIME + timedelta(hours=1),
         check_in_opens_at=CURRENT_TIME - timedelta(minutes=5),
@@ -125,6 +127,31 @@ def test_returns_the_camel_case_attendance_state(
     }
     assert body["initialCheckIn"] is None
     assert body["finalAttendance"] is None
+    assert body["cancelledAt"] is None
+    assert body["cancellationReason"] is None
+
+
+def test_a_cancelled_session_reports_when_and_why(
+    jwks_document,
+    make_access_token,
+) -> None:
+    cancelled_at = CURRENT_TIME - timedelta(minutes=1)
+    state = build_state(
+        session_state=SessionState.CANCELLED,
+        cancelled_at=cancelled_at,
+        cancellation_reason="The lecturer is unwell.",
+        can_start_check_in=False,
+    )
+    service = StubStateService(state=state)
+
+    with build_client(jwks_document, service) as client:
+        response = client.get(ATTENDANCE_URL, headers=authorize(make_access_token()))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sessionState"] == "cancelled"
+    assert body["cancelledAt"] == cancelled_at.isoformat().replace("+00:00", "Z")
+    assert body["cancellationReason"] == "The lecturer is unwell."
 
 
 def test_a_checked_in_state_serializes_its_nested_objects(

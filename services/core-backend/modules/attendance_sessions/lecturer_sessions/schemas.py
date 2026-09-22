@@ -89,6 +89,8 @@ class LecturerSessionResponse(BaseModel):
     late_after_at: datetime | None = Field(alias="lateAfterAt")
     activated_at: datetime | None = Field(alias="activatedAt")
     closed_at: datetime | None = Field(alias="closedAt")
+    cancelled_at: datetime | None = Field(alias="cancelledAt")
+    cancellation_reason: str | None = Field(alias="cancellationReason")
     requires_face_verification: bool = Field(alias="requiresFaceVerification")
     requires_geofence: bool = Field(alias="requiresGeofence")
     requires_qr: bool = Field(alias="requiresQr")
@@ -129,6 +131,8 @@ class LecturerSessionResponse(BaseModel):
             late_after_at=record.late_after_at,
             activated_at=record.activated_at,
             closed_at=record.closed_at,
+            cancelled_at=record.cancelled_at,
+            cancellation_reason=record.cancellation_reason,
             requires_face_verification=record.requires_face_verification,
             requires_geofence=record.requires_geofence,
             requires_qr=record.requires_qr,
