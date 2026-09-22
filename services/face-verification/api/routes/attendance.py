@@ -1,19 +1,29 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import JSONResponse
 
 from api.dependencies.attendance import (
     get_attendance_face_verification_service,
 )
 from api.dependencies.auth import get_current_student_id
+from api.dependencies.runtime import get_face_verification_settings
 from api.face_image_upload import read_face_image_upload
-from api.schemas.attendance import AttendanceFaceVerificationResponse
+from api.schemas.attendance import (
+    AttendanceFaceVerificationResponse,
+    LivenessFailureResponse,
+)
+from core.config import Settings
 from services.attendance_face_verification_service import (
     AttendanceFaceVerificationService,
     AttendanceFaceVerificationUnavailableError,
     VerificationClosedError,
     VerificationNotStartedError,
+)
+from services.liveness_evidence import (
+    LivenessEvidenceValidationError,
+    validate_optional_liveness_evidence,
 )
 
 
@@ -23,7 +33,15 @@ router = APIRouter(
 )
 
 
-@router.post("", response_model=AttendanceFaceVerificationResponse)
+@router.post(
+    "",
+    response_model=AttendanceFaceVerificationResponse,
+    responses={
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
+            "model": LivenessFailureResponse,
+        }
+    },
+)
 async def verify_attendance_face(
     session_id: UUID,
     image: Annotated[UploadFile, File(description="JPEG or PNG face capture")],
@@ -32,7 +50,24 @@ async def verify_attendance_face(
         AttendanceFaceVerificationService,
         Depends(get_attendance_face_verification_service),
     ],
-) -> AttendanceFaceVerificationResponse:
+    settings: Annotated[Settings, Depends(get_face_verification_settings)],
+    liveness: Annotated[
+        str | None,
+        Form(description="Optional serialized liveness evidence"),
+    ] = None,
+) -> AttendanceFaceVerificationResponse | JSONResponse:
+    try:
+        validate_optional_liveness_evidence(
+            liveness,
+            enforcement_enabled=settings.liveness_enforcement_enabled,
+            max_age_seconds=settings.liveness_max_age_seconds,
+        )
+    except LivenessEvidenceValidationError:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content=LivenessFailureResponse().model_dump(),
+        )
+
     captured_image = await read_face_image_upload(image)
 
     try:
