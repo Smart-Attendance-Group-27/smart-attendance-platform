@@ -1,3 +1,5 @@
+import { describe, expect, jest, test } from '@jest/globals';
+
 import {
   destinationForNotificationData,
   installNotificationNavigation,
@@ -53,4 +55,3 @@ describe('notification navigation', () => {
     expect(remove).toHaveBeenCalled();
   });
 });
-import { describe, expect, jest, test } from '@jest/globals';

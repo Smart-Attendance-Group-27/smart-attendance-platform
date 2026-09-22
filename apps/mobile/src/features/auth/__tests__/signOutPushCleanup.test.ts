@@ -1,11 +1,11 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
+import { revokePushBeforeSignOut } from '../services/signOutPushCleanup';
+
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),
   getExpoPushTokenAsync: jest.fn(),
 }), { virtual: true });
-
-import { revokePushBeforeSignOut } from '../services/signOutPushCleanup';
 
 describe('sign-out push cleanup', () => {
   test('revokes with an authenticated API client', async () => {

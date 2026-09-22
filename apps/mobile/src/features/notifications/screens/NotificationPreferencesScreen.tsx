@@ -33,8 +33,26 @@ export function NotificationPreferencesScreen({ onBack, service }: Props) {
   }, [service]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let isMounted = true;
+
+    void service.getPreferences().then(
+      (loadedPreferences) => {
+        if (isMounted) {
+          setPreferences(loadedPreferences);
+          setStatus('ready');
+        }
+      },
+      () => {
+        if (isMounted) {
+          setStatus('error');
+        }
+      },
+    );
+
+    return () => {
+      isMounted = false;
+    };
+  }, [service]);
 
   const toggle = (typeCode: string, field: 'inAppEnabled' | 'pushEnabled') => {
     setPreferences((current) => current.map((preference) =>
