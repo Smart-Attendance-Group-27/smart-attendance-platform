@@ -11,7 +11,7 @@ FastAPI backend service for the smart attendance platform.
    do not connect to Supabase.
    `DB_URI` takes precedence: when it is set, the individual `DB_HOST`,
    `DB_PORT`, `DB_NAME`, `DB_USER` and `DB_PASSWORD` values are ignored. Use one
-   style, not both. `TOKEN_SECRET` is deprecated and may stay empty.
+   style, not both.
 3. Install dependencies (Python 3.11-3.13 from python.org; the MSYS2 build
    cannot install `pydantic-core`):
 
