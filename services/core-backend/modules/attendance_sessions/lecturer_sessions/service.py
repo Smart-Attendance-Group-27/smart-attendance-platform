@@ -21,6 +21,9 @@ from modules.attendance_sessions.lecturer_sessions.exception import (
     SessionNotFoundError,
     TimetableEntryNotFoundError,
 )
+from modules.attendance_sessions.lecturer_sessions.activation_timing import (
+    ExplicitCheckInFields,
+)
 from modules.attendance_sessions.lecturer_sessions.repository import (
     LecturerSessionRecord,
     LecturerSessionRepository,
@@ -177,6 +180,17 @@ class LecturerSessionService:
 
         session_id = uuid4()
 
+        # A field the request names outright is the lecturer's own decision,
+        # made deliberately, and must be preserved exactly as given even if a
+        # later activation turns out to be early or late. A field the request
+        # leaves out is the active policy's to fill in now, and free to be
+        # recomputed from the session's effective start when it activates.
+        explicit_fields = ExplicitCheckInFields(
+            check_in_opens_at=check_in_opens_at is not None,
+            check_in_closes_at=check_in_closes_at is not None,
+            late_after_at=late_after_at is not None,
+        )
+
         async with pool.acquire() as connection, connection.transaction():
             (
                 resolved_check_in_opens_at,
@@ -221,6 +235,9 @@ class LecturerSessionService:
                 check_in_opens_at=resolved_check_in_opens_at,
                 check_in_closes_at=resolved_check_in_closes_at,
                 late_after_at=resolved_late_after_at,
+                check_in_opens_at_explicit=explicit_fields.check_in_opens_at,
+                check_in_closes_at_explicit=explicit_fields.check_in_closes_at,
+                late_after_at_explicit=explicit_fields.late_after_at,
                 requires_face_verification=requires_face_verification,
                 requires_geofence=requires_geofence,
                 requires_qr=requires_qr,

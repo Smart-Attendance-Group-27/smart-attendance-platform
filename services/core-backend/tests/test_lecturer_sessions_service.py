@@ -958,6 +958,75 @@ async def test_with_no_policy_the_built_in_defaults_are_kept() -> None:
     assert kwargs["late_after_at"] == CURRENT_TIME + timedelta(minutes=10)
 
 
+# --- explicit-field recording (Phase 2, activation timing) -------------------
+
+
+async def test_no_explicit_fields_are_recorded_when_the_request_supplies_nothing() -> None:
+    kwargs, _ = await create_with_policy(build_policy())
+
+    assert kwargs["check_in_opens_at_explicit"] is False
+    assert kwargs["check_in_closes_at_explicit"] is False
+    assert kwargs["late_after_at_explicit"] is False
+
+
+async def test_an_explicit_opens_time_is_recorded_as_explicit() -> None:
+    kwargs, _ = await create_with_policy(
+        build_policy(),
+        check_in_opens_at=CURRENT_TIME - timedelta(minutes=10),
+    )
+
+    assert kwargs["check_in_opens_at_explicit"] is True
+    assert kwargs["check_in_closes_at_explicit"] is False
+    assert kwargs["late_after_at_explicit"] is False
+
+
+async def test_an_explicit_closes_time_is_recorded_as_explicit() -> None:
+    kwargs, _ = await create_with_policy(
+        build_policy(),
+        check_in_closes_at=CURRENT_TIME + timedelta(minutes=8),
+    )
+
+    assert kwargs["check_in_opens_at_explicit"] is False
+    assert kwargs["check_in_closes_at_explicit"] is True
+    assert kwargs["late_after_at_explicit"] is False
+
+
+async def test_an_explicit_late_time_is_recorded_as_explicit() -> None:
+    kwargs, _ = await create_with_policy(
+        build_policy(),
+        late_after_at=CURRENT_TIME + timedelta(minutes=12),
+    )
+
+    assert kwargs["check_in_opens_at_explicit"] is False
+    assert kwargs["check_in_closes_at_explicit"] is False
+    assert kwargs["late_after_at_explicit"] is True
+
+
+async def test_every_field_explicit_is_recorded_as_every_flag_true() -> None:
+    kwargs, _ = await create_with_policy(
+        build_policy(),
+        check_in_opens_at=CURRENT_TIME - timedelta(minutes=5),
+        check_in_closes_at=CURRENT_TIME + timedelta(minutes=25),
+        late_after_at=CURRENT_TIME + timedelta(minutes=15),
+    )
+
+    assert kwargs["check_in_opens_at_explicit"] is True
+    assert kwargs["check_in_closes_at_explicit"] is True
+    assert kwargs["late_after_at_explicit"] is True
+
+
+async def test_explicit_recording_does_not_depend_on_a_policy_being_configured() -> None:
+    kwargs, _ = await create_with_policy(
+        None,
+        check_in_closes_at=CURRENT_TIME + timedelta(minutes=30),
+        late_after_at=CURRENT_TIME + timedelta(minutes=10),
+    )
+
+    assert kwargs["check_in_opens_at_explicit"] is False
+    assert kwargs["check_in_closes_at_explicit"] is True
+    assert kwargs["late_after_at_explicit"] is True
+
+
 async def test_a_policy_that_produces_an_impossible_window_is_refused_before_anything_is_written() -> None:
     created = build_session()
     repository = FakeLecturerSessionRepository(
