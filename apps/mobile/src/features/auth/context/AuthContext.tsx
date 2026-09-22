@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
@@ -33,8 +34,11 @@ import type {
   StoredAuthTokens,
 } from '../types/auth.types';
 import { getJwtSubject } from '../utils/jwt';
+import { setDefaultAccessTokenRefresher } from '../../../services/api/coreApiClient';
 
 WebBrowser.maybeCompleteAuthSession();
+
+const sessionExpiredMessage = 'Your session expired. Please sign in again.';
 
 type AuthContextValue = {
   readonly clearAuthError: () => void;
@@ -42,6 +46,7 @@ type AuthContextValue = {
   readonly isAuthRequestReady: boolean;
   readonly isRestoring: boolean;
   readonly isSigningIn: boolean;
+  readonly refreshAccessToken: () => Promise<string | undefined>;
   readonly session: AuthSession;
   readonly signIn: () => Promise<void>;
   readonly signOut: () => Promise<void>;
@@ -73,6 +78,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [isRestoring, setIsRestoring] = useState(true);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const refreshInFlight = useRef<Promise<string | undefined> | null>(null);
 
   const [request, , promptAsync] = useAuthRequest(
     {
@@ -112,7 +118,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
             return;
           }
           setSession(sessionExpired);
-          setErrorMessage('Your session expired. Please sign in again.');
+          setErrorMessage(sessionExpiredMessage);
           return;
         }
 
@@ -137,7 +143,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
           return;
         }
         setSession(sessionExpired);
-        setErrorMessage('Your session expired. Please sign in again.');
+        setErrorMessage(sessionExpiredMessage);
       } finally {
         if (isMounted) {
           setIsRestoring(false);
@@ -213,6 +219,72 @@ export function AuthProvider({ children }: PropsWithChildren) {
     request,
   ]);
 
+  /**
+   * Renews the session and returns a usable access token, or `undefined` when
+   * the user has to sign in again.
+   *
+   * Concurrent callers share one round trip. Several screens can be in flight
+   * at once - the dashboard alone builds five clients - and letting each one
+   * present the same refresh token independently would have Keycloak race
+   * itself, with whichever response landed last deciding the stored session.
+   */
+  const refreshAccessToken = useCallback(async (): Promise<string | undefined> => {
+    if (refreshInFlight.current) {
+      return refreshInFlight.current;
+    }
+
+    const endSession = async () => {
+      await clearStoredAuthTokens();
+      setSession(sessionExpired);
+      setErrorMessage(sessionExpiredMessage);
+      return undefined;
+    };
+
+    const run = async (): Promise<string | undefined> => {
+      const storedTokens = await loadStoredAuthTokens();
+
+      if (!storedTokens?.refreshToken || !discovery?.tokenEndpoint) {
+        return endSession();
+      }
+
+      try {
+        const refreshedTokens = await refreshAsync(
+          {
+            clientId: keycloakAuthConfig.clientId,
+            refreshToken: storedTokens.refreshToken,
+            scopes: [...keycloakAuthConfig.scopes],
+          },
+          discovery,
+        );
+        const nextStoredTokens = buildStoredAuthTokens(refreshedTokens);
+
+        await saveStoredAuthTokens(nextStoredTokens);
+        setSession(createAuthenticatedSession(nextStoredTokens));
+        return nextStoredTokens.accessToken;
+      } catch {
+        // The refresh token is expired or was revoked at Keycloak.
+        return endSession();
+      }
+    };
+
+    const pending = run().finally(() => {
+      refreshInFlight.current = null;
+    });
+    refreshInFlight.current = pending;
+
+    return pending;
+  }, [discovery]);
+
+  // One registration for every CoreApiClient in the app, including the ones
+  // screens build for themselves.
+  useEffect(() => {
+    setDefaultAccessTokenRefresher(refreshAccessToken);
+
+    return () => {
+      setDefaultAccessTokenRefresher(undefined);
+    };
+  }, [refreshAccessToken]);
+
   const signOut = useCallback(async () => {
     const idToken = session.status === 'authenticated' ? session.idToken : undefined;
     const logoutUrl = buildKeycloakLogoutUrl({
@@ -242,6 +314,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       isAuthRequestReady: Boolean(discovery && request),
       isRestoring,
       isSigningIn,
+      refreshAccessToken,
       session,
       signIn,
       signOut,
@@ -252,6 +325,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       errorMessage,
       isRestoring,
       isSigningIn,
+      refreshAccessToken,
       request,
       session,
       signIn,

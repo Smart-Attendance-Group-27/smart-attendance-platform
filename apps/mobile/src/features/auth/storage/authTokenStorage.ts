@@ -45,12 +45,21 @@ export async function clearStoredAuthTokens() {
   await SecureStore.deleteItemAsync(authTokensStorageKey, secureStoreOptions);
 }
 
+/**
+ * Whether the stored access token can still be used as-is.
+ *
+ * Tokens without a known expiry are treated as stale, not fresh. Keycloak omits
+ * `expires_in` only rarely, but when it does we cannot tell how long the token
+ * has left — and assuming "forever" strands the session on a token the API has
+ * already started rejecting. Reporting it stale sends the caller down the
+ * refresh path instead, which either renews the session or ends it honestly.
+ */
 export function areStoredAuthTokensFresh(
   tokens: StoredAuthTokens,
   nowSeconds = Date.now() / 1000,
 ) {
-  if (!tokens.expiresAt) {
-    return true;
+  if (tokens.expiresAt === undefined) {
+    return false;
   }
 
   return tokens.expiresAt - nowSeconds > tokenRefreshMarginSeconds;
