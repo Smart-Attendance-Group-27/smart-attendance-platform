@@ -57,7 +57,7 @@ async def verify_attendance_face(
     ] = None,
 ) -> AttendanceFaceVerificationResponse | JSONResponse:
     try:
-        validate_optional_liveness_evidence(
+        liveness_evidence = validate_optional_liveness_evidence(
             liveness,
             enforcement_enabled=settings.liveness_enforcement_enabled,
             max_age_seconds=settings.liveness_max_age_seconds,
@@ -75,6 +75,7 @@ async def verify_attendance_face(
             session_id=session_id,
             student_id=student_id,
             captured_image=captured_image,
+            liveness_evidence=liveness_evidence,
         )
     except VerificationNotStartedError as error:
         raise HTTPException(

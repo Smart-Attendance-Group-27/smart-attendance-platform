@@ -83,6 +83,15 @@ def test_rejects_payload_larger_than_two_kibibytes() -> None:
         validate(serialized)
 
 
+def test_accepts_payload_exactly_at_two_kibibytes() -> None:
+    empty_engine_payload = evidence(engine="")
+    engine_length = MAX_EVIDENCE_BYTES - len(empty_engine_payload.encode("utf-8"))
+    serialized = evidence(engine="x" * engine_length)
+
+    assert len(serialized.encode("utf-8")) == MAX_EVIDENCE_BYTES
+    assert validate(serialized).engine == "x" * engine_length
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
@@ -99,6 +108,24 @@ def test_rejects_incorrect_fixed_values(
     message: str,
 ) -> None:
     with pytest.raises(LivenessEvidenceValidationError, match=message):
+        validate(evidence(**{field: value}))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("version", "1"),
+        ("method", 1),
+        ("passed", "true"),
+        ("challenges", "turn_left,turn_right"),
+        ("challenges", ["turn_left", 1]),
+        ("startedAt", 1),
+        ("completedAt", False),
+        ("engine", 1),
+    ],
+)
+def test_rejects_incorrect_field_types(field: str, value: object) -> None:
+    with pytest.raises(LivenessEvidenceValidationError):
         validate(evidence(**{field: value}))
 
 
@@ -149,6 +176,28 @@ def test_rejects_started_at_after_completed_at() -> None:
                 completedAt="2026-09-22T08:00:10Z",
             )
         )
+
+
+def test_accepts_equal_started_and_completed_timestamps() -> None:
+    result = validate(
+        evidence(
+            startedAt="2026-09-22T08:00:10Z",
+            completedAt="2026-09-22T08:00:10Z",
+        )
+    )
+
+    assert result.started_at == result.completed_at
+
+
+def test_accepts_evidence_just_inside_maximum_age() -> None:
+    result = validate(
+        evidence(
+            startedAt="2026-09-22T07:58:21Z",
+            completedAt="2026-09-22T07:58:31Z",
+        )
+    )
+
+    assert result.completed_at == datetime(2026, 9, 22, 7, 58, 31, tzinfo=UTC)
 
 
 def test_accepts_evidence_exactly_at_maximum_age() -> None:

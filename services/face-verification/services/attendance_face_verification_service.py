@@ -19,6 +19,7 @@ from services.face_comparison_service import (
     FaceComparisonService,
     FaceComparisonStatus,
 )
+from services.liveness_evidence import LivenessEvidence
 
 
 class AttendanceFaceVerificationStatus(StrEnum):
@@ -29,6 +30,7 @@ class AttendanceFaceVerificationStatus(StrEnum):
     LOW_QUALITY = "low_quality"
     PROCESSING_FAILED = "processing_failed"
     MODEL_MISMATCH = "model_mismatch"
+    LIVENESS_FAILURE = "liveness_failure"
     ATTEMPT_LIMIT_REACHED = "attempt_limit_reached"
 
 
@@ -61,6 +63,15 @@ class AttendanceFaceVerificationUnavailableError(
 
 
 Clock = Callable[[], datetime]
+ATTEMPT_CONSUMING_STATUSES = frozenset(
+    {
+        FaceComparisonStatus.MATCHED,
+        FaceComparisonStatus.NOT_MATCHED,
+        FaceComparisonStatus.NO_FACE,
+        FaceComparisonStatus.MULTIPLE_FACES,
+        FaceComparisonStatus.LOW_QUALITY,
+    }
+)
 
 
 class AttendanceFaceVerificationService:
@@ -99,6 +110,7 @@ class AttendanceFaceVerificationService:
         session_id: UUID,
         student_id: UUID,
         captured_image: bytes,
+        liveness_evidence: LivenessEvidence | None,
     ) -> AttendanceFaceVerificationResult:
         validated_at = self._ensure_utc(self._clock())
 
@@ -141,13 +153,26 @@ class AttendanceFaceVerificationService:
                 "No active face-verification configuration is available."
             )
 
-        attempt_number = previous_attempt_number + 1
         comparison = await self._face_comparison_service.compare(
             reference=reference,
             captured_image=captured_image,
             similarity_threshold=float(config.similarity_threshold),
         )
-        passed = comparison.status is FaceComparisonStatus.MATCHED
+
+        if comparison.status not in ATTEMPT_CONSUMING_STATUSES:
+            return AttendanceFaceVerificationResult(
+                status=self._status_for_comparison(comparison.status),
+                attempt_number=previous_attempt_number,
+                can_retry=True,
+                similarity_score=comparison.similarity_score,
+                similarity_threshold=comparison.similarity_threshold,
+                detection_confidence=comparison.detection_confidence,
+            )
+
+        attempt_number = previous_attempt_number + 1
+        liveness_passed = True if liveness_evidence is not None else None
+        biometric_matched = comparison.status is FaceComparisonStatus.MATCHED
+        passed = biometric_matched and liveness_passed is True
         can_retry = not passed and attempt_number < self._max_attempts
 
         await self._repository.save_latest_face_attempt(
@@ -155,7 +180,7 @@ class AttendanceFaceVerificationService:
             verification_attempt_id=context.verification_attempt_id,
             face_profile_id=reference.profile_id,
             attempt_number=attempt_number,
-            liveness_passed=self._liveness_passed(comparison),
+            liveness_passed=liveness_passed,
             quality_passed=self._quality_passed(comparison),
             similarity_score=comparison.similarity_score,
             verification_config_id=config.id,
@@ -163,7 +188,10 @@ class AttendanceFaceVerificationService:
             failure_reason=(
                 None
                 if passed
-                else self._failure_reason(comparison)
+                else self._failure_reason(
+                    comparison,
+                    liveness_passed=liveness_passed,
+                )
             ),
             captured_at=validated_at,
             validated_at=validated_at,
@@ -179,7 +207,11 @@ class AttendanceFaceVerificationService:
         await self._session.commit()
 
         return AttendanceFaceVerificationResult(
-            status=self._status_for_comparison(comparison.status),
+            status=(
+                AttendanceFaceVerificationStatus.LIVENESS_FAILURE
+                if biometric_matched and liveness_passed is not True
+                else self._status_for_comparison(comparison.status)
+            ),
             attempt_number=attempt_number,
             can_retry=can_retry,
             similarity_score=comparison.similarity_score,
@@ -239,13 +271,6 @@ class AttendanceFaceVerificationService:
         return AttendanceFaceVerificationStatus(status.value)
 
     @staticmethod
-    def _liveness_passed(comparison: FaceComparisonResult) -> bool:
-        return comparison.status in {
-            FaceComparisonStatus.MATCHED,
-            FaceComparisonStatus.NOT_MATCHED,
-        }
-
-    @staticmethod
     def _quality_passed(comparison: FaceComparisonResult) -> bool:
         return comparison.status in {
             FaceComparisonStatus.MATCHED,
@@ -253,7 +278,17 @@ class AttendanceFaceVerificationService:
         }
 
     @staticmethod
-    def _failure_reason(comparison: FaceComparisonResult) -> str:
+    def _failure_reason(
+        comparison: FaceComparisonResult,
+        *,
+        liveness_passed: bool | None,
+    ) -> str:
+        if (
+            comparison.status is FaceComparisonStatus.MATCHED
+            and liveness_passed is not True
+        ):
+            return "Valid liveness evidence was not provided"
+
         reason = comparison.failure_reason or comparison.status.value
         return reason[:100]
 

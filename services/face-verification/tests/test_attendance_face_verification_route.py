@@ -93,6 +93,7 @@ def test_returns_attempt_metadata_for_a_retryable_failure() -> None:
         session_id=SESSION_ID,
         student_id=STUDENT_ID,
         captured_image=b"jpeg",
+        liveness_evidence=None,
     )
 
 
@@ -115,10 +116,12 @@ def test_accepts_valid_liveness_evidence() -> None:
 
     assert response.status_code == 200
     assert response.json()["status"] == "passed"
-    service.verify.assert_awaited_once()
+    verified_evidence = service.verify.await_args.kwargs["liveness_evidence"]
+    assert verified_evidence is not None
+    assert verified_evidence.passed is True
 
 
-def test_rejects_missing_liveness_when_enforcement_is_enabled() -> None:
+def test_liveness_rejection_does_not_start_attempt_consumption() -> None:
     client, service = build_client(
         AttendanceFaceVerificationResult(
             status=AttendanceFaceVerificationStatus.PASSED,
