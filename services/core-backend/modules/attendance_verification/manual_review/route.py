@@ -24,8 +24,14 @@ from modules.identity.auth.dependencies import CurrentLecturer
 
 router = APIRouter(prefix="/lecturers/me/manual-reviews", tags=["manual-review"])
 
-_PROFILE_NOT_FOUND_DETAIL = "An active lecturer profile was not found for this account."
-_ATTEMPT_NOT_FOUND_DETAIL = "The verification attempt was not found."
+_PROFILE_NOT_FOUND_DETAIL = {
+    "code": "LECTURER_PROFILE_NOT_FOUND",
+    "message": "An active lecturer profile was not found for this account.",
+}
+_ATTEMPT_NOT_FOUND_DETAIL = {
+    "code": "VERIFICATION_ATTEMPT_NOT_FOUND",
+    "message": "The verification attempt was not found.",
+}
 
 
 def get_manual_review_service() -> ManualReviewService:
@@ -87,17 +93,26 @@ async def decide_my_manual_review(
     except VerificationAttemptNotFailedError as error:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "Only failed verification attempts can be manually reviewed.",
+            {
+                "code": "VERIFICATION_ATTEMPT_NOT_FAILED",
+                "message": "Only failed verification attempts can be manually reviewed.",
+            },
         ) from error
     except SessionCancelledError as error:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "This session was cancelled, so attendance cannot be changed.",
+            {
+                "code": "SESSION_CANCELLED",
+                "message": "This session was cancelled, so attendance cannot be changed.",
+            },
         ) from error
     except ManualAttendanceError as error:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "The attendance decision could not be recorded for this session.",
+            {
+                "code": "MANUAL_ATTENDANCE_ERROR",
+                "message": "The attendance decision could not be recorded for this session.",
+            },
         ) from error
 
     return ManualReviewQueueItemResponse.from_record(item)

@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from core.errors import error_detail
 from modules.identity.auth.dependencies import CurrentStudent
 from modules.notification.student_notifications.schemas import (
     StudentNotificationResponse,
@@ -73,7 +74,9 @@ async def mark_my_notification_as_read(
     if not marked:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notification was not found for this account.",
+            detail=error_detail(
+                "NOTIFICATION_NOT_FOUND", "Notification was not found for this account.",
+            ),
         )
 
     return {"ok": True}

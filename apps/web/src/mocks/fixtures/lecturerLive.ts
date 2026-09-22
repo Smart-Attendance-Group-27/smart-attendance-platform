@@ -69,7 +69,7 @@ export const mockCancelSessionResponse: ApiLecturerSession = {
 const baseStudent: ApiSessionStudent = {
   studentId: "student-1", registrationNumber: "2307001", fullName: "Nimali Perera",
   verificationStatus: "checked_in", geofenceStatus: "passed", faceStatus: "passed",
-  faceSimilarityScore: 0.94, faceLivenessPassed: true, qrStatus: null,
+  faceSimilarityScore: 0.94, faceLivenessPassed: true,
   attendanceStatus: null, reviewStatus: null, checkedInAt: time(-8),
   failureReason: null, initialCheckInStatus: "checked_in", qrRequiredCount: 2,
   qrPassedCount: 1, recordSource: null, manualReason: null, recordUpdatedAt: null,

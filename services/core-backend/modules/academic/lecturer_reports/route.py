@@ -16,8 +16,14 @@ from modules.identity.auth.dependencies import CurrentLecturer
 
 router = APIRouter(prefix="/lecturers/me", tags=["lecturer-reports"])
 
-_PROFILE_NOT_FOUND_DETAIL = "An active lecturer profile was not found for this account."
-_COURSE_NOT_FOUND_DETAIL = "The course offering was not found."
+_PROFILE_NOT_FOUND_DETAIL = {
+    "code": "LECTURER_PROFILE_NOT_FOUND",
+    "message": "An active lecturer profile was not found for this account.",
+}
+_COURSE_NOT_FOUND_DETAIL = {
+    "code": "COURSE_OFFERING_NOT_FOUND",
+    "message": "The course offering was not found.",
+}
 
 
 def get_lecturer_report_service() -> LecturerReportService:

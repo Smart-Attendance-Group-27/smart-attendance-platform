@@ -69,6 +69,15 @@ class Settings(BaseSettings):
     # validating time-based JWT claims such as iat, nbf, and exp.
     keycloak_leeway_seconds: float = Field(default=5, ge=0)
 
+    # Keycloak Admin API service account used only for account provisioning.
+    # These settings are validated lazily so deployments that do not expose
+    # provisioning can still run the rest of the API.
+    keycloak_admin_base_url: str | None = None
+    keycloak_admin_realm: str | None = None
+    keycloak_admin_client_id: str | None = None
+    keycloak_admin_client_secret: SecretStr | None = None
+    keycloak_admin_timeout_seconds: float = Field(default=10, gt=0)
+
     # Required by dynamic QR generation and verification. Static QR sessions
     # do not use this secret.
     dynamic_qr_hmac_secret: SecretStr | None = None
@@ -103,12 +112,6 @@ class Settings(BaseSettings):
     geofence_max_future_skew_seconds: float = Field(default=5, ge=0)
     geofence_max_attempts: int = Field(default=3, ge=1)
 
-    # Deprecated: the pre-Keycloak development token secret. It is no longer
-    # read by any code path and is never used to validate Keycloak tokens.
-    # Kept only so that existing local .env files do not fail to load.
-    # TODO: remove once every environment has dropped TOKEN_SECRET.
-    token_secret: SecretStr | None = None
-
     model_config = SettingsConfigDict(
         env_file=ENV_FILE_PATH,
         env_file_encoding="utf-8",
@@ -124,6 +127,10 @@ class Settings(BaseSettings):
         "dynamic_qr_hmac_secret",
         "face_verification_service_url",
         "expo_access_token",
+        "keycloak_admin_base_url",
+        "keycloak_admin_realm",
+        "keycloak_admin_client_id",
+        "keycloak_admin_client_secret",
         mode="before",
     )
     @classmethod
@@ -146,6 +153,13 @@ class Settings(BaseSettings):
     @field_validator("keycloak_expected_issuer")
     @classmethod
     def strip_issuer_trailing_slash(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.rstrip("/")
+
+    @field_validator("keycloak_admin_base_url")
+    @classmethod
+    def strip_admin_base_url_trailing_slash(cls, value: str | None) -> str | None:
         if value is None:
             return None
         return value.rstrip("/")
@@ -276,6 +290,24 @@ class Settings(BaseSettings):
         if missing_variables:
             raise ConfigurationError(
                 "Keycloak authentication is not configured. Set "
+                f"{', '.join(missing_variables)} in services/core-backend/.env.",
+            )
+
+    def require_keycloak_admin_configuration(self) -> None:
+        """Validate the dedicated service account without exposing values."""
+        missing_variables = [
+            variable_name
+            for variable_name, value in (
+                ("KEYCLOAK_ADMIN_BASE_URL", self.keycloak_admin_base_url),
+                ("KEYCLOAK_ADMIN_REALM", self.keycloak_admin_realm),
+                ("KEYCLOAK_ADMIN_CLIENT_ID", self.keycloak_admin_client_id),
+                ("KEYCLOAK_ADMIN_CLIENT_SECRET", self.keycloak_admin_client_secret),
+            )
+            if not value
+        ]
+        if missing_variables:
+            raise ConfigurationError(
+                "Keycloak account provisioning is not configured. Set "
                 f"{', '.join(missing_variables)} in services/core-backend/.env.",
             )
 

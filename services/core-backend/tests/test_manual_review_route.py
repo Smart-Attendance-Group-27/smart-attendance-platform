@@ -143,6 +143,10 @@ def test_queue_missing_profile_returns_404(jwks_document, make_access_token) -> 
         )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "LECTURER_PROFILE_NOT_FOUND",
+        "message": "An active lecturer profile was not found for this account.",
+    }
 
 
 def lecturer_headers(make_access_token) -> dict[str, str]:
@@ -233,6 +237,10 @@ def test_decision_missing_attempt_returns_404(jwks_document, make_access_token) 
         )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "VERIFICATION_ATTEMPT_NOT_FOUND",
+        "message": "The verification attempt was not found.",
+    }
 
 
 def test_decision_on_non_failed_attempt_returns_409(jwks_document, make_access_token) -> None:
@@ -245,6 +253,10 @@ def test_decision_on_non_failed_attempt_returns_409(jwks_document, make_access_t
         )
 
     assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "VERIFICATION_ATTEMPT_NOT_FAILED",
+        "message": "Only failed verification attempts can be manually reviewed.",
+    }
 
 
 def test_decision_on_a_cancelled_session_returns_409(jwks_document, make_access_token) -> None:
@@ -257,6 +269,10 @@ def test_decision_on_a_cancelled_session_returns_409(jwks_document, make_access_
         )
 
     assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "SESSION_CANCELLED",
+        "message": "This session was cancelled, so attendance cannot be changed.",
+    }
 
 
 def test_requires_bearer_token(client: TestClient) -> None:

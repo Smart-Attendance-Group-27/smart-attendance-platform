@@ -41,7 +41,10 @@ async def list_my_courses(
     except LecturerProfileNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="An active lecturer profile was not found for this account.",
+            detail={
+                "code": "LECTURER_PROFILE_NOT_FOUND",
+                "message": "An active lecturer profile was not found for this account.",
+            },
         ) from error
 
     return [
@@ -84,7 +87,10 @@ async def list_my_timetable(
     except LecturerProfileNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="An active lecturer profile was not found for this account.",
+            detail={
+                "code": "LECTURER_PROFILE_NOT_FOUND",
+                "message": "An active lecturer profile was not found for this account.",
+            },
         ) from error
 
     return [

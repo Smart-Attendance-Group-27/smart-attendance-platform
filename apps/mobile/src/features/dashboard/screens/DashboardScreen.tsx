@@ -26,7 +26,6 @@ import { MockDashboardService } from '../services/mockDashboardService';
 import type { Lecture, AttendanceSession } from '../types';
 import type { ActiveAttendanceSession } from '../types/activeAttendanceSession';
 import type { ProfileService } from '../../profile/services/profile.service';
-import { MockProfileService } from '../../profile/services/mockProfileService';
 import type { CourseService } from '../../courses/services/courseService';
 import type { Course } from '../../courses/mockCoursesData';
 import type { QrProgress } from '../../qr/types/qrProgress';
@@ -41,7 +40,7 @@ type DashboardScreenProps = {
   >;
   courseService?: CourseService;
   onReadinessCheckPress?: () => void;
-  profileService?: ProfileService;
+  profileService: ProfileService;
   qrProgressService?: QrProgressService;
   onSignOutPress?: () => void;
 };
@@ -58,10 +57,6 @@ export function DashboardScreen({
 }: DashboardScreenProps) {
   const router = useRouter();
   const service = useMemo(() => dashboardService ?? new MockDashboardService(), [dashboardService]);
-  const profileServiceInstance = useMemo(
-    () => profileService ?? new MockProfileService(),
-    [profileService],
-  );
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +90,7 @@ export function DashboardScreen({
       // student from the access token, so no sign-in call and no user ID
       // lookup happens here: authentication stays inside AuthContext.
       try {
-        const profileResult = await profileServiceInstance.getMyStudentProfile();
+        const profileResult = await profileService.getMyStudentProfile();
         if (profileResult.status === 'found') {
           const full = profileResult.profile.fullName;
           const first = full.split(' ')[0] ?? full;
@@ -133,7 +128,7 @@ export function DashboardScreen({
 
       try {
         try {
-          const profileResult = await profileServiceInstance.getMyStudentProfile();
+          const profileResult = await profileService.getMyStudentProfile();
           if (profileResult.status === 'found') {
             const full = profileResult.profile.fullName;
             const first = full.split(' ')[0] ?? full;
@@ -167,7 +162,7 @@ export function DashboardScreen({
     return () => {
       mounted = false;
     };
-  }, [activeSessionService, courseService, faceVerificationApiService, profileServiceInstance, service]);
+  }, [activeSessionService, courseService, faceVerificationApiService, profileService, service]);
 
   // The dashboard remains mounted while attendance routes are open. Refresh
   // the student-specific session state when focus returns so a completed

@@ -39,7 +39,10 @@ async def list_my_courses(
     except StudentProfileNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="An active student profile was not found for this account.",
+            detail={
+                "code": "STUDENT_PROFILE_NOT_FOUND",
+                "message": "An active student profile was not found for this account.",
+            },
         ) from error
 
     return [

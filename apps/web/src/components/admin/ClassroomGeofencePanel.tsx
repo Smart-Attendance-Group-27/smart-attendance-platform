@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Button } from "@/components/ui/Button";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { classroomStatusDisplay } from "@/lib/status";
 import { Classroom } from "@/types/admin";
@@ -49,11 +48,7 @@ export function ClassroomGeofencePanel({ classrooms }: { classrooms: Classroom[]
         <Card
           title={selected ? `Selected geofence · ${selected.room}` : "Selected geofence"}
           className="border-l-4 border-l-[var(--uom-gold)]"
-          actions={
-            <Button title="Available once geofence management API is integrated" disabled>
-              Edit
-            </Button>
-          }
+          actions={<LinkButton href="/admin/classrooms">Edit</LinkButton>}
         >
           {!selected ? (
             <p className="p-6 text-center text-xs text-[var(--muted)]">Select a classroom to preview its geofence.</p>

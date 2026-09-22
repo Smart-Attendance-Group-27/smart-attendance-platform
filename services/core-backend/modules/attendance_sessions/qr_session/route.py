@@ -49,9 +49,18 @@ lecturer_qr_batches_router = APIRouter(
     prefix="/lecturers/me/attendance-sessions/{session_id}/qr-batches",
 )
 
-_SESSION_NOT_FOUND_DETAIL = "The attendance session was not found, or does not belong to this lecturer."
-_QR_SESSION_NOT_FOUND_DETAIL = "The QR session was not found, or does not belong to this lecturer."
-_QR_NOT_REQUIRED_DETAIL = "QR verification is not enabled for this attendance session."
+_SESSION_NOT_FOUND_DETAIL = {
+    "code": "SESSION_NOT_FOUND",
+    "message": "The attendance session was not found, or does not belong to this lecturer.",
+}
+_QR_SESSION_NOT_FOUND_DETAIL = {
+    "code": "QR_SESSION_NOT_FOUND",
+    "message": "The QR session was not found, or does not belong to this lecturer.",
+}
+_QR_NOT_REQUIRED_DETAIL = {
+    "code": "QR_NOT_REQUIRED",
+    "message": "QR verification is not enabled for this attendance session.",
+}
 
 
 def get_qr_session_service(request: Request) -> QrSessionService:
@@ -90,17 +99,17 @@ async def get_initial_dynamic_qr_session(
     except QrSessionNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="QR session was not found.",
+            detail={"code": "QR_SESSION_NOT_FOUND", "message": "QR session was not found."},
         ) from error
     except DynamicQrSessionUnavailableError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=error.message,
+            detail={"code": "DYNAMIC_QR_SESSION_UNAVAILABLE", "message": error.message},
         ) from error
     except DynamicQrConfigurationError as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=error.message,
+            detail={"code": "DYNAMIC_QR_CONFIGURATION_ERROR", "message": error.message},
         ) from error
 
 
@@ -148,7 +157,7 @@ async def create_qr_session(
     except AttendanceSessionNotActiveError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=error.message,
+            detail={"code": "SESSION_NOT_ACTIVE", "message": error.message},
         ) from error
 
     return CreateQrSessionResponse(
@@ -185,12 +194,15 @@ async def verify_qr_session(
     except QrSessionNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="QR session was not found.",
+            detail={"code": "QR_SESSION_NOT_FOUND", "message": "QR session was not found."},
         ) from error
     except ActiveStudentProfileNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="An active student profile was not found for this account.",
+            detail={
+                "code": "STUDENT_PROFILE_NOT_FOUND",
+                "message": "An active student profile was not found for this account.",
+            },
         ) from error
     except StudentNotEligibleError as error:
         raise HTTPException(
@@ -208,7 +220,7 @@ async def verify_qr_session(
     except DynamicQrConfigurationError as error:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=error.message,
+            detail={"code": "DYNAMIC_QR_CONFIGURATION_ERROR", "message": error.message},
         ) from error
 
     return VerifyQrSessionResponse(

@@ -149,6 +149,10 @@ def test_overview_missing_profile_returns_404(jwks_document, make_access_token) 
         response = client.get(OVERVIEW_URL, headers=authorize(lecturer_token(make_access_token)))
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "LECTURER_PROFILE_NOT_FOUND",
+        "message": "An active lecturer profile was not found for this account.",
+    }
 
 
 def test_returns_course_session_report(client: TestClient, make_access_token) -> None:
@@ -166,6 +170,10 @@ def test_report_for_unowned_course_returns_404(jwks_document, make_access_token)
         response = client.get(REPORT_URL, headers=authorize(lecturer_token(make_access_token)))
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "COURSE_OFFERING_NOT_FOUND",
+        "message": "The course offering was not found.",
+    }
 
 
 def test_returns_attendance_trend(client: TestClient, make_access_token) -> None:
@@ -182,6 +190,10 @@ def test_trend_missing_profile_returns_404(jwks_document, make_access_token) -> 
         response = client.get(TREND_URL, headers=authorize(lecturer_token(make_access_token)))
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "LECTURER_PROFILE_NOT_FOUND",
+        "message": "An active lecturer profile was not found for this account.",
+    }
 
 
 def test_returns_at_risk_students(client: TestClient, make_access_token) -> None:

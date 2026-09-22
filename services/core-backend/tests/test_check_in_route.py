@@ -173,6 +173,10 @@ def test_missing_student_profile_returns_404(jwks_document, make_access_token) -
         response = client.post(CHECK_IN_URL, headers=authorize(student_token(make_access_token)))
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "STUDENT_PROFILE_NOT_FOUND",
+        "message": "no profile",
+    }
 
 
 def test_missing_session_returns_404(jwks_document, make_access_token) -> None:
@@ -181,6 +185,10 @@ def test_missing_session_returns_404(jwks_document, make_access_token) -> None:
         response = client.post(CHECK_IN_URL, headers=authorize(student_token(make_access_token)))
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "SESSION_NOT_FOUND",
+        "message": "no session",
+    }
 
 
 def test_checking_in_before_verifying_returns_409(jwks_document, make_access_token) -> None:
@@ -189,6 +197,10 @@ def test_checking_in_before_verifying_returns_409(jwks_document, make_access_tok
         response = client.post(CHECK_IN_URL, headers=authorize(student_token(make_access_token)))
 
     assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "VERIFICATION_NOT_STARTED",
+        "message": "not started",
+    }
 
 
 def test_requires_bearer_token(client: TestClient) -> None:

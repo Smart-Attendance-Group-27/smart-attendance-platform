@@ -1,11 +1,14 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Notice } from "@/components/ui/Notice";
-import { Button } from "@/components/ui/Button";
 import { UsersWorkspace } from "@/components/admin/UsersWorkspace";
-import { getUserDirectory } from "@/services/adminService";
+import { ProvisionAccountButton } from "@/components/admin/ProvisionAccountButton";
+import { getProvisioningDepartments, getUserDirectory } from "@/services/adminService";
 
 export default async function AdminUsersPage() {
-  const directory = await getUserDirectory();
+  const [directory, departments] = await Promise.all([
+    getUserDirectory(),
+    getProvisioningDepartments(),
+  ]);
 
   return (
     <div>
@@ -13,9 +16,7 @@ export default async function AdminUsersPage() {
         title="Users"
         description="Manage student, lecturer, and administrator accounts. Credentials remain in Keycloak — this page manages application profile and access status only."
         actions={
-          <Button variant="primary" title="Account provisioning (creating new Keycloak-linked accounts) is not built yet" disabled>
-            Provision account
-          </Button>
+          <ProvisionAccountButton departments={departments} />
         }
       />
       <Notice>

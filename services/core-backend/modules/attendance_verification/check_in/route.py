@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from core.errors import error_detail
 from modules.attendance_verification.check_in.exception import (
     ActiveStudentProfileNotFoundError,
     AttendanceSessionNotFoundError,
@@ -45,10 +46,19 @@ async def check_in(
             session_id,
         )
     except ActiveStudentProfileNotFoundError as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, error.message) from error
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            error_detail("STUDENT_PROFILE_NOT_FOUND", error.message),
+        ) from error
     except AttendanceSessionNotFoundError as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, error.message) from error
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            error_detail("SESSION_NOT_FOUND", error.message),
+        ) from error
     except VerificationNotStartedError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, error.message) from error
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            error_detail("VERIFICATION_NOT_STARTED", error.message),
+        ) from error
 
     return CheckInResponse.from_result(result)

@@ -422,6 +422,10 @@ def test_create_static_qr_session_route_maps_missing_session_to_404(
         )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "SESSION_NOT_FOUND",
+        "message": "The attendance session was not found, or does not belong to this lecturer.",
+    }
 
 
 def test_create_static_qr_session_route_maps_not_owned_session_to_404(
@@ -436,6 +440,10 @@ def test_create_static_qr_session_route_maps_not_owned_session_to_404(
         )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "SESSION_NOT_FOUND",
+        "message": "The attendance session was not found, or does not belong to this lecturer.",
+    }
 
 
 def test_create_static_qr_session_route_maps_qr_not_required_to_409(
@@ -450,6 +458,10 @@ def test_create_static_qr_session_route_maps_qr_not_required_to_409(
         )
 
     assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "QR_NOT_REQUIRED",
+        "message": "QR verification is not enabled for this attendance session.",
+    }
 
 
 def test_create_static_qr_session_route_maps_inactive_session_to_409(
@@ -464,7 +476,12 @@ def test_create_static_qr_session_route_maps_inactive_session_to_409(
         )
 
     assert response.status_code == 409
-    assert response.json() == {"detail": "Attendance session is not active."}
+    assert response.json() == {
+        "detail": {
+            "code": "SESSION_NOT_ACTIVE",
+            "message": "Attendance session is not active.",
+        },
+    }
 
 
 def test_verify_qr_session_route_returns_camel_case_response(
@@ -554,7 +571,10 @@ def test_verify_qr_session_route_maps_dynamic_config_error_to_500(
 
     assert response.status_code == 500
     assert response.json() == {
-        "detail": "Dynamic QR HMAC secret is not configured.",
+        "detail": {
+            "code": "DYNAMIC_QR_CONFIGURATION_ERROR",
+            "message": "Dynamic QR HMAC secret is not configured.",
+        },
     }
 
 
@@ -570,6 +590,10 @@ def test_verify_qr_session_route_maps_missing_student_profile_to_404(
         )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "STUDENT_PROFILE_NOT_FOUND",
+        "message": "An active student profile was not found for this account.",
+    }
 
 
 def test_verify_qr_session_route_maps_ineligible_student_to_403(
@@ -651,6 +675,10 @@ def test_get_current_dynamic_qr_session_route_maps_not_owned_to_404(
         )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "QR_SESSION_NOT_FOUND",
+        "message": "The QR session was not found, or does not belong to this lecturer.",
+    }
 
 
 def test_get_current_dynamic_qr_session_route_maps_missing_session_to_404(
@@ -664,6 +692,10 @@ def test_get_current_dynamic_qr_session_route_maps_missing_session_to_404(
         )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "QR_SESSION_NOT_FOUND",
+        "message": "QR session was not found.",
+    }
 
 
 def test_get_current_dynamic_qr_session_route_rejects_static_session(
@@ -678,7 +710,10 @@ def test_get_current_dynamic_qr_session_route_rejects_static_session(
 
     assert response.status_code == 409
     assert response.json() == {
-        "detail": "QR session is not a dynamic QR session.",
+        "detail": {
+            "code": "DYNAMIC_QR_SESSION_UNAVAILABLE",
+            "message": "QR session is not a dynamic QR session.",
+        },
     }
 
 
@@ -694,7 +729,10 @@ def test_get_current_dynamic_qr_session_route_rejects_missing_secret(
 
     assert response.status_code == 500
     assert response.json() == {
-        "detail": "Dynamic QR HMAC secret is not configured.",
+        "detail": {
+            "code": "DYNAMIC_QR_CONFIGURATION_ERROR",
+            "message": "Dynamic QR HMAC secret is not configured.",
+        },
     }
 
 
@@ -736,7 +774,10 @@ def test_stream_dynamic_qr_session_route_rejects_static_session_before_streaming
 
     assert response.status_code == 409
     assert response.json() == {
-        "detail": "QR session is not a dynamic QR session.",
+        "detail": {
+            "code": "DYNAMIC_QR_SESSION_UNAVAILABLE",
+            "message": "QR session is not a dynamic QR session.",
+        },
     }
 
 

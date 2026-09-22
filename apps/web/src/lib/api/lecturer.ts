@@ -86,7 +86,6 @@ export type ApiSessionStudent = {
   faceStatus: string | null;
   faceSimilarityScore: number | null;
   faceLivenessPassed: boolean | null;
-  qrStatus: string | null;
   attendanceStatus: string | null;
   reviewStatus: string | null;
   checkedInAt: string | null;

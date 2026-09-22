@@ -282,7 +282,10 @@ def test_duplicate_mutations_return_409(
             json=payload,
         )
     assert response.status_code == 409
-    assert response.json()["detail"] == "Duplicate academic record."
+    assert response.json()["detail"] == {
+        "code": "ACADEMIC_CONFLICT",
+        "message": "Duplicate academic record.",
+    }
 
 
 def test_timetable_rejects_end_before_start(jwks_document, make_access_token) -> None:

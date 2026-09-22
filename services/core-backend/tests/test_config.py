@@ -26,7 +26,6 @@ def test_settings_normalizes_blank_redis_url() -> None:
         db_user="postgres",
         db_password="password",
         redis_url=" ",
-        token_secret="secret",
         _env_file=None,
     )
 
@@ -39,7 +38,6 @@ def test_settings_normalizes_blank_dynamic_qr_hmac_secret() -> None:
         db_user="postgres",
         db_password="password",
         dynamic_qr_hmac_secret=" ",
-        token_secret="secret",
         _env_file=None,
     )
 
@@ -191,10 +189,31 @@ def test_issuer_trailing_slash_is_normalized() -> None:
     assert settings.keycloak_expected_issuer == "http://localhost:8080/realms/uniattend"
 
 
-def test_deprecated_token_secret_is_optional() -> None:
+def test_keycloak_admin_configuration_is_validated_lazily() -> None:
     settings = build_settings()
 
-    assert settings.token_secret is None
+    with pytest.raises(ConfigurationError) as error:
+        settings.require_keycloak_admin_configuration()
+
+    message = str(error.value)
+    assert "KEYCLOAK_ADMIN_BASE_URL" in message
+    assert "KEYCLOAK_ADMIN_REALM" in message
+    assert "KEYCLOAK_ADMIN_CLIENT_ID" in message
+    assert "KEYCLOAK_ADMIN_CLIENT_SECRET" in message
+
+
+def test_keycloak_admin_configuration_normalizes_and_hides_secret() -> None:
+    settings = build_settings(
+        keycloak_admin_base_url="http://keycloak:8080/",
+        keycloak_admin_realm="uniattend",
+        keycloak_admin_client_id="uniattend-provisioner",
+        keycloak_admin_client_secret="admin-client-secret",
+    )
+
+    settings.require_keycloak_admin_configuration()
+    assert settings.keycloak_admin_base_url == "http://keycloak:8080"
+    assert "admin-client-secret" not in repr(settings)
+    assert "admin-client-secret" not in str(settings)
 
 
 def test_accepted_issuers_includes_only_the_primary_issuer_by_default() -> None:

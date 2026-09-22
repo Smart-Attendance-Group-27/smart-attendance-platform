@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from core.config import Settings, get_settings
+from core.errors import error_detail
 from modules.attendance_verification.geofence.exception import (
     ActiveStudentProfileNotFoundError,
     AttendanceAlreadyCompletedError,
@@ -81,17 +82,17 @@ async def create_geofence_attempt(
     except ActiveStudentProfileNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=error.message,
+            detail=error_detail("STUDENT_PROFILE_NOT_FOUND", error.message),
         ) from error
     except AttendanceSessionNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=error.message,
+            detail=error_detail("SESSION_NOT_FOUND", error.message),
         ) from error
     except StudentNotEligibleError as error:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=_error_detail(error),
+            detail=error_detail(_error_code(error), error.message),
         ) from error
     except AttendanceAlreadyCompletedError as error:
         raise HTTPException(
@@ -113,7 +114,7 @@ async def create_geofence_attempt(
     ) as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_error_detail(error),
+            detail=error_detail(_error_code(error), error.message),
         ) from error
 
     return CreateGeofenceAttemptResponse(
@@ -132,7 +133,13 @@ async def create_geofence_attempt(
     )
 
 
-def _error_detail(error: GeofenceServiceError) -> str:
+_FALLBACK_ERROR_CODES: dict[type, str] = {
+    GeofenceNotRequiredError: "GEOFENCE_NOT_REQUIRED",
+    VerificationAttemptClosedError: "VERIFICATION_ATTEMPT_CLOSED",
+}
+
+
+def _error_code(error: GeofenceServiceError) -> str:
     if error.reason is not None:
         return error.reason.value
-    return error.message
+    return _FALLBACK_ERROR_CODES[type(error)]
