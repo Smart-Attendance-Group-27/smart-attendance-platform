@@ -17,13 +17,23 @@ class PushMessage:
 
 @dataclass(frozen=True)
 class PushReceipt:
-    """The result of attempting to deliver one PushMessage."""
+    """Expo's immediate push ticket for one submitted message."""
 
     token: str
     status: str                  # "ok" | "error"
     provider_id: str | None      # Expo receipt ID when status == "ok"
     failure_reason: str | None   # Expo error detail when status == "error"
     is_invalid_token: bool       # True when Expo says DeviceNotRegistered
+
+
+@dataclass(frozen=True)
+class PushDeliveryReceipt:
+    """Expo's later delivery receipt, keyed by the push ticket ID."""
+
+    provider_id: str
+    status: str
+    failure_reason: str | None
+    is_invalid_token: bool
 
 
 class PushProvider(Protocol):
@@ -36,4 +46,11 @@ class PushProvider(Protocol):
 
     async def send_many(self, messages: list[PushMessage]) -> list[PushReceipt]:
         """Send all messages and return one receipt per message, in order."""
+        ...
+
+    async def fetch_receipts(
+        self,
+        provider_ids: list[str],
+    ) -> dict[str, PushDeliveryReceipt]:
+        """Return the delivery receipts currently available for ticket IDs."""
         ...

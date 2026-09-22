@@ -195,3 +195,67 @@ async def test_sends_in_chunks_of_100():
 
     assert call_count == 3
     assert len(receipts) == 201
+
+
+# ---------------------------------------------------------------------------
+# Delivery receipts
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_receipts_parses_delivered_and_invalid_token_results():
+    provider = ExpoPushProvider()
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "data": {
+            "ticket-ok": {"status": "ok"},
+            "ticket-dead": {
+                "status": "error",
+                "message": "The device is not registered",
+                "details": {"error": "DeviceNotRegistered"},
+            },
+        }
+    }
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_response):
+        receipts = await provider.fetch_receipts(["ticket-ok", "ticket-dead"])
+
+    assert receipts["ticket-ok"].status == "ok"
+    assert receipts["ticket-dead"].status == "error"
+    assert receipts["ticket-dead"].is_invalid_token is True
+
+
+@pytest.mark.asyncio
+async def test_fetch_receipts_omits_ids_not_yet_available():
+    provider = ExpoPushProvider()
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"data": {}}
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_response):
+        receipts = await provider.fetch_receipts(["ticket-pending"])
+
+    assert receipts == {}
+
+
+@pytest.mark.asyncio
+async def test_fetch_receipts_uses_batches_of_1000():
+    provider = ExpoPushProvider()
+    provider_ids = [f"ticket-{index}" for index in range(2001)]
+    batch_sizes: list[int] = []
+
+    async def fake_post(url, *, json, headers, **kwargs):
+        batch_sizes.append(len(json["ids"]))
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {
+            "data": {provider_id: {"status": "ok"} for provider_id in json["ids"]}
+        }
+        return response
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, side_effect=fake_post):
+        receipts = await provider.fetch_receipts(provider_ids)
+
+    assert batch_sizes == [1000, 1000, 1]
+    assert len(receipts) == 2001
