@@ -87,6 +87,35 @@ export type ApiUserDirectory = {
   administrators: ApiAdministratorAccount[];
 };
 
+export type ApiProvisionedAccountRole = "student" | "lecturer" | "administrator";
+
+export type ApiAccountProvisionRequest = {
+  role: ApiProvisionedAccountRole;
+  email: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  departmentId: string;
+  registrationNumber?: string;
+  intakeYear?: number;
+  currentSemester?: number;
+  employeeNumber?: string;
+  designation?: string;
+  administrativeScope?: string;
+};
+
+export type ApiProvisionedAccount = {
+  userId: string;
+  keycloakUserId: string;
+  role: ApiProvisionedAccountRole;
+  email: string;
+  temporaryPassword: string;
+};
+
+export type ApiAccountProvisioningOptions = {
+  departments: { id: string; label: string }[];
+};
+
 export type ApiAdminCourse = {
   courseId: string;
   courseCode: string;
@@ -261,6 +290,16 @@ export function updateAccountStatus(
     method: "PATCH",
     body: { accountStatus },
   });
+}
+
+export function provisionAccount(
+  body: ApiAccountProvisionRequest,
+): Promise<ApiProvisionedAccount> {
+  return coreBackendFetch("/api/v1/administrators/me/users", { method: "POST", body });
+}
+
+export function getAccountProvisioningOptions(): Promise<ApiAccountProvisioningOptions> {
+  return coreBackendFetch("/api/v1/administrators/me/users/provisioning-options");
 }
 
 export function getAcademicData(): Promise<ApiAcademicData> {
