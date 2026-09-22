@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from services.attendance_face_verification_service import (
@@ -11,3 +13,7 @@ class AttendanceFaceVerificationResponse(BaseModel):
     status: AttendanceFaceVerificationStatus
     attempt_number: int = Field(alias="attemptNumber")
     can_retry: bool = Field(alias="canRetry")
+
+
+class LivenessFailureResponse(BaseModel):
+    status: Literal["liveness_failure"] = "liveness_failure"

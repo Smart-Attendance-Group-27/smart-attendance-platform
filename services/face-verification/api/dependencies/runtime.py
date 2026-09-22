@@ -16,16 +16,24 @@ class FaceVerificationRuntime:
     settings: Settings
 
 
+def get_face_verification_settings(request: Request) -> Settings:
+    settings = getattr(request.app.state, "settings", None)
+
+    if not isinstance(settings, Settings):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Face verification is unavailable",
+        )
+
+    return settings
+
+
 def get_face_verification_runtime(request: Request) -> FaceVerificationRuntime:
     session_factory = getattr(request.app.state, "db_session_factory", None)
     face_engine = getattr(request.app.state, "face_engine", None)
-    settings = getattr(request.app.state, "settings", None)
+    settings = get_face_verification_settings(request)
 
-    if (
-        session_factory is None
-        or face_engine is None
-        or not isinstance(settings, Settings)
-    ):
+    if session_factory is None or face_engine is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Face verification is unavailable",
@@ -41,4 +49,8 @@ def get_face_verification_runtime(request: Request) -> FaceVerificationRuntime:
     )
 
 
-__all__ = ["FaceVerificationRuntime", "get_face_verification_runtime"]
+__all__ = [
+    "FaceVerificationRuntime",
+    "get_face_verification_runtime",
+    "get_face_verification_settings",
+]

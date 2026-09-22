@@ -26,6 +26,8 @@ def test_database_settings_accept_explicit_values() -> None:
     assert settings.face_detection_size == 640
     assert settings.face_minimum_detection_confidence == 0.60
     assert settings.face_max_concurrent_inferences == 1
+    assert settings.liveness_enforcement_enabled is False
+    assert settings.liveness_max_age_seconds == 120
     assert settings.core_api_url == "http://localhost:8000"
     assert settings.core_api_timeout_seconds == 5
 
@@ -43,3 +45,20 @@ def test_core_api_url_removes_trailing_slash() -> None:
     )
 
     assert settings.core_api_url == "http://localhost:8000"
+
+
+def test_liveness_settings_accept_explicit_values() -> None:
+    settings = Settings(
+        db_host="localhost",
+        db_user="face_service",
+        db_password="test-password",
+        face_embedding_encryption_key=(
+            "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+        ),
+        liveness_enforcement_enabled=True,
+        liveness_max_age_seconds=90,
+        _env_file=None,
+    )
+
+    assert settings.liveness_enforcement_enabled is True
+    assert settings.liveness_max_age_seconds == 90

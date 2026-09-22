@@ -20,6 +20,7 @@ from services.face_comparison_service import (
     FaceComparisonResult,
     FaceComparisonStatus,
 )
+from services.liveness_evidence import LivenessEvidence
 
 
 SESSION_ID = UUID("40000000-0000-0000-0000-000000000001")
@@ -28,6 +29,15 @@ VERIFICATION_ATTEMPT_ID = UUID("50000000-0000-0000-0000-000000000001")
 PROFILE_ID = UUID("60000000-0000-0000-0000-000000000001")
 CONFIG_ID = UUID("70000000-0000-0000-0000-000000000001")
 NOW = datetime(2026, 8, 28, 8, 30, tzinfo=UTC)
+VALID_LIVENESS_EVIDENCE = LivenessEvidence(
+    version=1,
+    method="mlkit_challenge",
+    passed=True,
+    challenges=("turn_left", "eyes_closed_hold"),
+    started_at=NOW - timedelta(seconds=10),
+    completed_at=NOW,
+    engine="uniattend-mobile-liveness",
+)
 
 
 def build_context() -> AttendanceVerificationContext:
@@ -88,7 +98,7 @@ def build_service(
     return service, session, repository, comparison_service
 
 
-def test_pass_saves_one_face_record_and_keeps_parent_open_for_qr() -> None:
+def test_matched_consumes_first_attempt_and_keeps_parent_open_for_qr() -> None:
     service, session, repository, _ = build_service(
         comparison=FaceComparisonResult(
             status=FaceComparisonStatus.MATCHED,
@@ -102,6 +112,7 @@ def test_pass_saves_one_face_record_and_keeps_parent_open_for_qr() -> None:
             session_id=SESSION_ID,
             student_id=STUDENT_ID,
             captured_image=b"capture",
+            liveness_evidence=VALID_LIVENESS_EVIDENCE,
         )
     )
 
@@ -111,12 +122,13 @@ def test_pass_saves_one_face_record_and_keeps_parent_open_for_qr() -> None:
     saved = repository.save_latest_face_attempt.await_args.kwargs
     assert saved["existing"] is None
     assert saved["attempt_number"] == 1
+    assert saved["liveness_passed"] is True
     assert saved["validation_status"] == "passed"
     repository.mark_verification_attempt_failed.assert_not_awaited()
     session.commit.assert_awaited_once()
 
 
-def test_retry_updates_existing_face_record_instead_of_inserting_history() -> None:
+def test_no_face_consumes_retry_and_updates_existing_record() -> None:
     existing = SimpleNamespace(
         attempt_number=1,
         validation_status="failed",
@@ -134,6 +146,7 @@ def test_retry_updates_existing_face_record_instead_of_inserting_history() -> No
             session_id=SESSION_ID,
             student_id=STUDENT_ID,
             captured_image=b"capture",
+            liveness_evidence=VALID_LIVENESS_EVIDENCE,
         )
     )
 
@@ -146,7 +159,7 @@ def test_retry_updates_existing_face_record_instead_of_inserting_history() -> No
     repository.mark_verification_attempt_failed.assert_not_awaited()
 
 
-def test_successful_retry_replaces_the_previous_failure_in_the_same_row() -> None:
+def test_matched_retry_consumes_attempt_and_replaces_previous_failure() -> None:
     existing = SimpleNamespace(
         attempt_number=1,
         validation_status="failed",
@@ -165,6 +178,7 @@ def test_successful_retry_replaces_the_previous_failure_in_the_same_row() -> Non
             session_id=SESSION_ID,
             student_id=STUDENT_ID,
             captured_image=b"capture",
+            liveness_evidence=VALID_LIVENESS_EVIDENCE,
         )
     )
 
@@ -178,7 +192,7 @@ def test_successful_retry_replaces_the_previous_failure_in_the_same_row() -> Non
     repository.mark_verification_attempt_failed.assert_not_awaited()
 
 
-def test_last_failed_retry_updates_same_row_and_closes_parent_attempt() -> None:
+def test_not_matched_consumes_final_attempt_and_closes_parent() -> None:
     existing = SimpleNamespace(
         attempt_number=2,
         validation_status="failed",
@@ -198,6 +212,7 @@ def test_last_failed_retry_updates_same_row_and_closes_parent_attempt() -> None:
             session_id=SESSION_ID,
             student_id=STUDENT_ID,
             captured_image=b"capture",
+            liveness_evidence=VALID_LIVENESS_EVIDENCE,
         )
     )
 
@@ -212,6 +227,118 @@ def test_last_failed_retry_updates_same_row_and_closes_parent_attempt() -> None:
         failure_reason="FACE_ATTEMPT_LIMIT_REACHED",
         completed_at=NOW,
     )
+
+
+@pytest.mark.parametrize(
+    "comparison_status",
+    [
+        FaceComparisonStatus.MULTIPLE_FACES,
+        FaceComparisonStatus.LOW_QUALITY,
+    ],
+)
+def test_face_validation_failures_consume_one_attempt(
+    comparison_status: FaceComparisonStatus,
+) -> None:
+    existing = SimpleNamespace(
+        attempt_number=1,
+        validation_status="failed",
+    )
+    service, session, repository, _ = build_service(
+        existing=existing,
+        comparison=FaceComparisonResult(
+            status=comparison_status,
+            failure_reason="Face validation failed",
+        ),
+    )
+
+    result = asyncio.run(
+        service.verify(
+            session_id=SESSION_ID,
+            student_id=STUDENT_ID,
+            captured_image=b"capture",
+            liveness_evidence=VALID_LIVENESS_EVIDENCE,
+        )
+    )
+
+    assert result.attempt_number == 2
+    assert result.can_retry is True
+    saved = repository.save_latest_face_attempt.await_args.kwargs
+    assert saved["existing"] is existing
+    assert saved["attempt_number"] == 2
+    repository.mark_verification_attempt_failed.assert_not_awaited()
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    "comparison_status",
+    [
+        FaceComparisonStatus.PROCESSING_FAILED,
+        FaceComparisonStatus.MODEL_MISMATCH,
+    ],
+)
+def test_operational_failures_do_not_consume_an_attempt(
+    comparison_status: FaceComparisonStatus,
+) -> None:
+    existing = SimpleNamespace(
+        attempt_number=1,
+        validation_status="failed",
+    )
+    service, session, repository, _ = build_service(
+        existing=existing,
+        comparison=FaceComparisonResult(
+            status=comparison_status,
+            failure_reason="Verification unavailable",
+        ),
+    )
+
+    result = asyncio.run(
+        service.verify(
+            session_id=SESSION_ID,
+            student_id=STUDENT_ID,
+            captured_image=b"capture",
+            liveness_evidence=VALID_LIVENESS_EVIDENCE,
+        )
+    )
+
+    assert result.status is AttendanceFaceVerificationStatus(
+        comparison_status.value
+    )
+    assert result.attempt_number == 1
+    assert result.can_retry is True
+    repository.save_latest_face_attempt.assert_not_awaited()
+    repository.mark_verification_attempt_failed.assert_not_awaited()
+    session.commit.assert_not_awaited()
+
+
+def test_legacy_missing_liveness_does_not_persist_a_false_success() -> None:
+    service, session, repository, _ = build_service(
+        comparison=FaceComparisonResult(
+            status=FaceComparisonStatus.MATCHED,
+            similarity_score=0.82,
+            similarity_threshold=0.5,
+        )
+    )
+
+    result = asyncio.run(
+        service.verify(
+            session_id=SESSION_ID,
+            student_id=STUDENT_ID,
+            captured_image=b"capture",
+            liveness_evidence=None,
+        )
+    )
+
+    assert result.status is AttendanceFaceVerificationStatus.LIVENESS_FAILURE
+    assert result.attempt_number == 1
+    assert result.can_retry is True
+    saved = repository.save_latest_face_attempt.await_args.kwargs
+    assert saved["liveness_passed"] is None
+    assert saved["validation_status"] == "failed"
+    assert saved["failure_reason"] == (
+        "Valid liveness evidence was not provided"
+    )
+    repository.mark_verification_attempt_failed.assert_not_awaited()
+    session.commit.assert_awaited_once()
 
 
 def test_existing_pass_rejects_a_new_capture_without_comparing_again() -> None:
@@ -234,6 +361,7 @@ def test_existing_pass_rejects_a_new_capture_without_comparing_again() -> None:
                 session_id=SESSION_ID,
                 student_id=STUDENT_ID,
                 captured_image=b"capture",
+                liveness_evidence=VALID_LIVENESS_EVIDENCE,
             )
         )
 
