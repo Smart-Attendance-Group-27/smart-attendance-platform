@@ -48,12 +48,158 @@ class UserAccountRecord:
     locked_until: datetime | None
 
 
+@dataclass(frozen=True)
+class DepartmentOptionRecord:
+    id: UUID
+    label: str
+
+
 _FULL_NAME_EXPR = """
     TRIM(CONCAT_WS(' ', profile.first_name, NULLIF(profile.middle_name, ''), profile.last_name))
 """
 
 
 class AdminUserRepository:
+    async def list_active_departments(
+        self,
+        connection: asyncpg.Connection,
+    ) -> list[DepartmentOptionRecord]:
+        rows = await connection.fetch(
+            """
+            SELECT id, department_name AS label
+            FROM academic.departments
+            WHERE status = 'active'
+            ORDER BY department_name
+            """,
+        )
+        return [DepartmentOptionRecord(id=row["id"], label=row["label"] or "") for row in rows]
+
+    async def email_exists(self, connection: asyncpg.Connection, email: str) -> bool:
+        return bool(
+            await connection.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM identity.users WHERE lower(email)=lower($1))",
+                email,
+            ),
+        )
+
+    async def registration_number_exists(
+        self,
+        connection: asyncpg.Connection,
+        registration_number: str,
+    ) -> bool:
+        return bool(
+            await connection.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM academic.student_profiles WHERE registration_number=$1)",
+                registration_number,
+            ),
+        )
+
+    async def employee_number_exists(
+        self,
+        connection: asyncpg.Connection,
+        employee_number: str,
+    ) -> bool:
+        return bool(
+            await connection.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM academic.lecturer_profiles WHERE employee_number=$1)",
+                employee_number,
+            ),
+        )
+
+    async def create_user(
+        self,
+        connection: asyncpg.Connection,
+        *,
+        user_id: UUID,
+        email: str,
+        keycloak_user_id: str,
+        created_by: UUID,
+    ) -> None:
+        await connection.execute(
+            """
+            INSERT INTO identity.users (
+                id, email, password_hash, account_status, failed_login_attempts,
+                must_change_password, created_by, created_at, updated_at, keycloak_user_id
+            ) VALUES ($1, $2, NULL, 'active', 0, TRUE, $3, now(), now(), $4)
+            """,
+            user_id,
+            email,
+            created_by,
+            keycloak_user_id,
+        )
+
+    async def create_student_profile(
+        self,
+        connection: asyncpg.Connection,
+        *,
+        profile_id: UUID,
+        user_id: UUID,
+        registration_number: str,
+        first_name: str,
+        middle_name: str | None,
+        last_name: str,
+        department_id: UUID,
+        intake_year: int,
+        current_semester: int,
+    ) -> None:
+        await connection.execute(
+            """
+            INSERT INTO academic.student_profiles (
+                id, user_id, registration_number, first_name, middle_name, last_name,
+                department_id, intake_year, current_semester, profile_status, created_at, updated_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',now(),now())
+            """,
+            profile_id, user_id, registration_number, first_name, middle_name, last_name,
+            department_id, intake_year, current_semester,
+        )
+
+    async def create_lecturer_profile(
+        self,
+        connection: asyncpg.Connection,
+        *,
+        profile_id: UUID,
+        user_id: UUID,
+        employee_number: str,
+        first_name: str,
+        middle_name: str | None,
+        last_name: str,
+        department_id: UUID,
+        designation: str,
+    ) -> None:
+        await connection.execute(
+            """
+            INSERT INTO academic.lecturer_profiles (
+                id, user_id, employee_number, first_name, middle_name, last_name,
+                department_id, designation, profile_status, created_at, updated_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'active',now(),now())
+            """,
+            profile_id, user_id, employee_number, first_name, middle_name, last_name,
+            department_id, designation,
+        )
+
+    async def create_administrator_profile(
+        self,
+        connection: asyncpg.Connection,
+        *,
+        profile_id: UUID,
+        user_id: UUID,
+        first_name: str,
+        middle_name: str | None,
+        last_name: str,
+        department_id: UUID,
+        administrative_scope: str,
+    ) -> None:
+        await connection.execute(
+            """
+            INSERT INTO academic.administrator_profiles (
+                id, user_id, first_name, middle_name, last_name, department_id,
+                administrative_scope, profile_status, created_at, updated_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,'active',now(),now())
+            """,
+            profile_id, user_id, first_name, middle_name, last_name,
+            department_id, administrative_scope,
+        )
+
     async def list_students(self, connection: asyncpg.Connection) -> list[StudentAccountRecord]:
         rows = await connection.fetch(
             f"""

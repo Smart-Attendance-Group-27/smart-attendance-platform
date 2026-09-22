@@ -2,10 +2,11 @@ from datetime import UTC, datetime
 from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from modules.identity.admin_users.repository import (
     AdministratorAccountRecord,
+    DepartmentOptionRecord,
     LecturerAccountRecord,
     StudentAccountRecord,
     UserAccountRecord,
@@ -17,6 +18,93 @@ ACTIVE_ACCOUNT_STATUS = "active"
 class SettableAccountStatus(str, Enum):
     ACTIVE = "active"
     SUSPENDED = "suspended"
+
+
+class ProvisionedAccountRole(str, Enum):
+    STUDENT = "student"
+    LECTURER = "lecturer"
+    ADMINISTRATOR = "administrator"
+
+
+class AccountProvisionRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, str_strip_whitespace=True)
+
+    role: ProvisionedAccountRole
+    email: str = Field(min_length=3, max_length=255)
+    first_name: str = Field(alias="firstName", min_length=1, max_length=100)
+    middle_name: str | None = Field(default=None, alias="middleName", max_length=100)
+    last_name: str = Field(alias="lastName", min_length=1, max_length=100)
+    department_id: UUID = Field(alias="departmentId")
+    registration_number: str | None = Field(
+        default=None,
+        alias="registrationNumber",
+        max_length=30,
+    )
+    intake_year: int | None = Field(default=None, alias="intakeYear", ge=1900, le=2100)
+    current_semester: int | None = Field(default=None, alias="currentSemester", ge=1, le=20)
+    employee_number: str | None = Field(default=None, alias="employeeNumber", max_length=30)
+    designation: str | None = Field(default=None, max_length=100)
+    administrative_scope: str | None = Field(
+        default=None,
+        alias="administrativeScope",
+        max_length=30,
+    )
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        normalized = value.lower()
+        if normalized.count("@") != 1 or normalized.startswith("@") or normalized.endswith("@"):
+            raise ValueError("email must be a valid address")
+        return normalized
+
+    @model_validator(mode="after")
+    def require_role_fields(self) -> "AccountProvisionRequest":
+        required_by_role = {
+            ProvisionedAccountRole.STUDENT: (
+                "registration_number",
+                "intake_year",
+                "current_semester",
+            ),
+            ProvisionedAccountRole.LECTURER: ("employee_number", "designation"),
+            ProvisionedAccountRole.ADMINISTRATOR: ("administrative_scope",),
+        }
+        missing = [field for field in required_by_role[self.role] if not getattr(self, field)]
+        if missing:
+            aliases = {
+                "registration_number": "registrationNumber",
+                "intake_year": "intakeYear",
+                "current_semester": "currentSemester",
+                "employee_number": "employeeNumber",
+                "administrative_scope": "administrativeScope",
+            }
+            raise ValueError(
+                f"{', '.join(aliases.get(field, field) for field in missing)} required for {self.role.value}",
+            )
+        return self
+
+
+class ProvisionedAccountResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    user_id: UUID = Field(alias="userId")
+    keycloak_user_id: str = Field(alias="keycloakUserId")
+    role: ProvisionedAccountRole
+    email: str
+    temporary_password: str = Field(alias="temporaryPassword")
+
+
+class ProvisioningOptionResponse(BaseModel):
+    id: UUID
+    label: str
+
+    @staticmethod
+    def from_record(record: DepartmentOptionRecord) -> "ProvisioningOptionResponse":
+        return ProvisioningOptionResponse(id=record.id, label=record.label)
+
+
+class AccountProvisioningOptionsResponse(BaseModel):
+    departments: list[ProvisioningOptionResponse]
 
 
 def derive_effective_status(record: UserAccountRecord, *, now: datetime | None = None) -> str:
