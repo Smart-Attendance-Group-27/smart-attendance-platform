@@ -1,0 +1,1 @@
+"""Student notification preference management."""

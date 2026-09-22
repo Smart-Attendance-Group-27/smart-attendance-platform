@@ -93,6 +93,9 @@ class Settings(BaseSettings):
     push_worker_retry_base_seconds: float = Field(default=5.0, gt=0)
     push_worker_retry_max_seconds: float = Field(default=300.0, gt=0)
     push_worker_shutdown_timeout_seconds: float = Field(default=15.0, gt=0)
+    reminder_scheduler_enabled: bool = True
+    reminder_scheduler_interval_seconds: float = Field(default=60.0, gt=0)
+    reminder_lead_minutes: int = Field(default=15, ge=1, le=1440)
 
     # General geofence safeguards. Session-specific radius, accuracy buffer and
     # maximum accuracy values are loaded from the session geofence snapshot.

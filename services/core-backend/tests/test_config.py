@@ -84,6 +84,9 @@ def test_settings_defaults_to_bounded_push_worker_batches_and_retries() -> None:
     assert settings.push_worker_batch_size == 100
     assert settings.push_worker_receipt_batch_size == 1000
     assert settings.push_worker_max_attempts == 5
+    assert settings.reminder_scheduler_enabled is True
+    assert settings.reminder_scheduler_interval_seconds == 60
+    assert settings.reminder_lead_minutes == 15
 
 
 def test_settings_rejects_push_batch_above_expo_limit() -> None:

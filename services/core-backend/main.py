@@ -41,9 +41,11 @@ from modules.audit.admin_log.route import router as admin_audit_log_router
 from modules.identity.admin_users.route import router as admin_users_router
 from modules.identity.auth.route import router as auth_router
 from modules.notification.device_tokens.route import router as device_tokens_router
+from modules.notification.preferences.route import router as notification_preferences_router
 from modules.notification.push.expo_provider import ExpoPushProvider
 from modules.notification.push.repository import PushDeliveryRepository
 from modules.notification.push.worker import PushDeliveryWorker, PushWorkerConfig
+from modules.notification.reminders.scheduler import UpcomingClassReminderScheduler
 from modules.notification.student_notifications.route import (
     router as student_notifications_router,
 )
@@ -94,6 +96,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             app.state.push_worker.run(push_worker_stop),
             name="push-delivery-worker",
         )
+    reminder_stop = asyncio.Event()
+    reminder_task: asyncio.Task[None] | None = None
+    if settings.reminder_scheduler_enabled:
+        app.state.reminder_scheduler = UpcomingClassReminderScheduler(
+            pool=app.state.db_pool,
+            interval_seconds=settings.reminder_scheduler_interval_seconds,
+            lead_minutes=settings.reminder_lead_minutes,
+        )
+        reminder_task = asyncio.create_task(
+            app.state.reminder_scheduler.run(reminder_stop),
+            name="upcoming-class-reminder-scheduler",
+        )
     # Deliberately no connection details here: the URI, user and password must
     # never reach the logs.
     logger.info(
@@ -106,6 +120,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        if reminder_task is not None:
+            reminder_stop.set()
+            try:
+                await asyncio.wait_for(
+                    reminder_task,
+                    timeout=settings.push_worker_shutdown_timeout_seconds,
+                )
+            except TimeoutError:
+                reminder_task.cancel()
+                await asyncio.gather(reminder_task, return_exceptions=True)
+                logger.warning("Reminder scheduler cancelled during shutdown")
         if push_worker_task is not None:
             push_worker_stop.set()
             try:
@@ -132,6 +157,7 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
     app.include_router(student_courses_router, prefix="/api/v1")
     app.include_router(student_notifications_router, prefix="/api/v1")
     app.include_router(device_tokens_router, prefix="/api/v1")
+    app.include_router(notification_preferences_router, prefix="/api/v1")
     app.include_router(active_session_router, prefix="/api/v1")
     app.include_router(qr_session_router, prefix="/api/v1")
     app.include_router(geofence_router, prefix="/api/v1")
