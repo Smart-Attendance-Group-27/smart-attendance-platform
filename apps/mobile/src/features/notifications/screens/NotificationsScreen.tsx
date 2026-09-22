@@ -11,20 +11,17 @@ import {
 } from '../components/NotificationFilters';
 import { NotificationItem } from '../components/NotificationItem';
 import { NotificationListSkeleton } from '../components/NotificationListSkeleton';
-import { MockNotificationsService } from '../services/mockNotificationsService';
 import type { NotificationsService } from '../services/notificationsService';
 import type { NotificationItem as Notification } from '../types/notification';
 
 type NotificationScreenState = 'loading' | 'loaded' | 'empty' | 'error';
 
 export type NotificationsScreenProps = {
-  notificationsService?: NotificationsService;
+  notificationsService: NotificationsService;
 };
 
-const defaultNotificationsService = new MockNotificationsService();
-
 export function NotificationsScreen({
-  notificationsService = defaultNotificationsService,
+  notificationsService,
 }: NotificationsScreenProps) {
   const requestId = useRef(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
