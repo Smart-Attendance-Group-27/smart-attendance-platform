@@ -91,6 +91,7 @@ export type ApiAdminCourse = {
   courseId: string;
   courseCode: string;
   courseName: string;
+  departmentId: string | null;
   department: string | null;
   credits: number | null;
   status: string;
@@ -98,6 +99,10 @@ export type ApiAdminCourse = {
 
 export type ApiAdminCourseOffering = {
   offeringId: string;
+  courseId: string;
+  semesterId: string;
+  lecturerId: string | null;
+  lecturerName: string | null;
   courseCode: string;
   courseName: string;
   semesterLabel: string;
@@ -110,6 +115,8 @@ export type ApiAdminCourseOffering = {
 
 export type ApiAdminTimetableEntry = {
   id: string;
+  courseOfferingId: string;
+  classroomId: string | null;
   courseCode: string;
   courseName: string;
   dayOfWeek: number;
@@ -117,10 +124,16 @@ export type ApiAdminTimetableEntry = {
   endTime: string;
   classroomCode: string | null;
   lecturerName: string | null;
+  courseType: string | null;
+  validFrom: string;
+  validUntil: string | null;
+  status: string;
 };
 
 export type ApiAdminEnrolment = {
   enrolmentId: string;
+  courseOfferingId: string;
+  studentId: string;
   studentName: string;
   registrationNumber: string;
   courseCode: string;
@@ -134,6 +147,46 @@ export type ApiAcademicData = {
   offerings: ApiAdminCourseOffering[];
   timetable: ApiAdminTimetableEntry[];
   enrolments: ApiAdminEnrolment[];
+};
+
+export type ApiAcademicOption = { id: string; label: string };
+
+export type ApiAcademicReferenceData = {
+  departments: ApiAcademicOption[];
+  semesters: ApiAcademicOption[];
+  lecturers: ApiAcademicOption[];
+  students: ApiAcademicOption[];
+  classrooms: ApiAcademicOption[];
+};
+
+export type ApiCourseWriteRequest = {
+  courseCode: string;
+  courseName: string;
+  departmentId: string;
+  credits: number;
+  status: "active" | "inactive";
+};
+
+export type ApiOfferingWriteRequest = {
+  courseId: string;
+  semesterId: string;
+  lecturerId: string;
+  batchYear: number;
+  courseType: string;
+  attendanceThresholdPercent: number;
+  status: "active" | "inactive";
+};
+
+export type ApiTimetableWriteRequest = {
+  courseOfferingId: string;
+  classroomId: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  courseType: string;
+  validFrom: string;
+  validUntil: string | null;
+  status: "active" | "inactive";
 };
 
 export type ApiReferenceFace = {
@@ -212,6 +265,65 @@ export function updateAccountStatus(
 
 export function getAcademicData(): Promise<ApiAcademicData> {
   return coreBackendFetch("/api/v1/administrators/me/academic-data");
+}
+
+export function getAcademicOptions(): Promise<ApiAcademicReferenceData> {
+  return coreBackendFetch("/api/v1/administrators/me/academic-options");
+}
+
+export function createCourse(body: ApiCourseWriteRequest): Promise<ApiAdminCourse> {
+  return coreBackendFetch("/api/v1/administrators/me/courses", { method: "POST", body });
+}
+
+export function updateCourse(courseId: string, body: ApiCourseWriteRequest): Promise<ApiAdminCourse> {
+  return coreBackendFetch(`/api/v1/administrators/me/courses/${courseId}`, { method: "PUT", body });
+}
+
+export function createOffering(body: ApiOfferingWriteRequest): Promise<ApiAdminCourseOffering> {
+  return coreBackendFetch("/api/v1/administrators/me/offerings", { method: "POST", body });
+}
+
+export function updateOffering(
+  offeringId: string,
+  body: ApiOfferingWriteRequest,
+): Promise<ApiAdminCourseOffering> {
+  return coreBackendFetch(`/api/v1/administrators/me/offerings/${offeringId}`, { method: "PUT", body });
+}
+
+export function enrolStudent(offeringId: string, studentId: string): Promise<ApiAdminEnrolment> {
+  return coreBackendFetch(`/api/v1/administrators/me/offerings/${offeringId}/enrolments`, {
+    method: "POST",
+    body: { studentId },
+  });
+}
+
+export function dropStudent(offeringId: string, studentId: string): Promise<ApiAdminEnrolment> {
+  return coreBackendFetch(
+    `/api/v1/administrators/me/offerings/${offeringId}/enrolments/${studentId}`,
+    { method: "DELETE" },
+  );
+}
+
+export function createTimetableEntry(
+  body: ApiTimetableWriteRequest,
+): Promise<ApiAdminTimetableEntry> {
+  return coreBackendFetch("/api/v1/administrators/me/timetable-entries", { method: "POST", body });
+}
+
+export function updateTimetableEntry(
+  entryId: string,
+  body: ApiTimetableWriteRequest,
+): Promise<ApiAdminTimetableEntry> {
+  return coreBackendFetch(`/api/v1/administrators/me/timetable-entries/${entryId}`, {
+    method: "PUT",
+    body,
+  });
+}
+
+export function deactivateTimetableEntry(entryId: string): Promise<ApiAdminTimetableEntry> {
+  return coreBackendFetch(`/api/v1/administrators/me/timetable-entries/${entryId}`, {
+    method: "DELETE",
+  });
 }
 
 export function getReferenceFaces(): Promise<ApiReferenceFace[]> {
