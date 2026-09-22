@@ -13,17 +13,26 @@ from conftest import (
 )
 from main import create_app
 from modules.identity.admin_users.exception import (
+    AccountProvisioningError,
+    AccountProvisioningUnavailableError,
     CannotModifyOwnAccountError,
+    DuplicateAccountFieldError,
+    OrphanedKeycloakUserError,
     UserNotFoundError,
 )
 from modules.identity.admin_users.repository import (
     AdministratorAccountRecord,
+    DepartmentOptionRecord,
     LecturerAccountRecord,
     StudentAccountRecord,
     UserAccountRecord,
 )
-from modules.identity.admin_users.route import get_admin_user_service
-from modules.identity.admin_users.service import UserDirectory
+from modules.identity.admin_users.route import (
+    get_account_provisioning_service,
+    get_admin_user_service,
+)
+from modules.identity.admin_users.schemas import ProvisionedAccountRole
+from modules.identity.admin_users.service import ProvisionedAccount, UserDirectory
 from modules.identity.auth.dependencies import get_authentication_service
 
 USERS_URL = "/api/v1/administrators/me/users"
@@ -83,15 +92,36 @@ class StubAdminUserService:
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
         self.status_calls: list[tuple] = []
+        self.provision_calls: list[tuple] = []
 
     async def get_directory(self, pool):
         return build_directory()
+
+    async def get_provisioning_departments(self, pool):
+        return [
+            DepartmentOptionRecord(
+                id=UUID("10000000-0000-0000-0000-000000000001"),
+                label="Computer Science",
+            ),
+        ]
 
     async def update_account_status(self, pool, actor_user_id, target_user_id, account_status):
         self.status_calls.append((actor_user_id, target_user_id, account_status))
         if self.error is not None:
             raise self.error
         return UserAccountRecord(id=target_user_id, account_status=account_status, locked_until=None)
+
+    async def provision_account(self, pool, actor_user_id, body):
+        self.provision_calls.append((actor_user_id, body))
+        if self.error is not None:
+            raise self.error
+        return ProvisionedAccount(
+            user_id=TARGET_USER_ID,
+            keycloak_user_id="kc-new-user",
+            role=body.role,
+            email=body.email,
+            temporary_password="Temporary1!Password",
+        )
 
 
 def build_client(jwks_document, service: StubAdminUserService) -> TestClient:
@@ -102,6 +132,7 @@ def build_client(jwks_document, service: StubAdminUserService) -> TestClient:
         lambda: build_authentication_service_for_tests(jwks_document)
     )
     app.dependency_overrides[get_admin_user_service] = lambda: service
+    app.dependency_overrides[get_account_provisioning_service] = lambda: service
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -125,6 +156,20 @@ def test_returns_combined_user_directory(client: TestClient, make_access_token) 
     assert len(body["lecturers"]) == 1
     assert len(body["administrators"]) == 1
     assert body["students"][0]["registrationNumber"] == "230701A"
+
+
+def test_returns_account_provisioning_options(client: TestClient, make_access_token) -> None:
+    response = client.get(
+        f"{USERS_URL}/provisioning-options",
+        headers=authorize(admin_token(make_access_token)),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "departments": [
+            {"id": "10000000-0000-0000-0000-000000000001", "label": "Computer Science"},
+        ],
+    }
 
 
 def test_rejects_non_administrator_role(client: TestClient, make_access_token) -> None:
@@ -186,3 +231,73 @@ def test_requires_bearer_token(client: TestClient) -> None:
     response = client.get(USERS_URL)
 
     assert response.status_code == 401
+
+
+def valid_student_payload() -> dict:
+    return {
+        "role": "student",
+        "email": "New.Student@example.test",
+        "firstName": "New",
+        "lastName": "Student",
+        "departmentId": "10000000-0000-0000-0000-000000000001",
+        "registrationNumber": "REG-100",
+        "intakeYear": 2026,
+        "currentSemester": 1,
+    }
+
+
+def test_provisions_account_and_returns_password_once(
+    client: TestClient,
+    service: StubAdminUserService,
+    make_access_token,
+) -> None:
+    response = client.post(
+        USERS_URL,
+        headers=authorize(admin_token(make_access_token)),
+        json=valid_student_payload(),
+    )
+
+    assert response.status_code == 201
+    assert response.json() == {
+        "userId": str(TARGET_USER_ID),
+        "keycloakUserId": "kc-new-user",
+        "role": ProvisionedAccountRole.STUDENT.value,
+        "email": "new.student@example.test",
+        "temporaryPassword": "Temporary1!Password",
+    }
+    assert len(service.provision_calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_status"),
+    [
+        (DuplicateAccountFieldError("email"), 409),
+        (AccountProvisioningUnavailableError(), 503),
+        (AccountProvisioningError(), 502),
+        (OrphanedKeycloakUserError("orphan-id"), 500),
+    ],
+)
+def test_maps_provisioning_errors(jwks_document, make_access_token, error, expected_status) -> None:
+    with build_client(jwks_document, StubAdminUserService(error=error)) as client:
+        response = client.post(
+            USERS_URL,
+            headers=authorize(admin_token(make_access_token)),
+            json=valid_student_payload(),
+        )
+
+    assert response.status_code == expected_status
+    if isinstance(error, OrphanedKeycloakUserError):
+        assert "orphan-id" in response.json()["detail"]
+
+
+def test_rejects_missing_role_specific_fields(client: TestClient, make_access_token) -> None:
+    payload = valid_student_payload()
+    del payload["registrationNumber"]
+
+    response = client.post(
+        USERS_URL,
+        headers=authorize(admin_token(make_access_token)),
+        json=payload,
+    )
+
+    assert response.status_code == 422
