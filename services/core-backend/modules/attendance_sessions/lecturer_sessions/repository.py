@@ -47,6 +47,15 @@ class LecturerSessionRecord:
     failed_verification_count: int = 0
     absent_count: int = 0
     manual_count: int = 0
+    # Added for Phase 2 activation timing (20260922_01). Defaulted so a caller
+    # built for the old field set (an older test's direct constructor call)
+    # still works unchanged, matching the O4 fields above.
+    check_in_opens_at_explicit: bool = False
+    check_in_closes_at_explicit: bool = False
+    late_after_at_explicit: bool = False
+    # Added for Phase 2 cancellation-reason exposure. Defaulted, same
+    # reasoning as the fields immediately above.
+    cancellation_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -95,9 +104,13 @@ _SESSION_COLUMNS = f"""
     session.check_in_opens_at,
     session.check_in_closes_at,
     session.late_after_at,
+    session.check_in_opens_at_explicit,
+    session.check_in_closes_at_explicit,
+    session.late_after_at_explicit,
     session.activated_at,
     session.closed_at,
     session.cancelled_at,
+    session.cancellation_reason,
     session.requires_face_verification,
     session.requires_geofence,
     session.requires_qr,
@@ -187,9 +200,13 @@ def _row_to_record(row: asyncpg.Record) -> LecturerSessionRecord:
         check_in_opens_at=row["check_in_opens_at"],
         check_in_closes_at=row["check_in_closes_at"],
         late_after_at=row["late_after_at"],
+        check_in_opens_at_explicit=bool(row["check_in_opens_at_explicit"]),
+        check_in_closes_at_explicit=bool(row["check_in_closes_at_explicit"]),
+        late_after_at_explicit=bool(row["late_after_at_explicit"]),
         activated_at=row["activated_at"],
         closed_at=row["closed_at"],
         cancelled_at=row["cancelled_at"],
+        cancellation_reason=row["cancellation_reason"],
         requires_face_verification=bool(row["requires_face_verification"]),
         requires_geofence=bool(row["requires_geofence"]),
         requires_qr=bool(row["requires_qr"]),
@@ -245,14 +262,37 @@ class LecturerSessionRepository:
             return None
         return _row_to_record(row)
 
-    async def activate(self, connection: asyncpg.Connection, session_id: UUID) -> None:
+    async def activate(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+        *,
+        activated_at: datetime,
+        check_in_opens_at: datetime,
+        check_in_closes_at: datetime,
+        late_after_at: datetime,
+    ) -> None:
+        # activated_at is supplied by the caller rather than read back from
+        # now(): the service needs that exact instant to compute the check-in
+        # window (effective_start = max(scheduled_start_at, activated_at)),
+        # and a second, separately-evaluated now() here could disagree with
+        # it by however long the round trip to the database takes.
         await connection.execute(
             """
             UPDATE attendance_session.sessions
-            SET activated_at = now(), status = $2, updated_at = now()
+            SET activated_at = $2,
+                check_in_opens_at = $3,
+                check_in_closes_at = $4,
+                late_after_at = $5,
+                status = $6,
+                updated_at = now()
             WHERE id = $1
             """,
             session_id,
+            activated_at,
+            check_in_opens_at,
+            check_in_closes_at,
+            late_after_at,
             SESSION_ACTIVE_STATUS,
         )
 
@@ -343,6 +383,9 @@ class LecturerSessionRepository:
         check_in_opens_at: datetime,
         check_in_closes_at: datetime,
         late_after_at: datetime,
+        check_in_opens_at_explicit: bool,
+        check_in_closes_at_explicit: bool,
+        late_after_at_explicit: bool,
         requires_face_verification: bool,
         requires_geofence: bool,
         requires_qr: bool,
@@ -354,6 +397,7 @@ class LecturerSessionRepository:
                 created_by, session_title, session_type,
                 scheduled_start_at, scheduled_end_at,
                 check_in_opens_at, check_in_closes_at, late_after_at,
+                check_in_opens_at_explicit, check_in_closes_at_explicit, late_after_at_explicit,
                 status, requires_face_verification, requires_geofence, requires_qr,
                 activated_at, closed_at, cancelled_at, cancellation_reason,
                 created_at, updated_at
@@ -363,7 +407,8 @@ class LecturerSessionRepository:
                 $4, $5, $6,
                 $7, $8,
                 $9, $10, $11,
-                $12, $13, $14, $15,
+                $12, $13, $14,
+                $15, $16, $17, $18,
                 NULL, NULL, NULL, NULL,
                 now(), now()
             )
@@ -379,6 +424,9 @@ class LecturerSessionRepository:
             check_in_opens_at,
             check_in_closes_at,
             late_after_at,
+            check_in_opens_at_explicit,
+            check_in_closes_at_explicit,
+            late_after_at_explicit,
             SESSION_SCHEDULED_STATUS,
             requires_face_verification,
             requires_geofence,

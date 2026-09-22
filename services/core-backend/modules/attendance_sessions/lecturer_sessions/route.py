@@ -215,7 +215,16 @@ async def close_my_attendance_session(
             "This session cannot be closed in its current state.",
         ) from error
 
-    return LecturerSessionResponse.from_record(session, finalization)
+    finalization_unavailable_reason = (
+        LecturerSessionService.FINALIZATION_UNAVAILABLE_REASON
+        if finalization is None
+        else None
+    )
+    return LecturerSessionResponse.from_record(
+        session,
+        finalization,
+        finalization_unavailable_reason,
+    )
 
 
 @router.post(

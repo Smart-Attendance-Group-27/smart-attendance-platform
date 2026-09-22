@@ -67,6 +67,8 @@ class StudentAttendanceStateResponse(BaseModel):
     session_title: str = Field(alias="sessionTitle")
     session_type: str = Field(alias="sessionType")
     session_state: SessionState = Field(alias="sessionState")
+    cancelled_at: datetime | None = Field(alias="cancelledAt")
+    cancellation_reason: str | None = Field(alias="cancellationReason")
     scheduled_start_at: datetime = Field(alias="scheduledStartAt")
     scheduled_end_at: datetime = Field(alias="scheduledEndAt")
     check_in_opens_at: datetime | None = Field(alias="checkInOpensAt")
@@ -88,6 +90,8 @@ class StudentAttendanceStateResponse(BaseModel):
             session_title=state.session_title or "",
             session_type=state.session_type or "",
             session_state=state.session_state,
+            cancelled_at=state.cancelled_at,
+            cancellation_reason=state.cancellation_reason,
             scheduled_start_at=state.scheduled_start_at,
             scheduled_end_at=state.scheduled_end_at,
             check_in_opens_at=state.check_in_opens_at,

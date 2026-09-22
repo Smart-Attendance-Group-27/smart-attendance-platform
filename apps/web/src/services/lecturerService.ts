@@ -225,6 +225,7 @@ export async function getSessionDetail(sessionId: string): Promise<LiveSessionDe
       : session.closedAt
         ? `Closed at ${formatClockTime(session.closedAt)}`
         : "Not started yet",
+    cancellationReason: session.cancellationReason,
     checkInWindow: formatTimeRange(session.checkInOpensAt, session.checkInClosesAt),
     lateThreshold: formatClockTime(session.lateAfterAt),
     lecturerName: isWebMockMode() ? "Demo lecturer" : (await getCurrentUser())?.name ?? "",

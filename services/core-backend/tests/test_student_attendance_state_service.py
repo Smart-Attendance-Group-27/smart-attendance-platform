@@ -105,6 +105,7 @@ def build_session_row(**overrides) -> StudentSessionRow:
         status="active",
         closed_at=None,
         cancelled_at=None,
+        cancellation_reason=None,
         scheduled_start_at=CURRENT_TIME - timedelta(minutes=5),
         scheduled_end_at=CURRENT_TIME + timedelta(hours=1),
         check_in_opens_at=CURRENT_TIME - timedelta(minutes=5),
@@ -228,6 +229,30 @@ async def test_a_cancelled_session_is_reported_as_cancelled() -> None:
 
     assert state.session_state is SessionState.CANCELLED
     assert state.can_start_check_in is False
+
+
+async def test_a_cancelled_session_carries_its_reason() -> None:
+    cancelled_at = CURRENT_TIME - timedelta(minutes=1)
+    service = build_service(
+        session=build_session_row(
+            cancelled_at=cancelled_at,
+            cancellation_reason="The lecturer is unwell.",
+        ),
+    )
+
+    state = await service.get_for_user(FakePool(), USER_ID, SESSION_ID)
+
+    assert state.cancelled_at == cancelled_at
+    assert state.cancellation_reason == "The lecturer is unwell."
+
+
+async def test_an_active_session_has_no_cancellation_reason() -> None:
+    service = build_service(session=build_session_row())
+
+    state = await service.get_for_user(FakePool(), USER_ID, SESSION_ID)
+
+    assert state.cancelled_at is None
+    assert state.cancellation_reason is None
 
 
 async def test_qr_enabled_mirrors_requires_qr() -> None:
