@@ -253,6 +253,45 @@ async def test_attendance_finalized_notifies_each_student():
 
 
 @pytest.mark.asyncio
+async def test_attendance_finalized_batches_repository_work_by_status():
+    repo = MagicMock(spec=NotificationProducerRepository)
+    session_id = uuid4()
+    students = [uuid4() for _ in range(60)]
+    repo.fetch_session_course_info = AsyncMock(return_value=("Databases", "CS201"))
+    repo.fetch_user_preferences = AsyncMock(
+        side_effect=lambda _connection, user_ids, _type: {
+            user_id: (True, True) for user_id in user_ids
+        }
+    )
+    repo.fetch_active_device_tokens = AsyncMock(return_value={})
+    repo.insert_notifications_and_attempts = AsyncMock()
+    producer = NotificationProducer(repository=repo)
+
+    results = [
+        (
+            student_id,
+            FinalAttendanceStatus.PRESENT
+            if index < 20
+            else FinalAttendanceStatus.LATE
+            if index < 40
+            else FinalAttendanceStatus.ABSENT,
+        )
+        for index, student_id in enumerate(students)
+    ]
+
+    created = await producer.attendance_finalized(
+        FakeConnection(),
+        session_id=session_id,
+        results=results,
+    )
+
+    assert len(created) == 60
+    assert repo.fetch_user_preferences.await_count == 3
+    assert repo.fetch_active_device_tokens.await_count == 3
+    assert repo.insert_notifications_and_attempts.await_count == 3
+
+
+@pytest.mark.asyncio
 async def test_attendance_finalized_empty_results():
     producer = NotificationProducer()
     conn = FakeConnection()
