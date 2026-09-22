@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
+import { Notice } from "@/components/ui/Notice";
 import { SummaryStrip } from "@/components/ui/SummaryStrip";
 import { DataTable, CellPrimary } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -31,6 +32,12 @@ export default async function SessionMonitorPage(props: PageProps<"/lecturer/ses
           ? <span className="text-xs text-[var(--muted)]">Mock preview · actions unavailable</span>
           : <SessionLifecycleControls sessionId={session.sessionId} status={session.status} />}
       />
+
+      {session.status === "cancelled" ? (
+        <Notice variant="warning" title="Session cancelled.">
+          {session.cancellationReason ?? "No reason was recorded."}
+        </Notice>
+      ) : null}
 
       <Card flush>
         <div className="grid grid-cols-1 border-b border-[var(--line)] sm:grid-cols-2 lg:grid-cols-[1.3fr_repeat(4,minmax(120px,1fr))]">
