@@ -62,6 +62,18 @@ MAX_CANCELLATION_REASON_LENGTH = 500
 
 
 class LecturerSessionService:
+    # The one and only reason close_for_user's finalization summary can be
+    # None: no QrEvidenceProvider was bound at the composition root (see
+    # contracts/providers.py). finalize() itself always returns a summary
+    # once called, so this is not a guess about why - it is the single
+    # documented cause, named once here so the audit log and the close
+    # route's response both point at the same sentence instead of each
+    # inventing their own.
+    FINALIZATION_UNAVAILABLE_REASON = (
+        "Attendance was not finalized for this session: QR evidence tracking "
+        "is unavailable, so no attendance records were written."
+    )
+
     def __init__(
         self,
         repository: LecturerSessionRepository | None = None,
@@ -377,6 +389,13 @@ class LecturerSessionService:
                     "reconciled": len(summary.reconciled_student_ids),
                     "deactivatedQrBatches": len(summary.deactivated_qr_batch_ids),
                 }
+            else:
+                # Explicit, not silent: a reviewer reading the audit trail
+                # sees why no attendance was decided, rather than a close
+                # entry that looks identical to a normal one.
+                audit_new_values["finalizationUnavailableReason"] = (
+                    self.FINALIZATION_UNAVAILABLE_REASON
+                )
 
             await write_audit_log(
                 connection,

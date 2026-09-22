@@ -429,6 +429,11 @@ async def test_close_writes_an_audit_log_entry() -> None:
     audit_query, audit_args = pool.connection.executed_queries[-1], pool.connection.executed_args[-1]
     assert "audit.audit_logs" in audit_query
     assert audit_args[2] == "session.close"
+    new_values = json.loads(audit_args[8])
+    assert (
+        new_values["finalizationUnavailableReason"]
+        == LecturerSessionService.FINALIZATION_UNAVAILABLE_REASON
+    )
 
 
 async def test_activate_rejects_already_active_session_without_audit_log() -> None:

@@ -36,6 +36,7 @@ from modules.attendance_sessions.lecturer_sessions.repository import (
 from modules.attendance_sessions.lecturer_sessions import route as lecturer_route
 from modules.attendance_sessions.qr_session.evidence import QrEvidenceRepository
 from modules.attendance_sessions.lecturer_sessions.route import get_lecturer_session_service
+from modules.attendance_sessions.lecturer_sessions.service import LecturerSessionService
 from modules.attendance_verification.finalization.types import (
     FinalizationResult,
     FinalizationSummary,
@@ -409,7 +410,12 @@ def test_close_session(client: TestClient, service: StubLecturerSessionService, 
     assert response.status_code == 200
     assert service.calls == ["close"]
     # No provider bound behind the stub by default: finalization stays null.
-    assert response.json()["finalization"] is None
+    body = response.json()
+    assert body["finalization"] is None
+    assert (
+        body["finalizationUnavailableReason"]
+        == LecturerSessionService.FINALIZATION_UNAVAILABLE_REASON
+    )
 
 
 def test_close_session_reports_the_finalization_summary(
@@ -447,6 +453,7 @@ def test_close_session_reports_the_finalization_summary(
         "deactivatedQrBatchCount": 1,
         "finalizedAt": finalized_at.isoformat().replace("+00:00", "Z"),
     }
+    assert body["finalizationUnavailableReason"] is None
 
 
 def test_close_inactive_session_returns_409(jwks_document, make_access_token) -> None:
