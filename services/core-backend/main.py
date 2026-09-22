@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -41,6 +42,8 @@ from modules.identity.admin_users.route import router as admin_users_router
 from modules.identity.auth.route import router as auth_router
 from modules.notification.device_tokens.route import router as device_tokens_router
 from modules.notification.push.expo_provider import ExpoPushProvider
+from modules.notification.push.repository import PushDeliveryRepository
+from modules.notification.push.worker import PushDeliveryWorker, PushWorkerConfig
 from modules.notification.student_notifications.route import (
     router as student_notifications_router,
 )
@@ -70,6 +73,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             else None
         ),
     )
+    push_worker_stop = asyncio.Event()
+    push_worker_task: asyncio.Task[None] | None = None
+    if settings.push_worker_enabled:
+        app.state.push_worker = PushDeliveryWorker(
+            repository=PushDeliveryRepository(app.state.db_pool),
+            provider=app.state.push_provider,
+            config=PushWorkerConfig(
+                batch_size=settings.push_worker_batch_size,
+                receipt_batch_size=settings.push_worker_receipt_batch_size,
+                poll_interval_seconds=settings.push_worker_poll_interval_seconds,
+                receipt_delay_seconds=settings.push_worker_receipt_delay_seconds,
+                lease_timeout_seconds=settings.push_worker_lease_timeout_seconds,
+                max_attempts=settings.push_worker_max_attempts,
+                retry_base_seconds=settings.push_worker_retry_base_seconds,
+                retry_max_seconds=settings.push_worker_retry_max_seconds,
+            ),
+        )
+        push_worker_task = asyncio.create_task(
+            app.state.push_worker.run(push_worker_stop),
+            name="push-delivery-worker",
+        )
     # Deliberately no connection details here: the URI, user and password must
     # never reach the logs.
     logger.info(
@@ -82,6 +106,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        if push_worker_task is not None:
+            push_worker_stop.set()
+            try:
+                await asyncio.wait_for(
+                    push_worker_task,
+                    timeout=settings.push_worker_shutdown_timeout_seconds,
+                )
+            except TimeoutError:
+                push_worker_task.cancel()
+                await asyncio.gather(push_worker_task, return_exceptions=True)
+                logger.warning("Push delivery worker cancelled during shutdown")
         await close_redis_client(app.state.redis_client)
         await close_database_pool(app.state.db_pool)
 
