@@ -1,0 +1,196 @@
+name: ${COMPOSE_PROJECT_NAME:-uniattend-mvp}
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    volumes:
+      - redis-data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  face-verification:
+    image: uniattend-face-verification:${IMAGE_TAG:?Set IMAGE_TAG in deployment/mvp.env}
+    build:
+      context: ./services/face-verification
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      APP_ENVIRONMENT: production
+      DB_URI: ${FACE_DB_URI:?Set FACE_DB_URI in deployment/mvp.env}
+      DB_SSL_MODE: ${DB_SSL_MODE:-require}
+      DB_POOL_MIN_SIZE: ${FACE_DB_POOL_MIN_SIZE:-1}
+      DB_POOL_MAX_SIZE: ${FACE_DB_POOL_MAX_SIZE:-5}
+      DB_COMMAND_TIMEOUT_SECONDS: ${DB_COMMAND_TIMEOUT_SECONDS:-10}
+      FACE_EMBEDDING_ENCRYPTION_KEY: ${FACE_EMBEDDING_ENCRYPTION_KEY:?Set FACE_EMBEDDING_ENCRYPTION_KEY in deployment/mvp.env}
+      FACE_MODEL_NAME: ${FACE_MODEL_NAME:-buffalo_l}
+      FACE_MODEL_VERSION: ${FACE_MODEL_VERSION:-1}
+      FACE_EXECUTION_PROVIDER: ${FACE_EXECUTION_PROVIDER:-CPUExecutionProvider}
+      FACE_CONTEXT_ID: ${FACE_CONTEXT_ID:--1}
+      FACE_DETECTION_SIZE: ${FACE_DETECTION_SIZE:-640}
+      FACE_MINIMUM_DETECTION_CONFIDENCE: ${FACE_MINIMUM_DETECTION_CONFIDENCE:-0.60}
+      FACE_MAX_CONCURRENT_INFERENCES: ${FACE_MAX_CONCURRENT_INFERENCES:-1}
+      FACE_MAX_ATTEMPTS: ${FACE_MAX_ATTEMPTS:-3}
+      # First MVP release: liveness integration is deliberately deferred.
+      LIVENESS_ENFORCEMENT_ENABLED: "false"
+      LIVENESS_MAX_AGE_SECONDS: ${LIVENESS_MAX_AGE_SECONDS:-120}
+      CORE_API_URL: http://core-api:8000
+      CORE_API_TIMEOUT_SECONDS: ${FACE_CORE_API_TIMEOUT_SECONDS:-5}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${FACE_VERIFICATION_PORT:-8001}:8001"
+    volumes:
+      - face-model-cache:/home/app/.insightface
+    networks:
+      - edge
+      - backend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health/db', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 180s
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  core-api:
+    image: uniattend-core-api:${IMAGE_TAG:?Set IMAGE_TAG in deployment/mvp.env}
+    build:
+      context: ./services/core-backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      APP_ENVIRONMENT: production
+      DB_URI: ${CORE_DB_URI:?Set CORE_DB_URI in deployment/mvp.env}
+      DB_SSL_MODE: ${DB_SSL_MODE:-require}
+      DB_POOL_MIN_SIZE: ${CORE_DB_POOL_MIN_SIZE:-1}
+      DB_POOL_MAX_SIZE: ${CORE_DB_POOL_MAX_SIZE:-5}
+      DB_COMMAND_TIMEOUT_SECONDS: ${DB_COMMAND_TIMEOUT_SECONDS:-10}
+      REDIS_URL: redis://redis:6379/0
+      KEYCLOAK_EXPECTED_ISSUER: ${KEYCLOAK_EXPECTED_ISSUER:?Set KEYCLOAK_EXPECTED_ISSUER in deployment/mvp.env}
+      KEYCLOAK_ADDITIONAL_ISSUERS: ${KEYCLOAK_ADDITIONAL_ISSUERS:-}
+      KEYCLOAK_JWKS_URL: ${CORE_KEYCLOAK_JWKS_URL:?Set CORE_KEYCLOAK_JWKS_URL in deployment/mvp.env}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE:-uniattend-api}
+      KEYCLOAK_AUTHORIZED_CLIENTS: ${KEYCLOAK_AUTHORIZED_CLIENTS:-uniattend-mobile,uniattend-web}
+      KEYCLOAK_ADMIN_BASE_URL: ${KEYCLOAK_ADMIN_BASE_URL:?Set KEYCLOAK_ADMIN_BASE_URL in deployment/mvp.env}
+      KEYCLOAK_ADMIN_REALM: ${KEYCLOAK_ADMIN_REALM:?Set KEYCLOAK_ADMIN_REALM in deployment/mvp.env}
+      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:?Set KEYCLOAK_ADMIN_CLIENT_ID in deployment/mvp.env}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?Set KEYCLOAK_ADMIN_CLIENT_SECRET in deployment/mvp.env}
+      KEYCLOAK_LEEWAY_SECONDS: ${KEYCLOAK_LEEWAY_SECONDS:-5}
+      DYNAMIC_QR_HMAC_SECRET: ${DYNAMIC_QR_HMAC_SECRET:?Set DYNAMIC_QR_HMAC_SECRET in deployment/mvp.env}
+      FACE_VERIFICATION_SERVICE_URL: http://face-verification:8001
+      FACE_VERIFICATION_TIMEOUT_SECONDS: ${FACE_VERIFICATION_TIMEOUT_SECONDS:-30}
+      EXPO_PUSH_TIMEOUT_SECONDS: ${EXPO_PUSH_TIMEOUT_SECONDS:-10}
+      EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
+      PUSH_WORKER_ENABLED: ${PUSH_WORKER_ENABLED:-false}
+      PUSH_WORKER_POLL_INTERVAL_SECONDS: ${PUSH_WORKER_POLL_INTERVAL_SECONDS:-2}
+      PUSH_WORKER_BATCH_SIZE: ${PUSH_WORKER_BATCH_SIZE:-100}
+      PUSH_WORKER_RECEIPT_BATCH_SIZE: ${PUSH_WORKER_RECEIPT_BATCH_SIZE:-1000}
+      PUSH_WORKER_RECEIPT_DELAY_SECONDS: ${PUSH_WORKER_RECEIPT_DELAY_SECONDS:-15}
+      PUSH_WORKER_LEASE_TIMEOUT_SECONDS: ${PUSH_WORKER_LEASE_TIMEOUT_SECONDS:-60}
+      PUSH_WORKER_MAX_ATTEMPTS: ${PUSH_WORKER_MAX_ATTEMPTS:-5}
+      PUSH_WORKER_RETRY_BASE_SECONDS: ${PUSH_WORKER_RETRY_BASE_SECONDS:-5}
+      PUSH_WORKER_RETRY_MAX_SECONDS: ${PUSH_WORKER_RETRY_MAX_SECONDS:-300}
+      PUSH_WORKER_SHUTDOWN_TIMEOUT_SECONDS: ${PUSH_WORKER_SHUTDOWN_TIMEOUT_SECONDS:-15}
+      REMINDER_SCHEDULER_ENABLED: ${REMINDER_SCHEDULER_ENABLED:-false}
+      REMINDER_SCHEDULER_INTERVAL_SECONDS: ${REMINDER_SCHEDULER_INTERVAL_SECONDS:-60}
+      REMINDER_LEAD_MINUTES: ${REMINDER_LEAD_MINUTES:-15}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${CORE_API_PORT:-8000}:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - edge
+      - backend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/db', timeout=5).read()",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  web:
+    image: uniattend-web:${IMAGE_TAG:?Set IMAGE_TAG in deployment/mvp.env}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: production
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      WEB_API_MODE: live
+      CORE_BACKEND_URL: http://core-api:8000
+      SESSION_SECRET: ${WEB_SESSION_SECRET:?Set WEB_SESSION_SECRET in deployment/mvp.env}
+      KEYCLOAK_ISSUER: ${WEB_KEYCLOAK_ISSUER:?Set WEB_KEYCLOAK_ISSUER in deployment/mvp.env}
+      KEYCLOAK_INTERNAL_ISSUER: ${WEB_KEYCLOAK_INTERNAL_ISSUER:-${WEB_KEYCLOAK_ISSUER}}
+      KEYCLOAK_CLIENT_ID: ${WEB_KEYCLOAK_CLIENT_ID:-uniattend-web}
+      KEYCLOAK_CLIENT_SECRET: ${WEB_KEYCLOAK_CLIENT_SECRET:?Set WEB_KEYCLOAK_CLIENT_SECRET in deployment/mvp.env}
+      WEB_BASE_URL: ${WEB_BASE_URL:?Set WEB_BASE_URL in deployment/mvp.env}
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-3000}:3000"
+    depends_on:
+      core-api:
+        condition: service_healthy
+    networks:
+      - edge
+      - backend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 30s
+    logging: *default-logging
+
+networks:
+  edge:
+  backend:
+    internal: true
+
+volumes:
+  redis-data:
+  face-model-cache:

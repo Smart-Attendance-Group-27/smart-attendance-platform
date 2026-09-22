@@ -13,6 +13,11 @@ The Docker setup runs the server-side development environment. The Expo mobile
 app is not Dockerized and should keep running on an Android emulator or a real
 Android phone.
 
+For the first production-like MVP deployment, use `docker-compose.production.yml`
+with `deployment/mvp.env` and follow
+`FinalDevPlan/deployment/mvp-deployment-runbook.md`. The root `docker-compose.yml`
+remains the local development stack.
+
 ## Prerequisites
 
 - Docker Desktop
