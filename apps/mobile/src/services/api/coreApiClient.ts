@@ -116,6 +116,13 @@ export class CoreApiClient {
     });
   }
 
+  async put<TData>(path: string, body: unknown): Promise<CoreApiResult<TData>> {
+    return this.request<TData>(path, 'PUT', {
+      kind: 'json',
+      value: body,
+    });
+  }
+
   async postFormData<TData>(
     path: string,
     body: FormData,
@@ -137,7 +144,7 @@ export class CoreApiClient {
    */
   private async request<TData>(
     path: string,
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PUT',
     body?: RequestBody,
   ): Promise<CoreApiResult<TData>> {
     const accessToken = await this.readAccessToken();
@@ -186,7 +193,7 @@ export class CoreApiClient {
 
   private async send<TData>(
     path: string,
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PUT',
     accessToken: string,
     body?: RequestBody,
   ): Promise<Attempt<TData>> {
@@ -297,7 +304,7 @@ function mapHttpStatus(httpStatus: number): CoreApiFailureStatus {
  * and any error object are deliberately excluded.
  */
 function logCoreApiFailure(
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PUT',
   path: string,
   failureStatus: CoreApiFailureStatus,
   httpStatus?: number,
