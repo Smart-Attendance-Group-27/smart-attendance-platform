@@ -117,6 +117,7 @@ export type AdminCourse = {
   courseId: string;
   courseCode: string;
   courseName: string;
+  departmentId?: string;
   department: string;
   credits: number;
   status: AcademicRecordStatus;
@@ -124,6 +125,10 @@ export type AdminCourse = {
 
 export type CourseOffering = {
   offeringId: string;
+  courseId?: string;
+  semesterId?: string;
+  lecturerId?: string;
+  lecturerName?: string;
   courseCode: string;
   courseName: string;
   semesterLabel: string;
@@ -136,16 +141,27 @@ export type CourseOffering = {
 
 export type AdminTimetableEntry = {
   id: string;
+  courseOfferingId?: string;
+  classroomId?: string;
   courseCode: string;
   courseName: string;
   day: string;
   timeRange: string;
   room: string;
   lecturerName: string;
+  dayOfWeek?: number;
+  startTime?: string;
+  endTime?: string;
+  courseType?: string;
+  validFrom?: string;
+  validUntil?: string;
+  status?: AcademicRecordStatus;
 };
 
 export type Enrolment = {
   enrolmentId: string;
+  courseOfferingId?: string;
+  studentId?: string;
   studentName: string;
   registrationNumber: string;
   courseCode: string;
@@ -161,6 +177,16 @@ export type AcademicData = {
   offerings: CourseOffering[];
   timetable: AdminTimetableEntry[];
   enrolments: Enrolment[];
+};
+
+export type AcademicOption = { id: string; label: string };
+
+export type AcademicReferenceData = {
+  departments: AcademicOption[];
+  semesters: AcademicOption[];
+  lecturers: AcademicOption[];
+  students: AcademicOption[];
+  classrooms: AcademicOption[];
 };
 
 // --- Reference-face governance ---------------------------------------------
