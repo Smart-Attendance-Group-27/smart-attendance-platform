@@ -213,6 +213,10 @@ def test_status_update_missing_user_returns_404(jwks_document, make_access_token
         )
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "USER_NOT_FOUND",
+        "message": "The user account was not found.",
+    }
 
 
 def test_cannot_modify_own_account_returns_409(jwks_document, make_access_token) -> None:
@@ -225,6 +229,10 @@ def test_cannot_modify_own_account_returns_409(jwks_document, make_access_token)
         )
 
     assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "CANNOT_MODIFY_OWN_ACCOUNT",
+        "message": "You cannot change your own account status.",
+    }
 
 
 def test_requires_bearer_token(client: TestClient) -> None:
@@ -287,7 +295,7 @@ def test_maps_provisioning_errors(jwks_document, make_access_token, error, expec
 
     assert response.status_code == expected_status
     if isinstance(error, OrphanedKeycloakUserError):
-        assert "orphan-id" in response.json()["detail"]
+        assert "orphan-id" in response.json()["detail"]["message"]
 
 
 def test_rejects_missing_role_specific_fields(client: TestClient, make_access_token) -> None:

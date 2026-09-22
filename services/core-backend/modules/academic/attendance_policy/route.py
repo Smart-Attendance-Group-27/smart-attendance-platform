@@ -41,7 +41,10 @@ async def get_attendance_policy(
     try:
         return _response(await policy_service.get_current(http_request.app.state.db_pool))
     except PolicyUnavailableError as error:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Attendance policy is unavailable.") from error
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            {"code": "POLICY_UNAVAILABLE", "message": "Attendance policy is unavailable."},
+        ) from error
 
 
 @router.put("", response_model=PolicyResponse)

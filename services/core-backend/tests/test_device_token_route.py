@@ -150,6 +150,10 @@ def test_register_device_invalid_token_returns_422(jwks_document, make_access_to
         headers=authorize(token),
     )
     assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "INVALID_EXPO_PUSH_TOKEN",
+        "message": "bad token",
+    }
 
 
 def test_register_device_unsupported_platform_returns_422(jwks_document, make_access_token):
@@ -163,6 +167,10 @@ def test_register_device_unsupported_platform_returns_422(jwks_document, make_ac
         headers=authorize(token),
     )
     assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "UNSUPPORTED_PLATFORM",
+        "message": "bad platform",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -216,3 +224,7 @@ def test_revoke_device_invalid_token_returns_422(jwks_document, make_access_toke
         headers=authorize(token),
     )
     assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "INVALID_EXPO_PUSH_TOKEN",
+        "message": "bad token",
+    }

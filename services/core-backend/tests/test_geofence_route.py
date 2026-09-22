@@ -259,7 +259,10 @@ def test_requires_a_bearer_token(client: TestClient) -> None:
     response = client.post(ATTEMPT_URL, json=valid_payload())
 
     assert response.status_code == 401
-    assert response.json()["detail"] == "A bearer access token is required."
+    assert response.json()["detail"] == {
+        "code": "BEARER_TOKEN_REQUIRED",
+        "message": "A bearer access token is required.",
+    }
 
 
 def test_rejects_an_invalid_token(client: TestClient) -> None:
@@ -288,7 +291,10 @@ def test_rejects_a_non_student_role(
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "The 'student' role is required."
+    assert response.json()["detail"] == {
+        "code": "INSUFFICIENT_ROLE",
+        "message": "The 'student' role is required.",
+    }
 
 
 @pytest.mark.parametrize(
@@ -361,11 +367,17 @@ def test_rejects_a_malformed_session_id(
             ActiveStudentProfileNotFoundError(
                 "No active student profile exists for this account.",
             ),
-            "No active student profile exists for this account.",
+            {
+                "code": "STUDENT_PROFILE_NOT_FOUND",
+                "message": "No active student profile exists for this account.",
+            },
         ),
         (
             AttendanceSessionNotFoundError("The attendance session was not found."),
-            "The attendance session was not found.",
+            {
+                "code": "SESSION_NOT_FOUND",
+                "message": "The attendance session was not found.",
+            },
         ),
     ],
 )
@@ -373,7 +385,7 @@ def test_maps_missing_resources_to_not_found(
     jwks_document,
     make_access_token,
     error: Exception,
-    expected_detail: str,
+    expected_detail: dict[str, str],
 ) -> None:
     with build_client(
         jwks_document,
@@ -408,7 +420,10 @@ def test_maps_ineligible_student_to_forbidden(
         )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "STUDENT_NOT_ELIGIBLE"
+    assert response.json()["detail"] == {
+        "code": "STUDENT_NOT_ELIGIBLE",
+        "message": "The student is not eligible for this attendance session.",
+    }
 
 
 def test_identifies_an_already_completed_attendance_attempt(
@@ -443,28 +458,49 @@ def test_identifies_an_already_completed_attendance_attempt(
     [
         (
             AttendanceSessionNotActiveError("The attendance session is not active."),
-            "SESSION_NOT_ACTIVE",
+            {"code": "SESSION_NOT_ACTIVE", "message": "The attendance session is not active."},
         ),
-        (CheckInNotOpenError("Check-in has not opened yet."), "CHECK_IN_NOT_OPEN"),
-        (CheckInClosedError("Check-in is closed."), "CHECK_IN_CLOSED"),
+        (
+            CheckInNotOpenError("Check-in has not opened yet."),
+            {"code": "CHECK_IN_NOT_OPEN", "message": "Check-in has not opened yet."},
+        ),
+        (
+            CheckInClosedError("Check-in is closed."),
+            {"code": "CHECK_IN_CLOSED", "message": "Check-in is closed."},
+        ),
         (
             GeofenceNotRequiredError(
                 "Geofence validation is not required for this session.",
             ),
-            "Geofence validation is not required for this session.",
+            {
+                "code": "GEOFENCE_NOT_REQUIRED",
+                "message": "Geofence validation is not required for this session.",
+            },
         ),
         (
             GeofenceNotConfiguredError(
                 "The attendance session has no complete geofence snapshot.",
             ),
-            "GEOFENCE_NOT_CONFIGURED",
+            {
+                "code": "GEOFENCE_NOT_CONFIGURED",
+                "message": "The attendance session has no complete geofence snapshot.",
+            },
         ),
-        (GeofenceAttemptLimitReachedError(3), "ATTEMPT_LIMIT_REACHED"),
+        (
+            GeofenceAttemptLimitReachedError(3),
+            {
+                "code": "ATTEMPT_LIMIT_REACHED",
+                "message": "The maximum of 3 geofence attempts has been reached.",
+            },
+        ),
         (
             VerificationAttemptClosedError(
                 "The verification attempt is already complete.",
             ),
-            "The verification attempt is already complete.",
+            {
+                "code": "VERIFICATION_ATTEMPT_CLOSED",
+                "message": "The verification attempt is already complete.",
+            },
         ),
     ],
 )
@@ -472,7 +508,7 @@ def test_maps_session_and_attempt_conflicts(
     jwks_document,
     make_access_token,
     error: Exception,
-    expected_detail: str,
+    expected_detail: dict[str, str],
 ) -> None:
     with build_client(
         jwks_document,

@@ -37,8 +37,14 @@ from modules.identity.auth.dependencies import CurrentLecturer
 router = APIRouter(prefix="/lecturers/me/attendance-sessions", tags=["lecturer-sessions"])
 router.include_router(manual_attendance_router)
 
-_PROFILE_NOT_FOUND_DETAIL = "An active lecturer profile was not found for this account."
-_SESSION_NOT_FOUND_DETAIL = "The attendance session was not found."
+_PROFILE_NOT_FOUND_DETAIL = {
+    "code": "LECTURER_PROFILE_NOT_FOUND",
+    "message": "An active lecturer profile was not found for this account.",
+}
+_SESSION_NOT_FOUND_DETAIL = {
+    "code": "SESSION_NOT_FOUND",
+    "message": "The attendance session was not found.",
+}
 
 
 def get_lecturer_session_service(http_request: Request) -> LecturerSessionService:
@@ -133,12 +139,21 @@ async def create_my_attendance_session(
     except TimetableEntryNotFoundError as error:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            "The timetable entry was not found for this lecturer.",
+            {
+                "code": "TIMETABLE_ENTRY_NOT_FOUND",
+                "message": "The timetable entry was not found for this lecturer.",
+            },
         ) from error
     except InvalidSessionScheduleError as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            {"code": "INVALID_SESSION_SCHEDULE", "message": str(error)},
+        ) from error
     except ClassroomGeofenceNotConfiguredError as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            {"code": "CLASSROOM_GEOFENCE_NOT_CONFIGURED", "message": str(error)},
+        ) from error
     except GeofenceRequiredError as error:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -178,7 +193,10 @@ async def activate_my_attendance_session(
     except (SessionAlreadyActiveError, SessionAlreadyClosedError, SessionCancelledError) as error:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "This session cannot be activated in its current state.",
+            {
+                "code": "SESSION_NOT_ACTIVATABLE",
+                "message": "This session cannot be activated in its current state.",
+            },
         ) from error
 
     return LecturerSessionResponse.from_record(session)
@@ -212,7 +230,10 @@ async def close_my_attendance_session(
     except (SessionNotActiveError, SessionAlreadyClosedError, SessionCancelledError) as error:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "This session cannot be closed in its current state.",
+            {
+                "code": "SESSION_NOT_CLOSABLE",
+                "message": "This session cannot be closed in its current state.",
+            },
         ) from error
 
     finalization_unavailable_reason = (

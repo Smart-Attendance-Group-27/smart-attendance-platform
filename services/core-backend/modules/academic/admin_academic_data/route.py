@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from core.errors import error_detail
 from modules.academic.admin_academic_data.exception import (
     AcademicConflictError,
     AcademicEntityNotFoundError,
@@ -44,10 +45,16 @@ async def _resolve(operation: Callable[[], Awaitable[T]]) -> T:
     except AcademicEntityNotFoundError as error:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            f"The referenced {error.entity} was not found.",
+            error_detail(
+                f"{error.entity.upper()}_NOT_FOUND",
+                f"The referenced {error.entity} was not found.",
+            ),
         ) from error
     except AcademicConflictError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, error.detail) from error
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            error_detail("ACADEMIC_CONFLICT", error.detail),
+        ) from error
 
 
 @router.get("/academic-data", response_model=AdminAcademicDataResponse)

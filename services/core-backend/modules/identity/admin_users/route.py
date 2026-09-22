@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from core.config import ConfigurationError
+from core.errors import error_detail
 from modules.identity.admin_users.exception import (
     AccountProvisioningError,
     AccountProvisioningUnavailableError,
@@ -30,8 +31,10 @@ from modules.identity.keycloak_admin.client import KeycloakAdminClient
 
 router = APIRouter(prefix="/administrators/me", tags=["admin-users"])
 
-_USER_NOT_FOUND_DETAIL = "The user account was not found."
-_CANNOT_MODIFY_OWN_ACCOUNT_DETAIL = "You cannot change your own account status."
+_USER_NOT_FOUND_DETAIL = error_detail("USER_NOT_FOUND", "The user account was not found.")
+_CANNOT_MODIFY_OWN_ACCOUNT_DETAIL = error_detail(
+    "CANNOT_MODIFY_OWN_ACCOUNT", "You cannot change your own account status.",
+)
 
 
 def get_admin_user_service() -> AdminUserService:
@@ -42,7 +45,10 @@ def get_account_provisioning_service(request: Request) -> AdminUserService:
     try:
         keycloak_client = KeycloakAdminClient.from_settings(request.app.state.settings)
     except ConfigurationError as error:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            error_detail("KEYCLOAK_ADMIN_UNAVAILABLE", str(error)),
+        ) from error
     return AdminUserService(keycloak_client=keycloak_client)
 
 
@@ -84,18 +90,30 @@ async def provision_user_account(
             body,
         )
     except DuplicateAccountFieldError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            error_detail("DUPLICATE_ACCOUNT_FIELD", str(error)),
+        ) from error
     except OrphanedKeycloakUserError as error:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(error)) from error
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            error_detail("ORPHANED_KEYCLOAK_USER", str(error)),
+        ) from error
     except AccountProvisioningUnavailableError as error:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Account provisioning is temporarily unavailable. Please try again.",
+            error_detail(
+                "ACCOUNT_PROVISIONING_UNAVAILABLE",
+                "Account provisioning is temporarily unavailable. Please try again.",
+            ),
         ) from error
     except AccountProvisioningError as error:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
-            "The account could not be provisioned. Any partial identity was cleaned up.",
+            error_detail(
+                "ACCOUNT_PROVISIONING_FAILED",
+                "The account could not be provisioned. Any partial identity was cleaned up.",
+            ),
         ) from error
 
     return ProvisionedAccountResponse(

@@ -215,6 +215,7 @@ def test_missing_active_profile_returns_not_found(
         )
 
     assert response.status_code == 404
-    assert response.json()["detail"] == (
-        "An active student profile was not found for this account."
-    )
+    assert response.json()["detail"] == {
+        "code": "STUDENT_PROFILE_NOT_FOUND",
+        "message": "An active student profile was not found for this account.",
+    }

@@ -92,7 +92,10 @@ def test_rejects_a_lecturer(client, make_access_token) -> None:
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"] == "The 'student' role is required."
+    assert response.json()["detail"] == {
+        "code": "INSUFFICIENT_ROLE",
+        "message": "The 'student' role is required.",
+    }
 
 
 def test_rejects_a_token_carrying_no_roles(client, make_access_token) -> None:
@@ -114,6 +117,10 @@ def test_returns_404_when_the_student_has_no_profile(
         response = client.get(PROFILE_URL, headers=authorize(make_access_token()))
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "STUDENT_PROFILE_NOT_FOUND",
+        "message": "A student profile was not found for this account.",
+    }
 
 
 def test_returns_404_when_the_profile_is_not_active(
@@ -131,6 +138,10 @@ def test_returns_404_when_the_profile_is_not_active(
         response = client.get(PROFILE_URL, headers=authorize(make_access_token()))
 
     assert response.status_code == 404
+    assert response.json()["detail"] == {
+        "code": "STUDENT_PROFILE_NOT_FOUND",
+        "message": "A student profile was not found for this account.",
+    }
 
 
 def test_ignores_a_student_id_supplied_by_the_caller(

@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from core.errors import error_detail
 from modules.academic.admin_classrooms.exception import (
     BuildingNotFoundError,
     ClassroomNotFoundError,
@@ -17,8 +18,10 @@ from modules.identity.auth.dependencies import CurrentAdministrator
 
 router = APIRouter(prefix="/administrators/me", tags=["admin-classrooms"])
 
-_CLASSROOM_NOT_FOUND_DETAIL = "The classroom was not found."
-_BUILDING_NOT_FOUND_DETAIL = "The referenced building was not found."
+_CLASSROOM_NOT_FOUND_DETAIL = error_detail("CLASSROOM_NOT_FOUND", "The classroom was not found.")
+_BUILDING_NOT_FOUND_DETAIL = error_detail(
+    "BUILDING_NOT_FOUND", "The referenced building was not found.",
+)
 
 
 def get_admin_classroom_service() -> AdminClassroomService:

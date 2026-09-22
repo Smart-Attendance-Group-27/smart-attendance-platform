@@ -22,6 +22,9 @@ from modules.attendance_verification.check_in.exception import (
 from modules.attendance_verification.check_in.route import get_check_in_service
 from modules.attendance_verification.attendance_state import InitialCheckInStatus
 from modules.attendance_verification.face.client import (
+    FaceVerificationServiceError,
+    FaceVerificationServiceInvalidRequestError,
+    FaceVerificationServiceRejectedError,
     InternalFaceVerificationResult,
 )
 from modules.attendance_verification.face.route import (
@@ -37,12 +40,20 @@ URL = f"/api/v1/attendance-sessions/{SESSION_ID}/face-verifications"
 
 
 class StubFaceVerificationClient:
-    def __init__(self, result: InternalFaceVerificationResult) -> None:
+    def __init__(
+        self,
+        result: InternalFaceVerificationResult | None = None,
+        *,
+        error: Exception | None = None,
+    ) -> None:
         self.result = result
+        self.error = error
         self.calls: list[dict[str, object]] = []
 
     async def verify_attendance_face(self, **kwargs):
         self.calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
         return self.result
 
 
@@ -272,4 +283,109 @@ def test_maps_last_internal_failure_as_non_retryable(
         "attemptNumber": 3,
         "canRetry": False,
         "initialCheckIn": None,
+    }
+
+
+def test_rejects_an_unsupported_image_type(
+    jwks_document,
+    make_access_token,
+) -> None:
+    service = StubFaceVerificationClient()
+
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            URL,
+            headers={"Authorization": f"Bearer {make_access_token()}"},
+            files={"image": ("capture.gif", b"gif-bytes", "image/gif")},
+        )
+
+    assert response.status_code == 415
+    assert response.json()["detail"] == {
+        "code": "UNSUPPORTED_IMAGE_TYPE",
+        "message": "Only JPEG and PNG images are supported",
+    }
+    assert service.calls == []
+
+
+def test_rejects_an_empty_image(jwks_document, make_access_token) -> None:
+    service = StubFaceVerificationClient()
+
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            URL,
+            headers={"Authorization": f"Bearer {make_access_token()}"},
+            files={"image": ("capture.jpg", b"", "image/jpeg")},
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == {
+        "code": "EMPTY_IMAGE",
+        "message": "The uploaded image is empty",
+    }
+    assert service.calls == []
+
+
+def test_maps_a_rejected_capture_to_a_conflict(
+    jwks_document,
+    make_access_token,
+) -> None:
+    service = StubFaceVerificationClient(
+        error=FaceVerificationServiceRejectedError("No matching reference face."),
+    )
+
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            URL,
+            headers={"Authorization": f"Bearer {make_access_token()}"},
+            files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "code": "FACE_VERIFICATION_REJECTED",
+        "message": "No matching reference face.",
+    }
+
+
+def test_maps_an_invalid_capture_to_unprocessable(
+    jwks_document,
+    make_access_token,
+) -> None:
+    service = StubFaceVerificationClient(
+        error=FaceVerificationServiceInvalidRequestError("Malformed capture."),
+    )
+
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            URL,
+            headers={"Authorization": f"Bearer {make_access_token()}"},
+            files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "FACE_VERIFICATION_INVALID_REQUEST",
+        "message": "Malformed capture.",
+    }
+
+
+def test_maps_a_face_service_outage_to_unavailable(
+    jwks_document,
+    make_access_token,
+) -> None:
+    service = StubFaceVerificationClient(
+        error=FaceVerificationServiceError("The face service did not respond."),
+    )
+
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            URL,
+            headers={"Authorization": f"Bearer {make_access_token()}"},
+            files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == {
+        "code": "FACE_VERIFICATION_SERVICE_ERROR",
+        "message": "The face service did not respond.",
     }
