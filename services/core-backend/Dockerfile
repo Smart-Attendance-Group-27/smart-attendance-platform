@@ -9,8 +9,12 @@ COPY requirements.txt .
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+RUN addgroup --system app \
+    && adduser --system --ingroup app --home /home/app app
 
+COPY --chown=app:app . .
+
+USER app
 EXPOSE 8000
 
 CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

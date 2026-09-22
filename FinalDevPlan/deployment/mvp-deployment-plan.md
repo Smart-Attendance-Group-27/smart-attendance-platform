@@ -2,7 +2,7 @@
 
 **Owner:** Manushan with the service owners
 
-**Planning baseline:** `origin/main` at `32082ee693c9ef0db9c5c60da38e512474d71821`, reviewed 2026-09-22
+**Planning baseline:** `origin/main` at `c7cde884bdc90e8e3e68b92d08a658b77916954b`, updated 2026-09-23
 
 **Aim:** release one reproducible MVP build of web, Core API, face verification and Android, backed by a controlled application database, identity provider and notification delivery.
 
@@ -29,8 +29,8 @@ See [mvp-current-status-review.md](mvp-current-status-review.md) for the evidenc
 
 - Build immutable web, Core API and face-service images from the candidate; verify the production web server starts. Confirm the face model loads and both service DB health endpoints work. Confirm Redis, issuer discovery/JWKS and browser login.
 - Configure Android build-time `EXPO_PUBLIC_CORE_API_URL`, `EXPO_PUBLIC_FACE_VERIFICATION_API_URL` and the Keycloak issuer for the preview endpoints. Produce and install a signed internal Android build; confirm camera, location and notification permissions on a physical phone.
-- Start push and reminder processing only after the relevant migrations and credentials are in place. Set liveness enforcement explicitly; test the enabled path, including rejected/crafted evidence.
-- Exercise the roadmap's CP1–CP8 using test users and a real class/session flow: enrolment and role access; face/geofence check-in; QR batch scan and void; close/finalize and manual change; cancel; policy defaults; web/mobile/history/reports agreement; push/reminder delivery and notification taps. Check failure paths, not only successful screens.
+- Start push and reminder processing only after the relevant migrations and credentials are in place. Keep liveness enforcement off and create first-release sessions with face verification disabled.
+- Exercise the non-face MVP flows using test users and a real class/session flow: enrolment and role access; geofence check-in; QR batch scan and void; close/finalize and manual change; cancel; policy defaults; web/mobile/history/reports agreement. Test face readiness separately without using its result for attendance. Check failure paths, not only successful screens.
 - Capture results, logs and defects. Fix blocking defects on separate PRs, rebase the release candidate on the new `main`, and repeat affected checks.
 
 **Exit:** a physical-device test record and signed approval from each service owner for the same candidate version.
@@ -52,4 +52,4 @@ See [mvp-current-status-review.md](mvp-current-status-review.md) for the evidenc
 
 ## Go / no-go checklist
 
-Ship only when all are evidenced on the same candidate: green CI; target migrations verified; production configuration and HTTPS correct; Keycloak login and roles; service/database health; CP1–CP8 on real services and Android; liveness enforced; notifications delivered; backup and rollback rehearsed; and owners accept the pilot risk. An unresolved item is a **no-go** until fixed or explicitly accepted by the release coordinator and affected owner.
+Ship the first pilot only when all in-scope items are evidenced on the same candidate: green CI; target migrations verified; production configuration and HTTPS correct; Keycloak login and roles; service/database health; non-face attendance flows on real services and Android; face verification disabled on pilot sessions; backup and rollback rehearsed; and owners accept the pilot risk. Liveness and face-based attendance remain a later release gate.

@@ -1,0 +1,97 @@
+name: Deployment CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deployment-ci.yml"
+      - "deployment/**"
+      - "database/migrations/**"
+      - "database/smart_attendance_db_clean.sql"
+      - "docker-compose.production.yml"
+      - "apps/web/Dockerfile"
+      - "services/core-backend/Dockerfile"
+      - "services/core-backend/requirements.txt"
+      - "services/face-verification/Dockerfile"
+      - "services/face-verification/requirements.txt"
+      - "package.json"
+      - "package-lock.json"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deployment-ci.yml"
+      - "deployment/**"
+      - "database/migrations/**"
+      - "database/smart_attendance_db_clean.sql"
+      - "docker-compose.production.yml"
+      - "apps/web/Dockerfile"
+      - "services/core-backend/Dockerfile"
+      - "services/core-backend/requirements.txt"
+      - "services/face-verification/Dockerfile"
+      - "services/face-verification/requirements.txt"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deployment-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  production-containers:
+    name: Validate and build production containers
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Confirm the example fails closed
+        run: |
+          if python deployment/validate_env.py deployment/mvp.env.example; then
+            echo "Example unexpectedly passed with placeholder values"
+            exit 1
+          fi
+
+      - name: Validate production Compose model
+        run: docker compose --env-file deployment/mvp.env.example -f docker-compose.production.yml config --quiet
+
+      - name: Rebuild and verify the production schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          container=uniattend-deployment-ci-postgres
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker run --detach --name "$container" \
+            --env POSTGRES_PASSWORD=deployment_ci \
+            --env POSTGRES_DB=smart_attendance \
+            postgres:16-alpine
+          until docker exec "$container" pg_isready --username postgres --dbname smart_attendance >/dev/null 2>&1; do
+            sleep 1
+          done
+          docker exec --interactive "$container" \
+            psql --username postgres --dbname smart_attendance --set ON_ERROR_STOP=1 \
+            < database/smart_attendance_db_clean.sql
+          while IFS= read -r migration; do
+            echo "Applying $migration"
+            docker exec --interactive "$container" \
+              psql --username postgres --dbname smart_attendance --set ON_ERROR_STOP=1 \
+              < "$migration"
+          done < <(find database/migrations -maxdepth 1 -type f -name '*.sql' ! -name '*_rollback.sql' | sort)
+          docker exec --interactive "$container" \
+            psql --username postgres --dbname smart_attendance --set ON_ERROR_STOP=1 \
+            < deployment/verify_mvp_schema.sql
+
+      - name: Build production images
+        run: docker compose --env-file deployment/mvp.env.example -f docker-compose.production.yml build

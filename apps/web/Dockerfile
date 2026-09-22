@@ -32,13 +32,14 @@ RUN npm run build
 
 FROM base AS production
 ENV NODE_ENV=production
-COPY --from=dependencies /workspace/node_modules /workspace/node_modules
-COPY --from=dependencies /workspace/package.json /workspace/package.json
-COPY --from=dependencies /workspace/package-lock.json /workspace/package-lock.json
-COPY --from=dependencies /workspace/apps/web/package.json /workspace/apps/web/package.json
-COPY --from=build /workspace/apps/web/.next /workspace/apps/web/.next
-COPY --from=build /workspace/apps/web/public /workspace/apps/web/public
-COPY --from=build /workspace/apps/web/next.config.ts /workspace/apps/web/next.config.ts
+COPY --chown=node:node --from=dependencies /workspace/node_modules /workspace/node_modules
+COPY --chown=node:node --from=dependencies /workspace/package.json /workspace/package.json
+COPY --chown=node:node --from=dependencies /workspace/package-lock.json /workspace/package-lock.json
+COPY --chown=node:node --from=dependencies /workspace/apps/web/package.json /workspace/apps/web/package.json
+COPY --chown=node:node --from=build /workspace/apps/web/.next /workspace/apps/web/.next
+COPY --chown=node:node --from=build /workspace/apps/web/public /workspace/apps/web/public
+COPY --chown=node:node --from=build /workspace/apps/web/next.config.ts /workspace/apps/web/next.config.ts
 WORKDIR /workspace/apps/web
+USER node
 EXPOSE 3000
 CMD ["npm", "run", "start", "--", "--hostname", "0.0.0.0"]
