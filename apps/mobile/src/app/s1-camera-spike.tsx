@@ -110,10 +110,14 @@ export default function S1CameraSpikeRoute() {
   const samplingRef = useRef(false);
   const busyRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handledSampleRequestRef = useRef(0);
   const measurementsRef = useRef(createMeasurements('straight'));
   const [cameraReady, setCameraReady] = useState(false);
   const [sampling, setSampling] = useState(false);
-  const [measurements, setMeasurements] = useState(measurementsRef.current);
+  const [sampleRequest, setSampleRequest] = useState(0);
+  const [measurements, setMeasurements] = useState(() =>
+    createMeasurements('straight'),
+  );
   const [error, setError] = useState<string | null>(null);
 
   const stopSampling = useCallback(() => {
@@ -133,86 +137,93 @@ export default function S1CameraSpikeRoute() {
     };
   }, []);
 
-  const captureSample = useCallback(async () => {
-    if (busyRef.current || !cameraReady || !cameraRef.current) return;
+  useEffect(() => {
+    const shouldCaptureSingleSample = sampleRequest > handledSampleRequestRef.current;
+    if ((!sampling && !shouldCaptureSingleSample) || !cameraReady) return;
+    if (shouldCaptureSingleSample) handledSampleRequestRef.current = sampleRequest;
 
-    busyRef.current = true;
-    setError(null);
-    const startedAt = Date.now();
-    let imageUri: string | null = null;
+    async function captureSample() {
+      if (busyRef.current || !cameraRef.current) return;
 
-    try {
-      const capturedAt = Date.now();
-      const image = await cameraRef.current.takePictureAsync({ quality: 0.45 });
-      imageUri = image.uri;
-      const detectedAt = Date.now();
-      const faces = await FaceDetection.detect(image.uri, DETECTOR_OPTIONS);
-      const finishedAt = Date.now();
-      const face = faces.length === 1 ? faces[0] : null;
-      const faceAreaPercent = face && image.width > 0 && image.height > 0
-        ? (100 * face.frame.width * face.frame.height) / (image.width * image.height)
-        : null;
-      const previous = measurementsRef.current;
-      const next: Measurements = {
-        ...previous,
-        attempts: previous.attempts + 1,
-        detectedSamples: previous.detectedSamples + (face ? 1 : 0),
-        missedSamples: previous.missedSamples + (face ? 0 : 1),
-        faceCount: faces.length,
-        face,
-        imageWidth: image.width,
-        imageHeight: image.height,
-        captureMs: detectedAt - capturedAt,
-        detectionMs: finishedAt - detectedAt,
-        totalMs: finishedAt - startedAt,
-        minYaw: minValue(previous.minYaw, face?.rotationY),
-        maxYaw: maxValue(previous.maxYaw, face?.rotationY),
-        minLeftEye: minValue(previous.minLeftEye, face?.leftEyeOpenProbability),
-        maxLeftEye: maxValue(previous.maxLeftEye, face?.leftEyeOpenProbability),
-        minRightEye: minValue(previous.minRightEye, face?.rightEyeOpenProbability),
-        maxRightEye: maxValue(previous.maxRightEye, face?.rightEyeOpenProbability),
-        minFaceAreaPercent: minValue(previous.minFaceAreaPercent, faceAreaPercent ?? undefined),
-        maxFaceAreaPercent: maxValue(previous.maxFaceAreaPercent, faceAreaPercent ?? undefined),
-      };
+      busyRef.current = true;
+      setError(null);
+      const startedAt = Date.now();
+      let imageUri: string | null = null;
 
-      measurementsRef.current = next;
-      if (mountedRef.current) setMeasurements(next);
-      console.log('[S1 Expo Camera fallback]', {
-        action: next.action,
-        attempt: next.attempts,
-        faces: faces.length,
-        yaw: face?.rotationY,
-        leftEye: face?.leftEyeOpenProbability,
-        rightEye: face?.rightEyeOpenProbability,
-        frame: face?.frame,
-        faceAreaPercent,
-        captureMs: next.captureMs,
-        detectionMs: next.detectionMs,
-        totalMs: next.totalMs,
-      });
-    } catch (caughtError) {
-      const message = caughtError instanceof Error
-        ? caughtError.message
-        : 'Capture or face detection failed.';
-      if (mountedRef.current) setError(message);
-      console.error('[S1 Expo Camera fallback]', caughtError);
-      stopSampling();
-    } finally {
-      if (imageUri) {
-        await FileSystem.deleteAsync(imageUri, { idempotent: true }).catch(() => undefined);
-      }
-      busyRef.current = false;
-      if (samplingRef.current && mountedRef.current) {
-        timerRef.current = setTimeout(() => void captureSample(), SAMPLE_DELAY_MS);
+      try {
+        const capturedAt = Date.now();
+        const image = await cameraRef.current.takePictureAsync({ quality: 0.45 });
+        imageUri = image.uri;
+        const detectedAt = Date.now();
+        const faces = await FaceDetection.detect(image.uri, DETECTOR_OPTIONS);
+        const finishedAt = Date.now();
+        const face = faces.length === 1 ? faces[0] : null;
+        const faceAreaPercent = face && image.width > 0 && image.height > 0
+          ? (100 * face.frame.width * face.frame.height) / (image.width * image.height)
+          : null;
+        const previous = measurementsRef.current;
+        const next: Measurements = {
+          ...previous,
+          attempts: previous.attempts + 1,
+          detectedSamples: previous.detectedSamples + (face ? 1 : 0),
+          missedSamples: previous.missedSamples + (face ? 0 : 1),
+          faceCount: faces.length,
+          face,
+          imageWidth: image.width,
+          imageHeight: image.height,
+          captureMs: detectedAt - capturedAt,
+          detectionMs: finishedAt - detectedAt,
+          totalMs: finishedAt - startedAt,
+          minYaw: minValue(previous.minYaw, face?.rotationY),
+          maxYaw: maxValue(previous.maxYaw, face?.rotationY),
+          minLeftEye: minValue(previous.minLeftEye, face?.leftEyeOpenProbability),
+          maxLeftEye: maxValue(previous.maxLeftEye, face?.leftEyeOpenProbability),
+          minRightEye: minValue(previous.minRightEye, face?.rightEyeOpenProbability),
+          maxRightEye: maxValue(previous.maxRightEye, face?.rightEyeOpenProbability),
+          minFaceAreaPercent: minValue(previous.minFaceAreaPercent, faceAreaPercent ?? undefined),
+          maxFaceAreaPercent: maxValue(previous.maxFaceAreaPercent, faceAreaPercent ?? undefined),
+        };
+
+        measurementsRef.current = next;
+        if (mountedRef.current) setMeasurements(next);
+        console.log('[S1 Expo Camera fallback]', {
+          action: next.action,
+          attempt: next.attempts,
+          faces: faces.length,
+          yaw: face?.rotationY,
+          leftEye: face?.leftEyeOpenProbability,
+          rightEye: face?.rightEyeOpenProbability,
+          frame: face?.frame,
+          faceAreaPercent,
+          captureMs: next.captureMs,
+          detectionMs: next.detectionMs,
+          totalMs: next.totalMs,
+        });
+      } catch (caughtError) {
+        const message = caughtError instanceof Error
+          ? caughtError.message
+          : 'Capture or face detection failed.';
+        if (mountedRef.current) setError(message);
+        console.error('[S1 Expo Camera fallback]', caughtError);
+        stopSampling();
+      } finally {
+        if (imageUri) {
+          await FileSystem.deleteAsync(imageUri, { idempotent: true }).catch(() => undefined);
+        }
+        busyRef.current = false;
+        if (samplingRef.current && mountedRef.current) {
+          timerRef.current = setTimeout(() => void captureSample(), SAMPLE_DELAY_MS);
+        }
       }
     }
-  }, [cameraReady, stopSampling]);
+
+    void captureSample();
+  }, [cameraReady, sampleRequest, sampling, stopSampling]);
 
   const startSampling = () => {
     if (!cameraReady) return;
     samplingRef.current = true;
     setSampling(true);
-    void captureSample();
   };
 
   const selectAction = (action: TestAction) => {
@@ -303,7 +314,7 @@ export default function S1CameraSpikeRoute() {
           </Pressable>
           <Pressable
             disabled={!cameraReady || sampling}
-            onPress={() => void captureSample()}
+            onPress={() => setSampleRequest((request) => request + 1)}
             style={[styles.button, (!cameraReady || sampling) && styles.disabledButton]}
           >
             <Text style={styles.buttonText}>One sample</Text>
