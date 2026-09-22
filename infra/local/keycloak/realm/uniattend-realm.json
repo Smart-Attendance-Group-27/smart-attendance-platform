@@ -146,6 +146,33 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "uniattend-provisioner",
+      "name": "UniAttend Account Provisioner",
+      "description": "Core API service account with the minimum realm-management roles needed to create users and assign realm roles.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "secret": "replace-with-local-provisioner-secret"
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-uniattend-provisioner",
+      "enabled": true,
+      "serviceAccountClientId": "uniattend-provisioner",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-realm"
+        ]
+      }
     }
   ]
 }
