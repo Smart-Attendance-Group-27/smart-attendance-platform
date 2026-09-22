@@ -145,9 +145,15 @@ export function AttendanceProgressScreen({
                   <Text>{attendance.finalAttendance.source === 'manual'
                     ? 'Set by your lecturer' : 'Recorded when the session closed'}</Text>
                 </>
+              ) : attendance.sessionState === 'cancelled' ? (
+                <>
+                  <Text>Session cancelled</Text>
+                  <Text style={styles.reason}>
+                    {attendance.cancellationReason ?? 'No reason was recorded.'}
+                  </Text>
+                </>
               ) : (
-                <Text>{attendance.sessionState === 'cancelled'
-                  ? 'Session cancelled' : 'Awaiting final attendance'}</Text>
+                <Text>Awaiting final attendance</Text>
               )}
             </View>
             {attendance.qrEnabled ? (
@@ -207,5 +213,6 @@ const styles = StyleSheet.create({
     borderRadius: 12, borderWidth: 1, borderColor: lightColors.border },
   heading: { ...typography.sectionTitle, color: lightColors.textPrimary },
   outcome: { ...typography.body, color: lightColors.textPrimary, fontWeight: '700' },
+  reason: { ...typography.supporting, color: lightColors.textSecondary },
   batchList: { gap: spacing.xs, marginTop: spacing.sm },
 });
