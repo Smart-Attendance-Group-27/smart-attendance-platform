@@ -2,6 +2,7 @@ import "server-only";
 import {
   getAcademicData as fetchAcademicData,
   getAcademicOptions as fetchAcademicOptions,
+  getAccountProvisioningOptions,
   getAdminDashboardOverview,
   getAttendancePolicy as fetchAttendancePolicy,
   getAuditLogs as fetchAuditLogs,
@@ -14,6 +15,7 @@ import {
 import { formatDateLabel, formatDateTimeLabel, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
 import {
   AcademicData,
+  AcademicOption,
   AcademicReferenceData,
   AdminDashboardData,
   AttendancePolicy,
@@ -127,6 +129,11 @@ export async function getUserDirectory(): Promise<UserDirectoryData> {
       profileStatus: administrator.profileStatus as UserDirectoryData["administrators"][number]["profileStatus"],
     })),
   };
+}
+
+export async function getProvisioningDepartments(): Promise<AcademicOption[]> {
+  const options = await getAccountProvisioningOptions();
+  return options.departments;
 }
 
 export async function getAcademicData(): Promise<AcademicData> {
