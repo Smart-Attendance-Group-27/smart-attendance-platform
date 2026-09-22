@@ -35,6 +35,7 @@ import type {
 } from '../types/auth.types';
 import { getJwtSubject } from '../utils/jwt';
 import { setDefaultAccessTokenRefresher } from '../../../services/api/coreApiClient';
+import { revokePushBeforeSignOut } from '../services/signOutPushCleanup';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -293,6 +294,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     });
 
     setErrorMessage(null);
+    if (session.status === 'authenticated' && session.accessToken) {
+      // Revocation needs the still-valid access token. A push cleanup failure
+      // must never trap the user in an authenticated session.
+      await revokePushBeforeSignOut(session.accessToken);
+    }
     await clearStoredAuthTokens();
     setSession(unauthenticatedSession);
 

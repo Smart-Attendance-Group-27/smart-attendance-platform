@@ -133,18 +133,30 @@ function resolvePlatform(): 'android' | 'ios' | 'web' {
  */
 export async function revokePushNotifications(
   coreApiClient: CoreApiClient,
-  expoPushToken: string,
+  expoPushToken?: string,
 ): Promise<boolean> {
   try {
+    if (!Device.isDevice) {
+      return false;
+    }
+    const token = expoPushToken ?? (
+      await Notifications.getExpoPushTokenAsync(resolveProjectId())
+    ).data;
     const result = await coreApiClient.post<unknown>(
       `${deviceRegistrationPath}/revoke`,
       {
-        expo_push_token: expoPushToken,
+        expo_push_token: token,
       },
     );
     return result.status === 'ok';
-  } catch (err) {
-    console.warn('[PushNotifications] Failed to revoke push token:', err);
+  } catch {
+    console.warn('[PushNotifications] Failed to revoke push token.');
     return false;
   }
+}
+
+function resolveProjectId(): { projectId: string } | undefined {
+  const projectId =
+    Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+  return projectId ? { projectId } : undefined;
 }
