@@ -21,7 +21,7 @@ function getBaseUrl(): string {
 }
 
 type RequestOptions = {
-  method?: "GET" | "POST" | "PUT" | "PATCH";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   searchParams?: Record<string, string | number | undefined>;
 };

@@ -1,6 +1,7 @@
 import "server-only";
 import {
   getAcademicData as fetchAcademicData,
+  getAcademicOptions as fetchAcademicOptions,
   getAdminDashboardOverview,
   getAttendancePolicy as fetchAttendancePolicy,
   getAuditLogs as fetchAuditLogs,
@@ -13,6 +14,7 @@ import {
 import { formatDateLabel, formatDateTimeLabel, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
 import {
   AcademicData,
+  AcademicReferenceData,
   AdminDashboardData,
   AttendancePolicy,
   AuditLogEntry,
@@ -136,12 +138,17 @@ export async function getAcademicData(): Promise<AcademicData> {
       courseId: course.courseId,
       courseCode: course.courseCode,
       courseName: course.courseName,
+      departmentId: course.departmentId ?? "",
       department: course.department ?? "",
       credits: course.credits ?? 0,
       status: course.status === "active" ? "active" : "inactive",
     })),
     offerings: data.offerings.map((offering) => ({
       offeringId: offering.offeringId,
+      courseId: offering.courseId,
+      semesterId: offering.semesterId,
+      lecturerId: offering.lecturerId ?? "",
+      lecturerName: offering.lecturerName ?? "",
       courseCode: offering.courseCode,
       courseName: offering.courseName,
       semesterLabel: offering.semesterLabel,
@@ -153,15 +160,26 @@ export async function getAcademicData(): Promise<AcademicData> {
     })),
     timetable: data.timetable.map((entry) => ({
       id: entry.id,
+      courseOfferingId: entry.courseOfferingId,
+      classroomId: entry.classroomId ?? "",
       courseCode: entry.courseCode,
       courseName: entry.courseName,
       day: formatDayOfWeek(entry.dayOfWeek),
       timeRange: formatTimeRange(entry.startTime, entry.endTime),
       room: entry.classroomCode ?? "—",
       lecturerName: entry.lecturerName ?? "—",
+      dayOfWeek: entry.dayOfWeek,
+      startTime: entry.startTime,
+      endTime: entry.endTime,
+      courseType: entry.courseType ?? "",
+      validFrom: entry.validFrom,
+      validUntil: entry.validUntil ?? "",
+      status: entry.status === "active" ? "active" : "inactive",
     })),
     enrolments: data.enrolments.map((enrolment) => ({
       enrolmentId: enrolment.enrolmentId,
+      courseOfferingId: enrolment.courseOfferingId,
+      studentId: enrolment.studentId,
       studentName: enrolment.studentName,
       registrationNumber: enrolment.registrationNumber,
       courseCode: enrolment.courseCode,
@@ -169,6 +187,10 @@ export async function getAcademicData(): Promise<AcademicData> {
       enrolmentStatus: enrolment.enrolmentStatus === "enrolled" ? "enrolled" : "dropped",
     })),
   };
+}
+
+export async function getAcademicReferenceData(): Promise<AcademicReferenceData> {
+  return fetchAcademicOptions();
 }
 
 export async function getReferenceFaces(): Promise<ReferenceFaceRecord[]> {
