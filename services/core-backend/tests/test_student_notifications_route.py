@@ -105,7 +105,7 @@ def test_map_notification_type():
     assert _map_notification_type("ATTENDANCE_SESSION_STARTED") == "attendance"
     assert _map_notification_type("UPCOMING_CLASS") == "attendance"
     assert _map_notification_type("ATTENDANCE_RESULT") == "attendance_update"
-    assert _map_notification_type("ATTENDANCE_SESSION_CANCELLED") == "general"
+    assert _map_notification_type("ATTENDANCE_SESSION_CANCELLED") == "attendance"
     assert _map_notification_type("ATTENDANCE_RISK") == "general"
     assert _map_notification_type("GENERAL") == "general"
     assert _map_notification_type(None) == "general"

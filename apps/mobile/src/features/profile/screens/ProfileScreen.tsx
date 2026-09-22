@@ -21,6 +21,7 @@ import type { ProfileService } from '../services/profile.service';
 import type { StudentProfile } from '../types/profile.types';
 
 type ProfileScreenProps = {
+  readonly onNotificationPreferencesPress?: () => void;
   readonly onSignOutPress: () => void | Promise<void>;
   readonly profileService: ProfileService;
   readonly session: AuthenticatedSession;
@@ -42,6 +43,7 @@ type StateMessageProps = {
 };
 
 export function ProfileScreen({
+  onNotificationPreferencesPress,
   onSignOutPress,
   profileService,
   session,
@@ -117,6 +119,7 @@ export function ProfileScreen({
       {screenState.status === 'ready' ? (
         <ProfileContent
           onSignOutPress={onSignOutPress}
+          onNotificationPreferencesPress={onNotificationPreferencesPress}
           profile={screenState.profile}
           session={session}
         />
@@ -207,11 +210,13 @@ function toScreenStatus(
 }
 
 function ProfileContent({
+  onNotificationPreferencesPress,
   onSignOutPress,
   profile,
   session,
 }: {
   readonly onSignOutPress: () => void | Promise<void>;
+  readonly onNotificationPreferencesPress?: () => void;
   readonly profile: StudentProfile;
   readonly session: AuthenticatedSession;
 }) {
@@ -265,6 +270,16 @@ function ProfileContent({
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>
+        {onNotificationPreferencesPress ? (
+          <Pressable
+            accessibilityLabel="Open notification preferences"
+            accessibilityRole="button"
+            onPress={onNotificationPreferencesPress}
+            style={({ pressed }) => [styles.preferenceButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.preferenceLabel}>Notification preferences</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityLabel="Sign out of UniAttend"
           accessibilityRole="button"
@@ -473,6 +488,20 @@ const styles = StyleSheet.create({
     borderColor: lightColors.error,
     borderRadius: radii.button,
     backgroundColor: lightColors.surface,
+  },
+  preferenceButton: {
+    minHeight: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: lightColors.border,
+    borderRadius: radii.button,
+    backgroundColor: lightColors.surface,
+  },
+  preferenceLabel: {
+    ...typography.button,
+    color: lightColors.textPrimary,
   },
   signOutLabel: {
     ...typography.button,

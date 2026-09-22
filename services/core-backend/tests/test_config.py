@@ -77,6 +77,31 @@ def test_settings_defaults_to_the_initial_geofence_safeguards() -> None:
     assert settings.geofence_max_attempts == 3
 
 
+def test_settings_defaults_to_bounded_push_worker_batches_and_retries() -> None:
+    settings = build_settings()
+
+    assert settings.push_worker_enabled is True
+    assert settings.push_worker_batch_size == 100
+    assert settings.push_worker_receipt_batch_size == 1000
+    assert settings.push_worker_max_attempts == 5
+    assert settings.reminder_scheduler_enabled is True
+    assert settings.reminder_scheduler_interval_seconds == 60
+    assert settings.reminder_lead_minutes == 15
+
+
+def test_settings_rejects_push_batch_above_expo_limit() -> None:
+    with pytest.raises(ValueError):
+        build_settings(push_worker_batch_size=101)
+
+
+def test_settings_rejects_retry_cap_below_base_delay() -> None:
+    with pytest.raises(ValueError):
+        build_settings(
+            push_worker_retry_base_seconds=30,
+            push_worker_retry_max_seconds=10,
+        )
+
+
 @pytest.mark.parametrize(
     ("setting_name", "invalid_value"),
     [

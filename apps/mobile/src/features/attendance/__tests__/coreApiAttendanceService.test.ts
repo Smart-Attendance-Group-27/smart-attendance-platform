@@ -47,6 +47,26 @@ describe('CoreApiAttendanceService', () => {
     }
   });
 
+  test('reads the cancellation reason for a cancelled session', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      response(200, myAttendanceFixtures['attendance-session-cancelled']),
+    );
+    const result = await service().getMyAttendance('attendance-session-cancelled');
+    expect(result.status).toBe('loaded');
+    if (result.status === 'loaded') {
+      expect(result.attendance.sessionState).toBe('cancelled');
+      expect(result.attendance.cancellationReason).toBe('The lecturer is unwell.');
+    }
+  });
+
+  test('rejects a payload whose cancellation reason is not a string or null', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(response(200, {
+      ...myAttendanceFixtures['attendance-session-cancelled'], cancellationReason: 42,
+    }));
+    await expect(service().getMyAttendance('attendance-session-cancelled'))
+      .resolves.toEqual({ status: 'server-error' });
+  });
+
   test('posts C01 and parses initial check-in', async () => {
     const initialCheckIn = { status: 'late_checked_in', checkedInAt: '2026-07-20T10:18:00+05:30' };
     const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(response(200, {

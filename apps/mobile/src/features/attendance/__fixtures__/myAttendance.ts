@@ -7,6 +7,7 @@ const base: MyAttendance = {
   sessionTitle: 'Architecture Review Lecture',
   sessionType: 'lecture',
   sessionState: 'active',
+  cancellationReason: null,
   scheduledStartAt: '2026-07-20T10:00:00+05:30',
   scheduledEndAt: '2026-07-20T12:00:00+05:30',
   checkInOpensAt: '2026-07-20T09:50:00+05:30',
@@ -72,5 +73,18 @@ export const myAttendanceFixtures: Readonly<Record<string, MyAttendance>> = {
     sessionState: 'closed',
     canStartCheckIn: false,
     finalAttendance: { status: 'absent', source: 'manual', decidedAt: '2026-07-20T12:00:00+05:30' },
+  },
+  'attendance-session-cancelled': {
+    ...base,
+    sessionId: 'attendance-session-cancelled',
+    sessionState: 'cancelled',
+    cancellationReason: 'The lecturer is unwell.',
+    canStartCheckIn: false,
+  },
+  'attendance-session-cancelled-no-reason': {
+    ...base,
+    sessionId: 'attendance-session-cancelled-no-reason',
+    sessionState: 'cancelled',
+    canStartCheckIn: false,
   },
 };

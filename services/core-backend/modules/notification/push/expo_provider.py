@@ -3,12 +3,18 @@ import logging
 import httpx
 
 from modules.notification.push.exception import ExpoNetworkError, ExpoServiceError
-from modules.notification.push.provider import PushMessage, PushReceipt
+from modules.notification.push.provider import (
+    PushDeliveryReceipt,
+    PushMessage,
+    PushReceipt,
+)
 
 logger = logging.getLogger(__name__)
 
 _EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
-_EXPO_CHUNK_SIZE = 100          # Expo limit per request
+_EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts"
+_EXPO_CHUNK_SIZE = 100
+_EXPO_RECEIPT_CHUNK_SIZE = 1000
 _INVALID_TOKEN_REASON = "DeviceNotRegistered"
 
 
@@ -89,6 +95,57 @@ class ExpoPushProvider:
             for i in range(len(messages))
         ]
 
+    async def fetch_receipts(
+        self,
+        provider_ids: list[str],
+    ) -> dict[str, PushDeliveryReceipt]:
+        if not provider_ids:
+            return {}
+
+        receipts: dict[str, PushDeliveryReceipt] = {}
+        for chunk in _chunks(provider_ids, _EXPO_RECEIPT_CHUNK_SIZE):
+            receipts.update(await self._fetch_receipt_chunk(chunk))
+        return receipts
+
+    async def _fetch_receipt_chunk(
+        self,
+        provider_ids: list[str],
+    ) -> dict[str, PushDeliveryReceipt]:
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        if self._access_token:
+            headers["Authorization"] = f"Bearer {self._access_token}"
+
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.post(
+                    _EXPO_RECEIPTS_URL,
+                    json={"ids": provider_ids},
+                    headers=headers,
+                )
+        except httpx.TimeoutException as exc:
+            raise ExpoNetworkError(
+                f"Expo receipt request timed out after {self._timeout}s."
+            ) from exc
+        except httpx.RequestError as exc:
+            raise ExpoNetworkError(
+                f"Network error while fetching Expo receipts: {exc}"
+            ) from exc
+
+        if response.status_code != 200:
+            raise ExpoServiceError(
+                "Expo Receipt API returned HTTP "
+                f"{response.status_code}: {response.text[:200]}"
+            )
+
+        data: dict[str, dict] = response.json().get("data", {})
+        return {
+            provider_id: _parse_delivery_receipt(provider_id, entry)
+            for provider_id, entry in data.items()
+        }
+
 
 # ---------------------------------------------------------------------------
 # Private helpers
@@ -131,6 +188,30 @@ def _parse_receipt(token: str, entry: dict) -> PushReceipt:
         provider_id=None,
         failure_reason=f"{error_type}: {message}" if error_type else message,
         is_invalid_token=is_invalid,
+    )
+
+
+def _parse_delivery_receipt(
+    provider_id: str,
+    entry: dict,
+) -> PushDeliveryReceipt:
+    expo_status: str = entry.get("status", "error")
+    if expo_status == "ok":
+        return PushDeliveryReceipt(
+            provider_id=provider_id,
+            status="ok",
+            failure_reason=None,
+            is_invalid_token=False,
+        )
+
+    details: dict = entry.get("details", {})
+    error_type: str | None = details.get("error")
+    message: str = entry.get("message", "Unknown Expo receipt error")
+    return PushDeliveryReceipt(
+        provider_id=provider_id,
+        status="error",
+        failure_reason=f"{error_type}: {message}" if error_type else message,
+        is_invalid_token=error_type == _INVALID_TOKEN_REASON,
     )
 
 

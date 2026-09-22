@@ -79,6 +79,7 @@ export function parseMyAttendance(value: unknown, sessionId: string): MyAttendan
     typeof value.sessionTitle !== 'string' ||
     typeof value.sessionType !== 'string' ||
     !['scheduled', 'active', 'closed', 'cancelled'].includes(String(value.sessionState)) ||
+    !(value.cancellationReason === null || typeof value.cancellationReason === 'string') ||
     !isDate(value.scheduledStartAt) || !isDate(value.scheduledEndAt) ||
     !isNullableDate(value.checkInOpensAt) || !isNullableDate(value.checkInClosesAt) ||
     !isNullableDate(value.lateAfterAt) ||

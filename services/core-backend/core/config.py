@@ -83,6 +83,19 @@ class Settings(BaseSettings):
     # enabled on the project. Leave blank for development / OSS projects.
     expo_push_timeout_seconds: float = Field(default=10.0, gt=0)
     expo_access_token: SecretStr | None = None
+    push_worker_enabled: bool = True
+    push_worker_poll_interval_seconds: float = Field(default=2.0, gt=0)
+    push_worker_batch_size: int = Field(default=100, ge=1, le=100)
+    push_worker_receipt_batch_size: int = Field(default=1000, ge=1, le=1000)
+    push_worker_receipt_delay_seconds: float = Field(default=15.0, ge=0)
+    push_worker_lease_timeout_seconds: float = Field(default=60.0, gt=0)
+    push_worker_max_attempts: int = Field(default=5, ge=1)
+    push_worker_retry_base_seconds: float = Field(default=5.0, gt=0)
+    push_worker_retry_max_seconds: float = Field(default=300.0, gt=0)
+    push_worker_shutdown_timeout_seconds: float = Field(default=15.0, gt=0)
+    reminder_scheduler_enabled: bool = True
+    reminder_scheduler_interval_seconds: float = Field(default=60.0, gt=0)
+    reminder_lead_minutes: int = Field(default=15, ge=1, le=1440)
 
     # General geofence safeguards. Session-specific radius, accuracy buffer and
     # maximum accuracy values are loaded from the session geofence snapshot.
@@ -155,6 +168,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_database_configuration(self) -> "Settings":
+        if self.push_worker_retry_max_seconds < self.push_worker_retry_base_seconds:
+            raise ValueError(
+                "PUSH_WORKER_RETRY_MAX_SECONDS must be greater than or equal "
+                "to PUSH_WORKER_RETRY_BASE_SECONDS"
+            )
         if self.db_uri:
             return self
 

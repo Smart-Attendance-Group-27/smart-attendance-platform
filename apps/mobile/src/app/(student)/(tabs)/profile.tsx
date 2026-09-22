@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useRouter } from 'expo-router';
 
 import { ProfileScreen } from '../../../features/profile/screens/ProfileScreen';
 import { CoreApiProfileService } from '../../../features/profile/services/coreApiProfileService';
@@ -7,6 +8,7 @@ import { CoreApiClient } from '../../../services/api/coreApiClient';
 
 export default function StudentProfileRoute() {
   const { session, signOut } = useAuth();
+  const router = useRouter();
   const accessToken = session.status === 'authenticated' ? session.accessToken : undefined;
 
   // Rebuilt when the token changes so a refreshed session is picked up. The
@@ -23,6 +25,7 @@ export default function StudentProfileRoute() {
   return (
     <ProfileScreen
       onSignOutPress={signOut}
+      onNotificationPreferencesPress={() => router.push('/(student)/notification-preferences' as never)}
       profileService={profileService}
       session={session}
     />

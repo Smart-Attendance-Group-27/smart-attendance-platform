@@ -60,6 +60,8 @@ export type ApiLecturerSession = {
   lateAfterAt: string | null;
   activatedAt: string | null;
   closedAt: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
   requiresFaceVerification: boolean;
   requiresGeofence: boolean;
   requiresQr: boolean;

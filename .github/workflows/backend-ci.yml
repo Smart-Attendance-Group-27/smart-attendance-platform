@@ -1,0 +1,63 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-checks:
+    name: ${{ matrix.service }} tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      # Report both services on every run. One failing suite must not hide the
+      # other's result.
+      fail-fast: false
+      matrix:
+        service:
+          - core-backend
+          - face-verification
+
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          # Matches the version both services deploy on (see each Dockerfile).
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/${{ matrix.service }}/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Deliberately no database environment variables. Every Settings object
+      # the suites build supplies its own values, and pydantic-settings reads
+      # the process environment even when a test passes _env_file=None - so a
+      # stray DB_URI here would override those values and fail
+      # face-verification's URL-building tests.
+      - name: Run tests
+        run: python -m pytest -q

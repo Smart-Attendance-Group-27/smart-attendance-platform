@@ -50,8 +50,8 @@ class DeviceTokenRepository:
         - is_active   → true
         - revoked_at  → NULL  (clear any previous revocation)
         - last_used_at → now()
-        The user_id is intentionally NOT updated on conflict so that an old
-        revoked token cannot be hijacked to spy on a different user.
+        Ownership follows the authenticated user presenting the token. Other
+        device tokens owned by either user are not modified.
         """
         row = await connection.fetchrow(
             """
@@ -62,7 +62,9 @@ class DeviceTokenRepository:
                 (gen_random_uuid(), $1, $2, $3,
                  true, now(), now(), NULL)
             ON CONFLICT (expo_push_token) DO UPDATE
-                SET is_active    = true,
+                SET user_id      = EXCLUDED.user_id,
+                    platform     = EXCLUDED.platform,
+                    is_active    = true,
                     revoked_at   = NULL,
                     last_used_at = now()
             RETURNING id, user_id, expo_push_token, platform,

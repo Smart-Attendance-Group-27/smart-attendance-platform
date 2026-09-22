@@ -89,6 +89,8 @@ class LecturerSessionResponse(BaseModel):
     late_after_at: datetime | None = Field(alias="lateAfterAt")
     activated_at: datetime | None = Field(alias="activatedAt")
     closed_at: datetime | None = Field(alias="closedAt")
+    cancelled_at: datetime | None = Field(alias="cancelledAt")
+    cancellation_reason: str | None = Field(alias="cancellationReason")
     requires_face_verification: bool = Field(alias="requiresFaceVerification")
     requires_geofence: bool = Field(alias="requiresGeofence")
     requires_qr: bool = Field(alias="requiresQr")
@@ -103,11 +105,20 @@ class LecturerSessionResponse(BaseModel):
     absent_count: int = Field(alias="absentCount")
     manual_count: int = Field(alias="manualCount")
     finalization: FinalizationResponse | None = None
+    # Populated only by the close endpoint, and only when finalization did
+    # not run (see LecturerSessionService.FINALIZATION_UNAVAILABLE_REASON).
+    # Every other endpoint - list, get, activate, create, cancel - leaves
+    # this None, the same way finalization above is already None everywhere
+    # except close.
+    finalization_unavailable_reason: str | None = Field(
+        default=None, alias="finalizationUnavailableReason",
+    )
 
     @staticmethod
     def from_record(
         record: LecturerSessionRecord,
         finalization: FinalizationSummary | None = None,
+        finalization_unavailable_reason: str | None = None,
     ) -> "LecturerSessionResponse":
         not_checked_in_count = (
             record.enrolled_count
@@ -129,6 +140,8 @@ class LecturerSessionResponse(BaseModel):
             late_after_at=record.late_after_at,
             activated_at=record.activated_at,
             closed_at=record.closed_at,
+            cancelled_at=record.cancelled_at,
+            cancellation_reason=record.cancellation_reason,
             requires_face_verification=record.requires_face_verification,
             requires_geofence=record.requires_geofence,
             requires_qr=record.requires_qr,
@@ -147,6 +160,7 @@ class LecturerSessionResponse(BaseModel):
                 if finalization is not None
                 else None
             ),
+            finalization_unavailable_reason=finalization_unavailable_reason,
         )
 
 

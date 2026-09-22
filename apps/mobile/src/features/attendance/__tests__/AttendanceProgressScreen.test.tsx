@@ -50,6 +50,30 @@ describe('AttendanceProgressScreen', () => {
     expect(screen.getByText('Set by your lecturer')).toBeTruthy();
   });
 
+  test('shows the cancellation reason for a cancelled session', async () => {
+    const screen = await render(<AttendanceProgressScreen
+      attendanceService={serviceFor('attendance-session-cancelled')}
+      onReturnHome={jest.fn()}
+      onStartCheckIn={jest.fn()}
+      sessionId="attendance-session-cancelled"
+    />);
+
+    expect(await screen.findByText('Session cancelled')).toBeTruthy();
+    expect(screen.getByText('The lecturer is unwell.')).toBeTruthy();
+  });
+
+  test('falls back to a plain message when no cancellation reason was recorded', async () => {
+    const screen = await render(<AttendanceProgressScreen
+      attendanceService={serviceFor('attendance-session-cancelled-no-reason')}
+      onReturnHome={jest.fn()}
+      onStartCheckIn={jest.fn()}
+      sessionId="attendance-session-cancelled-no-reason"
+    />);
+
+    expect(await screen.findByText('Session cancelled')).toBeTruthy();
+    expect(screen.getByText('No reason was recorded.')).toBeTruthy();
+  });
+
   test('shows a voided batch without counting it as required or passed', async () => {
     const attendanceService: AttendanceService = {
       ...serviceFor('attendance-session-checked-in'),

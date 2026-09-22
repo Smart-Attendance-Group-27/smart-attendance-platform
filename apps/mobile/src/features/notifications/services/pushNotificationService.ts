@@ -112,33 +112,14 @@ export async function registerForPushNotifications(
     };
   }
 
+  // The token itself is a delivery credential: anyone holding it can push to
+  // this device. Log that registration happened, never what was registered.
   console.info(
     '[PushNotifications] Device token registered successfully.',
-    { platform, expoPushToken },
+    { platform },
   );
 
-  // Trigger an immediate confirmation notification on device
-  try {
-    await sendLocalTestNotification();
-  } catch (notifyErr) {
-    console.warn('[PushNotifications] Local confirmation display failed:', notifyErr);
-  }
-
   return { status: 'registered' };
-}
-
-/**
- * Send an immediate test notification to verify Android channels and permissions.
- */
-export async function sendLocalTestNotification(): Promise<void> {
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'UniAttend Push Service',
-      body: 'Notifications are active and configured on your device!',
-      sound: true,
-    },
-    trigger: null,
-  });
 }
 
 function resolvePlatform(): 'android' | 'ios' | 'web' {
@@ -152,18 +133,30 @@ function resolvePlatform(): 'android' | 'ios' | 'web' {
  */
 export async function revokePushNotifications(
   coreApiClient: CoreApiClient,
-  expoPushToken: string,
+  expoPushToken?: string,
 ): Promise<boolean> {
   try {
+    if (!Device.isDevice) {
+      return false;
+    }
+    const token = expoPushToken ?? (
+      await Notifications.getExpoPushTokenAsync(resolveProjectId())
+    ).data;
     const result = await coreApiClient.post<unknown>(
       `${deviceRegistrationPath}/revoke`,
       {
-        expo_push_token: expoPushToken,
+        expo_push_token: token,
       },
     );
     return result.status === 'ok';
-  } catch (err) {
-    console.warn('[PushNotifications] Failed to revoke push token:', err);
+  } catch {
+    console.warn('[PushNotifications] Failed to revoke push token.');
     return false;
   }
+}
+
+function resolveProjectId(): { projectId: string } | undefined {
+  const projectId =
+    Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId;
+  return projectId ? { projectId } : undefined;
 }

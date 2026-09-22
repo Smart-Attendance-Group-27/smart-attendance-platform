@@ -1,5 +1,6 @@
 from collections import defaultdict
 from collections.abc import Sequence
+from datetime import timedelta
 from uuid import UUID
 
 import asyncpg
@@ -157,3 +158,83 @@ class NotificationProducerRepository:
             session_id,
         )
         return [row["user_id"] for row in rows]
+
+    async def enqueue_upcoming_class_reminders(
+        self,
+        connection: asyncpg.Connection,
+        *,
+        lead_minutes: int,
+    ) -> int:
+        row = await connection.fetchrow(
+            """
+            WITH candidates AS (
+                SELECT DISTINCT
+                    session.id AS session_id,
+                    student.user_id,
+                    course.course_name,
+                    COALESCE(pref.in_app_enabled, type.default_in_app_enabled, true)
+                        AS in_app_enabled,
+                    COALESCE(pref.push_enabled, type.default_push_enabled, true)
+                        AS push_enabled
+                FROM attendance_session.sessions session
+                JOIN attendance_session.session_students roster
+                  ON roster.session_id = session.id
+                JOIN academic.student_profiles student
+                  ON student.id = roster.student_id
+                JOIN academic.course_offerings offering
+                  ON offering.id = session.course_offering_id
+                JOIN academic.courses course
+                  ON course.id = offering.course_id
+                JOIN notification.notification_types type
+                  ON type.code = 'UPCOMING_CLASS'
+                 AND type.is_active IS TRUE
+                LEFT JOIN notification.notification_preferences pref
+                  ON pref.user_id = student.user_id
+                 AND pref.notification_type = type.code
+                WHERE session.status = 'scheduled'
+                  AND session.scheduled_start_at > now()
+                  AND session.scheduled_start_at
+                      <= now() + $1::interval
+            ), inserted AS (
+                INSERT INTO notification.notifications (
+                    id, recipient_user_id, notification_type,
+                    title, body, priority,
+                    related_entity_type, related_entity_id,
+                    in_app_visible, created_at
+                )
+                SELECT
+                    gen_random_uuid(), user_id, 'UPCOMING_CLASS',
+                    'Class starting soon',
+                    course_name || ' starts within ' || $2 || ' minutes.',
+                    'normal', 'ATTENDANCE_SESSION', session_id,
+                    in_app_enabled, now()
+                FROM candidates
+                WHERE in_app_enabled OR push_enabled
+                ON CONFLICT DO NOTHING
+                RETURNING id, recipient_user_id, related_entity_id
+            ), attempts AS (
+                INSERT INTO notification.delivery_attempts (
+                    id, notification_id, channel, device_token_id,
+                    attempt_number, delivery_status, queued_at
+                )
+                SELECT
+                    gen_random_uuid(), inserted.id, 'push', token.id,
+                    0, 'queued', now()
+                FROM inserted
+                JOIN candidates
+                  ON candidates.user_id = inserted.recipient_user_id
+                 AND candidates.session_id = inserted.related_entity_id
+                 AND candidates.push_enabled IS TRUE
+                JOIN notification.device_tokens token
+                  ON token.user_id = inserted.recipient_user_id
+                 AND token.is_active IS TRUE
+                 AND token.revoked_at IS NULL
+                 AND lower(token.platform) = 'android'
+                RETURNING id
+            )
+            SELECT count(*) AS created_count FROM inserted
+            """,
+            timedelta(minutes=lead_minutes),
+            lead_minutes,
+        )
+        return int(row["created_count"]) if row else 0
