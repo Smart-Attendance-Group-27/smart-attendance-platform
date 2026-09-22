@@ -1,3 +1,5 @@
+import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
@@ -176,14 +178,16 @@ class FakeLecturerSessionRepository:
         self.cancel_reason: str | None = None
         self.create_session_kwargs: dict | None = None
         self.create_session_geofence_kwargs: dict | None = None
+        self.activate_kwargs: dict | None = None
 
     async def find_for_lecturer(self, connection, session_id, lecturer_id, *, lock_for_update=False):
         if self.calls and self.calls[-1] in ("activate", "close", "cancel", "create_session"):
             return self.after
         return self.before
 
-    async def activate(self, connection, session_id) -> None:
+    async def activate(self, connection, session_id, **kwargs) -> None:
         self.calls.append("activate")
+        self.activate_kwargs = kwargs
 
     async def close(self, connection, session_id) -> None:
         self.calls.append("close")
@@ -228,6 +232,177 @@ async def test_activate_writes_an_audit_log_entry() -> None:
     assert audit_args[2] == "session.activate"
     assert audit_args[3] == "attendance_session"
     assert audit_args[4] == SESSION_ID
+
+
+# --- activation recomputes the check-in window (Phase 2, activation timing) --
+
+
+async def test_activate_passes_its_own_clock_reading_as_activated_at() -> None:
+    # The window recompute needs the exact instant activation happened, so it
+    # must come from the service's own clock rather than a second, separately
+    # evaluated now() at the database — see repository.activate's docstring.
+    before = build_session()
+    after = build_session(activated_at=CURRENT_TIME)
+    repository = FakeLecturerSessionRepository(before, after)
+    activated_at = CURRENT_TIME + timedelta(minutes=20)
+    service = LecturerSessionService(
+        repository=repository,
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        clock=lambda: activated_at,
+    )
+
+    await service.activate_for_user(FakePool(), ACTOR_ID, SESSION_ID)
+
+    assert repository.activate_kwargs["activated_at"] == activated_at
+
+
+async def test_a_late_activation_recomputes_every_derived_field_from_the_effective_start() -> None:
+    # build_session()'s check-in fields are all derived (explicit defaults to
+    # False), so a late activation should move all three.
+    before = build_session()
+    after = build_session(activated_at=CURRENT_TIME)
+    repository = FakeLecturerSessionRepository(before, after)
+    activated_at = CURRENT_TIME + timedelta(minutes=20)
+    policy = FakeAttendancePolicyProvider(
+        AttendancePolicy(
+            check_in_window_minutes=15,
+            late_threshold_minutes=10,
+            qr_default_validity_minutes=5,
+        )
+    )
+    service = LecturerSessionService(
+        repository=repository,
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        attendance_policy=policy,
+        clock=lambda: activated_at,
+    )
+
+    await service.activate_for_user(FakePool(), ACTOR_ID, SESSION_ID)
+
+    kwargs = repository.activate_kwargs
+    assert kwargs["check_in_opens_at"] == activated_at
+    assert kwargs["check_in_closes_at"] == activated_at + timedelta(minutes=15)
+    assert kwargs["late_after_at"] == activated_at + timedelta(minutes=10)
+
+
+async def test_an_early_activation_does_not_open_the_window_before_the_scheduled_start() -> None:
+    before = build_session()
+    after = build_session(activated_at=CURRENT_TIME)
+    repository = FakeLecturerSessionRepository(before, after)
+    activated_at = CURRENT_TIME - timedelta(minutes=26)
+    service = LecturerSessionService(
+        repository=repository,
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        clock=lambda: activated_at,
+    )
+
+    await service.activate_for_user(FakePool(), ACTOR_ID, SESSION_ID)
+
+    # before.scheduled_start_at is CURRENT_TIME; the effective start can never
+    # be earlier than that, no matter how early activation happens.
+    assert repository.activate_kwargs["check_in_opens_at"] == CURRENT_TIME
+
+
+async def test_an_explicit_field_survives_a_late_activation_unchanged() -> None:
+    lecturer_chosen_opens_at = CURRENT_TIME - timedelta(minutes=15)
+    before = build_session()
+    before = replace(
+        before,
+        check_in_opens_at=lecturer_chosen_opens_at,
+        check_in_opens_at_explicit=True,
+    )
+    after = build_session(activated_at=CURRENT_TIME)
+    repository = FakeLecturerSessionRepository(before, after)
+    activated_at = CURRENT_TIME + timedelta(minutes=20)
+    service = LecturerSessionService(
+        repository=repository,
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        clock=lambda: activated_at,
+    )
+
+    await service.activate_for_user(FakePool(), ACTOR_ID, SESSION_ID)
+
+    kwargs = repository.activate_kwargs
+    # The lecturer's own choice is untouched...
+    assert kwargs["check_in_opens_at"] == lecturer_chosen_opens_at
+    # ...while the two fields nobody pinned still move. No policy is bound in
+    # this test, so both fall back to their built-in defaults: closes pins to
+    # the scheduled end, and late is the effective start plus the built-in
+    # default, clamped to that same close time.
+    assert kwargs["check_in_closes_at"] == before.scheduled_end_at
+    assert kwargs["late_after_at"] == activated_at + timedelta(minutes=10)
+
+
+async def test_activation_with_every_field_explicit_writes_back_the_stored_window_unchanged() -> None:
+    stored_opens = CURRENT_TIME - timedelta(minutes=5)
+    stored_closes = CURRENT_TIME + timedelta(minutes=25)
+    stored_late = CURRENT_TIME + timedelta(minutes=15)
+    before = build_session()
+    before = replace(
+        before,
+        check_in_opens_at=stored_opens,
+        check_in_closes_at=stored_closes,
+        late_after_at=stored_late,
+        check_in_opens_at_explicit=True,
+        check_in_closes_at_explicit=True,
+        late_after_at_explicit=True,
+    )
+    after = build_session(activated_at=CURRENT_TIME)
+    repository = FakeLecturerSessionRepository(before, after)
+    activated_at = CURRENT_TIME + timedelta(minutes=20)
+    service = LecturerSessionService(
+        repository=repository,
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        clock=lambda: activated_at,
+    )
+
+    await service.activate_for_user(FakePool(), ACTOR_ID, SESSION_ID)
+
+    kwargs = repository.activate_kwargs
+    assert kwargs["check_in_opens_at"] == stored_opens
+    assert kwargs["check_in_closes_at"] == stored_closes
+    assert kwargs["late_after_at"] == stored_late
+
+
+async def test_activation_with_no_policy_falls_back_to_the_built_in_default() -> None:
+    before = build_session()
+    after = build_session(activated_at=CURRENT_TIME)
+    repository = FakeLecturerSessionRepository(before, after)
+    activated_at = CURRENT_TIME + timedelta(minutes=5)
+    service = LecturerSessionService(
+        repository=repository,
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        clock=lambda: activated_at,
+    )
+
+    await service.activate_for_user(FakePool(), ACTOR_ID, SESSION_ID)
+
+    kwargs = repository.activate_kwargs
+    assert kwargs["check_in_closes_at"] == before.scheduled_end_at
+    assert kwargs["late_after_at"] == activated_at + timedelta(minutes=10)
+
+
+async def test_the_audit_log_records_the_recomputed_window() -> None:
+    before = build_session()
+    after = build_session(activated_at=CURRENT_TIME)
+    repository = FakeLecturerSessionRepository(before, after)
+    activated_at = CURRENT_TIME + timedelta(minutes=20)
+    service = LecturerSessionService(
+        repository=repository,
+        lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
+        clock=lambda: activated_at,
+    )
+    pool = FakePool()
+
+    await service.activate_for_user(pool, ACTOR_ID, SESSION_ID)
+
+    audit_args = pool.connection.executed_args[0]
+    new_values = json.loads(audit_args[8])
+    # `after` (what find_for_lecturer returns post-write) carries the window
+    # values, and those are what the audit entry must reflect.
+    assert new_values["checkInOpensAt"] == after.check_in_opens_at.isoformat()
+    assert new_values["checkInClosesAt"] == after.check_in_closes_at.isoformat()
+    assert new_values["lateAfterAt"] == after.late_after_at.isoformat()
 
 
 async def test_close_writes_an_audit_log_entry() -> None:

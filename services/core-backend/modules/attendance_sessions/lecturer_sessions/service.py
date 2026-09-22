@@ -1,6 +1,7 @@
 import asyncio
+from collections.abc import Callable
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -22,7 +23,9 @@ from modules.attendance_sessions.lecturer_sessions.exception import (
     TimetableEntryNotFoundError,
 )
 from modules.attendance_sessions.lecturer_sessions.activation_timing import (
+    CheckInWindow,
     ExplicitCheckInFields,
+    resolve_check_in_window_on_activation,
 )
 from modules.attendance_sessions.lecturer_sessions.repository import (
     LecturerSessionRecord,
@@ -69,6 +72,7 @@ class LecturerSessionService:
         notification_producer: NotificationProducer | None = None,
         finalization_repository: FinalizationRepository | None = None,
         attendance_policy: AttendancePolicyProvider | None = None,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._repository = repository or LecturerSessionRepository()
         self._lecturer_profile_repository = (
@@ -80,6 +84,7 @@ class LecturerSessionService:
         self._notification_producer = notification_producer or NoOpNotificationProducer()
         self._finalization_repository = finalization_repository
         self._attendance_policy = attendance_policy or DefaultAttendancePolicyProvider()
+        self._clock = clock or self._utc_now
 
     async def list_for_user(
         self,
@@ -127,7 +132,17 @@ class LecturerSessionService:
             if record.activated_at is not None:
                 raise SessionAlreadyActiveError()
 
-            await self._repository.activate(connection, session_id)
+            activated_at = self._as_utc(self._clock())
+            window = await self._resolve_activation_window(connection, record, activated_at)
+
+            await self._repository.activate(
+                connection,
+                session_id,
+                activated_at=activated_at,
+                check_in_opens_at=window.check_in_opens_at,
+                check_in_closes_at=window.check_in_closes_at,
+                late_after_at=window.late_after_at,
+            )
             updated = await self._repository.find_for_lecturer(connection, session_id, lecturer_id)
             assert updated is not None
 
@@ -139,7 +154,12 @@ class LecturerSessionService:
                 entity_type=AUDIT_ENTITY_TYPE,
                 entity_id=session_id,
                 old_values={"activatedAt": None},
-                new_values={"activatedAt": updated.activated_at.isoformat()},
+                new_values={
+                    "activatedAt": updated.activated_at.isoformat(),
+                    "checkInOpensAt": updated.check_in_opens_at.isoformat(),
+                    "checkInClosesAt": updated.check_in_closes_at.isoformat(),
+                    "lateAfterAt": updated.late_after_at.isoformat(),
+                },
             )
 
             await announce(
@@ -556,6 +576,51 @@ class LecturerSessionService:
 
         return opens, closes, late_after
 
+    async def _resolve_activation_window(
+        self,
+        connection: asyncpg.Connection,
+        record: LecturerSessionRecord,
+        activated_at: datetime,
+    ) -> CheckInWindow:
+        """The check-in window this activation should store.
+
+        Delegates to the pure recompute in ``activation_timing``: a field the
+        lecturer explicitly supplied at creation is preserved untouched; a
+        field left for the policy to decide moves with the session's
+        effective start, so a late activation does not strand students in a
+        window that already closed and an early one does not open the window
+        before the lecture is due to begin.
+        """
+
+        policy = await self._attendance_policy.get_active(connection)
+
+        # A pre-existing row could in principle have a null timing field —
+        # nothing in this service writes one, but the column itself allows
+        # it. Falling back to the session's own schedule keeps this total
+        # rather than crashing on data nothing here produced. Because the
+        # migration backfills every existing row's explicit flags to false,
+        # a field in this state is already being recomputed, not preserved,
+        # so the fallback value is never actually surfaced.
+        current = CheckInWindow(
+            check_in_opens_at=record.check_in_opens_at or record.scheduled_start_at,
+            check_in_closes_at=record.check_in_closes_at or record.scheduled_end_at,
+            late_after_at=record.late_after_at or record.scheduled_end_at,
+        )
+        explicit = ExplicitCheckInFields(
+            check_in_opens_at=record.check_in_opens_at_explicit,
+            check_in_closes_at=record.check_in_closes_at_explicit,
+            late_after_at=record.late_after_at_explicit,
+        )
+
+        return resolve_check_in_window_on_activation(
+            scheduled_start_at=record.scheduled_start_at,
+            scheduled_end_at=record.scheduled_end_at,
+            activated_at=activated_at,
+            policy=policy,
+            current=current,
+            explicit=explicit,
+        )
+
     async def _resolve_active_lecturer_id(
         self,
         connection: asyncpg.Connection,
@@ -565,6 +630,16 @@ class LecturerSessionService:
         if profile is None or profile.profile_status != ACTIVE_PROFILE_STATUS:
             raise LecturerProfileNotFoundError("No active lecturer profile exists for this account.")
         return profile.id
+
+    @staticmethod
+    def _utc_now() -> datetime:
+        return datetime.now(UTC)
+
+    @staticmethod
+    def _as_utc(value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("clock must include a timezone")
+        return value.astimezone(UTC)
 
 
 _LATITUDE_RANGE = (Decimal("-90"), Decimal("90"))

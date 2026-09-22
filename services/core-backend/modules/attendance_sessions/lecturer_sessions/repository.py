@@ -257,14 +257,37 @@ class LecturerSessionRepository:
             return None
         return _row_to_record(row)
 
-    async def activate(self, connection: asyncpg.Connection, session_id: UUID) -> None:
+    async def activate(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+        *,
+        activated_at: datetime,
+        check_in_opens_at: datetime,
+        check_in_closes_at: datetime,
+        late_after_at: datetime,
+    ) -> None:
+        # activated_at is supplied by the caller rather than read back from
+        # now(): the service needs that exact instant to compute the check-in
+        # window (effective_start = max(scheduled_start_at, activated_at)),
+        # and a second, separately-evaluated now() here could disagree with
+        # it by however long the round trip to the database takes.
         await connection.execute(
             """
             UPDATE attendance_session.sessions
-            SET activated_at = now(), status = $2, updated_at = now()
+            SET activated_at = $2,
+                check_in_opens_at = $3,
+                check_in_closes_at = $4,
+                late_after_at = $5,
+                status = $6,
+                updated_at = now()
             WHERE id = $1
             """,
             session_id,
+            activated_at,
+            check_in_opens_at,
+            check_in_closes_at,
+            late_after_at,
             SESSION_ACTIVE_STATUS,
         )
 
