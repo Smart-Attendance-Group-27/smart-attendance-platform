@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections.abc import Sequence
 from uuid import UUID, uuid4
 
@@ -151,13 +152,16 @@ class NotificationProducer(NotificationProducerProtocol):
             return []
 
         course_name, _ = await self._repository.fetch_session_course_info(connection, session_id)
-        created_ids: list[UUID] = []
-
+        recipients_by_status: dict[FinalAttendanceStatus, list[UUID]] = defaultdict(list)
         for student_user_id, status in results:
+            recipients_by_status[status].append(student_user_id)
+
+        created_ids: list[UUID] = []
+        for status, recipient_user_ids in recipients_by_status.items():
             status_str = status.value.capitalize()
             ids = await self.notify_users(
                 connection,
-                recipient_user_ids=[student_user_id],
+                recipient_user_ids=recipient_user_ids,
                 type_code="ATTENDANCE_RESULT",
                 title="Attendance Recorded",
                 body=f"Your attendance for {course_name} has been recorded as {status_str}.",
