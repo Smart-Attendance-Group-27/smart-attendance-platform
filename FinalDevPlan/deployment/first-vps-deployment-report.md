@@ -94,8 +94,11 @@ Change them after handoff.
 
 1. Obtain the required reviews for PR #91, merge, confirm GHCR images publish,
    and redeploy the exact merged main SHA. Run smoke tests once more.
-2. Test on an Android physical device and run a supervised attendance pilot.
-   Attendance face enforcement remains disabled while liveness is unfinished.
+2. Obtain Expo EAS access: the configured project belongs to `techumeda55`,
+   while this workstation's `manushanhasanka` account is denied project read
+   access. Then build the updated preview APK, test on an Android physical
+   device, and run a supervised attendance pilot. Attendance face enforcement
+   remains disabled while liveness is unfinished.
 3. Create a Cloudflare account and private R2 bucket when approved reference
    photos are ready. The enrollment storage adapter is a separate product PR;
    R2 is not active in this release.
