@@ -21,6 +21,9 @@ async def test_reminder_repository_uses_database_idempotency_guard() -> None:
     assert created == 2
     query = connection.fetchrow.call_args.args[0]
     assert "ON CONFLICT DO NOTHING" in query
+    assert "NOT EXISTS" in query
+    assert "existing.related_entity_id = session.id" in query
+    assert "existing.recipient_user_id = student.user_id" in query
     assert "notification_preferences" in query
     assert "delivery_attempts" in query
 
@@ -54,7 +57,7 @@ class Pool:
 @pytest.mark.asyncio
 async def test_scheduler_is_idempotent_across_repeated_runs() -> None:
     producer = AsyncMock()
-    producer.upcoming_class_reminders.side_effect = [2, 0]
+    producer.upcoming_class_reminders.side_effect = [1, 0]
     scheduler = UpcomingClassReminderScheduler(
         pool=Pool(),  # type: ignore[arg-type]
         interval_seconds=1,
@@ -62,7 +65,7 @@ async def test_scheduler_is_idempotent_across_repeated_runs() -> None:
         producer=producer,
     )
 
-    assert await scheduler.run_once() == 2
+    assert await scheduler.run_once() == 1
     assert await scheduler.run_once() == 0
     assert producer.upcoming_class_reminders.await_count == 2
 

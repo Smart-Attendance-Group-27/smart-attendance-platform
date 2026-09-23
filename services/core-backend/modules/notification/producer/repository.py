@@ -195,6 +195,14 @@ class NotificationProducerRepository:
                   AND session.scheduled_start_at > now()
                   AND session.scheduled_start_at
                       <= now() + $1::interval
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM notification.notifications existing
+                      WHERE existing.notification_type = 'UPCOMING_CLASS'
+                        AND existing.related_entity_type = 'ATTENDANCE_SESSION'
+                        AND existing.related_entity_id = session.id
+                        AND existing.recipient_user_id = student.user_id
+                  )
             ), inserted AS (
                 INSERT INTO notification.notifications (
                     id, recipient_user_id, notification_type,
