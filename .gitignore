@@ -16,6 +16,8 @@ coverage/
 .env.*
 !.env.example
 deployment/mvp.env
+deployment/private.env
+deployment/private-realm.json
 
 # Logs
 *.log

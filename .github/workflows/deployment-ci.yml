@@ -15,6 +15,7 @@ on:
       - "services/core-backend/requirements.txt"
       - "services/face-verification/Dockerfile"
       - "services/face-verification/requirements.txt"
+      - "deployment/keycloak/Dockerfile"
       - "package.json"
       - "package-lock.json"
   push:
@@ -31,6 +32,7 @@ on:
       - "services/core-backend/requirements.txt"
       - "services/face-verification/Dockerfile"
       - "services/face-verification/requirements.txt"
+      - "deployment/keycloak/Dockerfile"
       - "package.json"
       - "package-lock.json"
   workflow_dispatch:
@@ -65,7 +67,10 @@ jobs:
           fi
 
       - name: Validate production Compose model
-        run: docker compose --env-file deployment/mvp.env.example -f docker-compose.production.yml config --quiet
+        run: |
+          docker compose --env-file deployment/mvp.env.example -f docker-compose.production.yml config --quiet
+          docker compose --env-file deployment/private.env.example -f deployment/compose.app.yml config --quiet
+          docker compose --env-file deployment/private.env.example -f deployment/compose.face.yml config --quiet
 
       - name: Rebuild and verify the production schema
         shell: bash
@@ -114,4 +119,43 @@ jobs:
             < deployment/verify_mvp_schema.sql
 
       - name: Build production images
-        run: docker compose --env-file deployment/mvp.env.example -f docker-compose.production.yml build
+        run: |
+          docker compose --env-file deployment/mvp.env.example -f docker-compose.production.yml build
+          docker build -f deployment/keycloak/Dockerfile -t uniattend-keycloak:ci deployment/keycloak
+
+  publish:
+    name: Publish immutable release images
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: production-containers
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Authenticate to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build and publish commit-tagged images
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix="ghcr.io/${GITHUB_REPOSITORY,,}"
+          source="https://github.com/${GITHUB_REPOSITORY}"
+          docker build --label "org.opencontainers.image.source=$source" \
+            -f apps/web/Dockerfile --target production \
+            -t "$prefix/web:$GITHUB_SHA" .
+          docker build --label "org.opencontainers.image.source=$source" \
+            -f services/core-backend/Dockerfile \
+            -t "$prefix/core-api:$GITHUB_SHA" services/core-backend
+          docker build --label "org.opencontainers.image.source=$source" \
+            -f services/face-verification/Dockerfile \
+            -t "$prefix/face-verification:$GITHUB_SHA" services/face-verification
+          docker build --label "org.opencontainers.image.source=$source" \
+            -f deployment/keycloak/Dockerfile \
+            -t "$prefix/keycloak:$GITHUB_SHA" deployment/keycloak
+          for image in web core-api face-verification keycloak; do
+            docker push "$prefix/$image:$GITHUB_SHA"
+          done
