@@ -245,8 +245,12 @@ describe('LivenessCamera', () => {
 
   test('shows a recoverable local failure and restarts through the controller', async () => {
     const fake = createFakeController();
+    const onSuccess = jest.fn();
     const screen = await render(
-      <LivenessCamera controllerFactory={() => fake.controller} />,
+      <LivenessCamera
+        controllerFactory={() => fake.controller}
+        onSuccess={onSuccess}
+      />,
     );
     await screen.findByText('Turn your head left');
 
@@ -263,6 +267,7 @@ describe('LivenessCamera', () => {
         'Keep your face fully visible inside the guide and try again.',
       ),
     ).toBeTruthy();
+    expect(onSuccess).not.toHaveBeenCalled();
 
     await fireEvent.press(screen.getByRole('button', { name: 'Try Again' }));
     expect(fake.controller.restart).toHaveBeenCalledTimes(1);
