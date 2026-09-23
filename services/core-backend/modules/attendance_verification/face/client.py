@@ -121,7 +121,7 @@ class FaceVerificationServiceClient:
             or status_value not in allowed_statuses
             or not isinstance(attempt_number, int)
             or isinstance(attempt_number, bool)
-            or attempt_number < 1
+            or attempt_number < 0
             or not isinstance(can_retry, bool)
         ):
             return None

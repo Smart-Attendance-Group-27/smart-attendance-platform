@@ -107,7 +107,7 @@ function toFaceVerificationResult(value: unknown): FaceVerificationResult {
     !supportedStatuses.has(response.status) ||
     typeof response.attemptNumber !== 'number' ||
     !Number.isInteger(response.attemptNumber) ||
-    response.attemptNumber < 1 ||
+    response.attemptNumber < 0 ||
     typeof response.canRetry !== 'boolean'
   ) {
     return { status: 'verification_failure', canRetry: true };

@@ -115,7 +115,10 @@ async def verify_attendance_face(
     if liveness is not None and len(liveness) > MAX_LIVENESS_CHARS:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail="The liveness evidence is too large",
+            detail=error_detail(
+                "LIVENESS_EVIDENCE_TOO_LARGE",
+                "The liveness evidence is too large",
+            ),
         )
 
     if image.content_type not in ALLOWED_IMAGE_TYPES:

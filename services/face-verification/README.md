@@ -226,6 +226,22 @@ After reviewing the summary, explicitly enable database writes:
 python -m scripts.enroll_reference_faces "C:\path\to\approved-reference-photos" --commit
 ```
 
+### Local burst verification
+
+The burst harness exercises the real InsightFace engine and concurrent HTTP verification
+path against a disposable cohort in local PostgreSQL. It refuses every database host except
+`localhost`, `127.0.0.1`, `::1`, and `host.docker.internal`, and removes its synthetic rows in
+a `finally` block:
+
+```powershell
+python -m scripts.burst_verify reference.jpg capture.jpg --requests 30
+```
+
+Run it only after loading the baseline and all migrations into local PostgreSQL. The report
+includes response-status counts, p50/p95/p99 latency, pool checkouts and checkout waits, peak
+pool use, and append-only attempt-number integrity. The two images remain local and are never
+written to the database by the harness.
+
 The script accepts `.jpg`, `.jpeg`, and `.png` files directly inside the
 specified directory. It skips duplicate registration numbers, inactive
 students, revoked profiles, and profiles that are already enrolled. It never

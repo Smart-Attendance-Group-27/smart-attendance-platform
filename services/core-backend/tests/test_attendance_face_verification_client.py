@@ -97,3 +97,36 @@ async def test_preserves_missing_liveness_for_downstream_enforcement() -> None:
         },
         data=None,
     )
+
+
+@pytest.mark.asyncio
+async def test_accepts_zero_attempts_for_a_non_consuming_failure() -> None:
+    client = FaceVerificationServiceClient(
+        base_url="http://face-verification:8001",
+        timeout_seconds=30,
+    )
+    response = httpx.Response(
+        200,
+        json={
+            "status": "processing_failed",
+            "attemptNumber": 0,
+            "canRetry": True,
+        },
+    )
+
+    with patch(
+        "modules.attendance_verification.face.client.httpx.AsyncClient.post",
+        new_callable=AsyncMock,
+        return_value=response,
+    ):
+        result = await client.verify_attendance_face(
+            session_id=SESSION_ID,
+            access_token="student-token",
+            image=b"original-image-bytes",
+            content_type="image/jpeg",
+            liveness=LIVENESS_JSON,
+        )
+
+    assert result.status == "processing_failed"
+    assert result.attempt_number == 0
+    assert result.can_retry is True

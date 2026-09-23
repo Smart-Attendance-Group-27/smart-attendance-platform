@@ -100,9 +100,8 @@ def build_enforced_face_app(
         del session_id
         received_liveness.append(liveness_field)
         try:
-            evidence = liveness.validate_optional_liveness_evidence(
+            evidence = liveness.validate_liveness_evidence(
                 liveness_field,
-                enforcement_enabled=True,
             )
         except liveness.LivenessEvidenceValidationError:
             return JSONResponse(
@@ -277,6 +276,36 @@ def test_forwards_the_liveness_field_when_the_client_sends_one(
         )
 
     assert service.calls[0]["liveness"] == LIVENESS_JSON
+
+
+def test_rejects_oversized_liveness_with_structured_error(
+    jwks_document,
+    make_access_token,
+) -> None:
+    service = StubFaceVerificationClient(
+        InternalFaceVerificationResult(
+            status="passed",
+            attempt_number=1,
+            can_retry=False,
+        )
+    )
+
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            URL,
+            headers={"Authorization": f"Bearer {make_access_token()}"},
+            files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+            data={"liveness": "x" * 4097},
+        )
+
+    assert response.status_code == 413
+    assert response.json() == {
+        "detail": {
+            "code": "LIVENESS_EVIDENCE_TOO_LARGE",
+            "message": "The liveness evidence is too large",
+        }
+    }
+    assert service.calls == []
 
 
 def test_missing_liveness_is_rejected_through_the_backend_chain(

@@ -8,7 +8,11 @@ from typing import Any
 import pytest
 
 from adapters.insightface_engine import InsightFaceEngine
-from services.face_engine import FaceAnalysisStatus, FaceEngine
+from services.face_engine import (
+    FaceAnalysisStatus,
+    FaceEngine,
+    FaceInferenceQueueTimeoutError,
+)
 
 
 class FakeAnalyzer:
@@ -57,6 +61,7 @@ def create_engine(analyzer: FakeAnalyzer,*,decoder=lambda _: "decoded-image",) -
         model_name="test-model",
         minimum_detection_confidence=0.60,
         max_concurrent_inferences=1,
+        inference_queue_timeout_seconds=1,
     )
 
 
@@ -159,6 +164,7 @@ def test_limits_shared_model_to_one_inference_at_a_time() -> None:
         model_name="test-model",
         minimum_detection_confidence=0.60,
         max_concurrent_inferences=1,
+        inference_queue_timeout_seconds=1,
     )
 
     async def analyze_three_images() -> list[Any]:
@@ -172,3 +178,36 @@ def test_limits_shared_model_to_one_inference_at_a_time() -> None:
 
     assert all(result.status is FaceAnalysisStatus.SUCCESS for result in results)
     assert analyzer.maximum_active_calls == 1
+
+
+def test_times_out_while_waiting_for_inference_capacity() -> None:
+    started = threading.Event()
+
+    class BlockingAnalyzer(FakeAnalyzer):
+        def get(self, image: Any) -> list[Any]:
+            started.set()
+            time.sleep(0.1)
+            return [
+                SimpleNamespace(
+                    det_score=0.98,
+                    normed_embedding=(1.0, 0.0),
+                )
+            ]
+
+    engine = InsightFaceEngine(
+        analyzer=BlockingAnalyzer(),
+        image_decoder=lambda _: "decoded-image",
+        model_name="test-model",
+        minimum_detection_confidence=0.60,
+        max_concurrent_inferences=1,
+        inference_queue_timeout_seconds=0.01,
+    )
+
+    async def exercise_queue_timeout() -> None:
+        first = asyncio.create_task(engine.analyze(b"first"))
+        await asyncio.to_thread(started.wait, 1)
+        with pytest.raises(FaceInferenceQueueTimeoutError):
+            await engine.analyze(b"second")
+        assert (await first).status is FaceAnalysisStatus.SUCCESS
+
+    asyncio.run(exercise_queue_timeout())

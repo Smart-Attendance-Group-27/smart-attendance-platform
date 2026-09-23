@@ -21,6 +21,7 @@ from repositories.attendance_face_verification_repository import (
 from repositories.face_profile_repository import StoredFaceEmbedding
 from services import liveness_evidence as liveness_evidence_module
 from services.attendance_face_verification_service import (
+    AttendanceFaceVerificationBusyError,
     AttendanceFaceVerificationResult,
     AttendanceFaceVerificationService,
     AttendanceFaceVerificationStatus,
@@ -60,8 +61,6 @@ def liveness_evidence(**overrides: object) -> str:
 
 def build_client(
     result: AttendanceFaceVerificationResult,
-    *,
-    enforcement_enabled: bool = False,
 ) -> tuple[TestClient, AsyncMock]:
     app = FastAPI()
     app.include_router(router)
@@ -73,7 +72,6 @@ def build_client(
     )
     app.dependency_overrides[get_face_verification_settings] = lambda: (
         SimpleNamespace(
-            liveness_enforcement_enabled=enforcement_enabled,
             liveness_max_age_seconds=120,
         )
     )
@@ -87,6 +85,20 @@ def build_attempt_integration_client(
 ) -> tuple[TestClient, AsyncMock, AsyncMock]:
     session = AsyncMock()
     repository = AsyncMock()
+    repository.get_verification_context.return_value = (
+        AttendanceVerificationContext(
+            verification_attempt_id=ATTEMPT_ID,
+            verification_status="in_progress",
+            session_status="active",
+            requires_face_verification=True,
+            requires_geofence=False,
+            latest_geofence_status=None,
+            check_in_opens_at=NOW - timedelta(minutes=5),
+            check_in_closes_at=NOW + timedelta(minutes=20),
+            closed_at=None,
+            cancelled_at=None,
+        )
+    )
     repository.lock_verification_context.return_value = (
         AttendanceVerificationContext(
             verification_attempt_id=ATTEMPT_ID,
@@ -102,6 +114,14 @@ def build_attempt_integration_client(
         )
     )
     repository.lock_latest_face_attempt.return_value = (
+        None
+        if existing_attempt_number is None
+        else SimpleNamespace(
+            attempt_number=existing_attempt_number,
+            validation_status="failed",
+        )
+    )
+    repository.get_latest_face_attempt.return_value = (
         None
         if existing_attempt_number is None
         else SimpleNamespace(
@@ -155,7 +175,6 @@ def build_attempt_integration_client(
     )
     app.dependency_overrides[get_face_verification_settings] = lambda: (
         SimpleNamespace(
-            liveness_enforcement_enabled=True,
             liveness_max_age_seconds=120,
         )
     )
@@ -175,6 +194,7 @@ def test_returns_attempt_metadata_for_a_retryable_failure() -> None:
         response = client.post(
             f"/internal/v1/attendance-sessions/{SESSION_ID}/face-verifications",
             files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+            data={"liveness": liveness_evidence()},
         )
 
     assert response.status_code == 200
@@ -183,25 +203,45 @@ def test_returns_attempt_metadata_for_a_retryable_failure() -> None:
         "attemptNumber": 2,
         "canRetry": True,
     }
-    service.verify.assert_awaited_once_with(
-        session_id=SESSION_ID,
-        student_id=STUDENT_ID,
-        captured_image=b"jpeg",
-        liveness_evidence=None,
+    verified = service.verify.await_args.kwargs
+    assert verified["session_id"] == SESSION_ID
+    assert verified["student_id"] == STUDENT_ID
+    assert verified["captured_image"] == b"jpeg"
+    assert verified["liveness_evidence"].passed is True
+
+
+def test_returns_retryable_service_unavailable_when_inference_queue_is_full() -> None:
+    client, service = build_client(
+        AttendanceFaceVerificationResult(
+            status=AttendanceFaceVerificationStatus.PROCESSING_FAILED,
+            attempt_number=0,
+            can_retry=True,
+        )
+    )
+    service.verify.side_effect = AttendanceFaceVerificationBusyError(
+        "Face verification is busy. Retry shortly."
     )
 
+    with client:
+        response = client.post(
+            f"/internal/v1/attendance-sessions/{SESSION_ID}/face-verifications",
+            files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+            data={"liveness": liveness_evidence()},
+        )
 
-@pytest.mark.parametrize("enforcement_enabled", [False, True])
-def test_accepts_valid_liveness_evidence(
-    enforcement_enabled: bool,
-) -> None:
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "Face verification is busy. Retry shortly."
+    }
+
+
+def test_accepts_valid_liveness_evidence() -> None:
     client, service = build_client(
         AttendanceFaceVerificationResult(
             status=AttendanceFaceVerificationStatus.PASSED,
             attempt_number=1,
             can_retry=False,
         ),
-        enforcement_enabled=enforcement_enabled,
     )
 
     with client:
@@ -225,7 +265,6 @@ def test_liveness_rejection_does_not_start_attempt_consumption() -> None:
             attempt_number=1,
             can_retry=False,
         ),
-        enforcement_enabled=True,
     )
 
     with client:
@@ -316,7 +355,7 @@ def test_valid_liveness_attempt_consuming_outcomes_persist_one_attempt(
         )
 
     assert response.status_code == 200
-    saved = repository.save_latest_face_attempt.await_args.kwargs
+    saved = repository.record_face_attempt.await_args.kwargs
     assert saved["attempt_number"] == 1
     assert saved["liveness_passed"] is True
 
@@ -345,6 +384,6 @@ def test_valid_liveness_operational_failures_do_not_consume_an_attempt(
 
     assert response.status_code == 200
     assert response.json()["attemptNumber"] == 1
-    repository.save_latest_face_attempt.assert_not_awaited()
+    repository.record_face_attempt.assert_not_awaited()
     repository.mark_verification_attempt_failed.assert_not_awaited()
-    session.commit.assert_not_awaited()
+    session.commit.assert_awaited_once()

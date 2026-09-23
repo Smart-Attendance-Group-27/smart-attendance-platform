@@ -19,6 +19,7 @@ from services.face_comparison_service import (
     FaceComparisonService,
     FaceComparisonStatus,
 )
+from services.face_engine import FaceInferenceQueueTimeoutError
 from services.liveness_evidence import LivenessEvidence
 
 
@@ -30,7 +31,6 @@ class AttendanceFaceVerificationStatus(StrEnum):
     LOW_QUALITY = "low_quality"
     PROCESSING_FAILED = "processing_failed"
     MODEL_MISMATCH = "model_mismatch"
-    LIVENESS_FAILURE = "liveness_failure"
     ATTEMPT_LIMIT_REACHED = "attempt_limit_reached"
 
 
@@ -59,6 +59,10 @@ class VerificationClosedError(AttendanceFaceVerificationError):
 class AttendanceFaceVerificationUnavailableError(
     AttendanceFaceVerificationError
 ):
+    pass
+
+
+class AttendanceFaceVerificationBusyError(AttendanceFaceVerificationError):
     pass
 
 
@@ -110,18 +114,21 @@ class AttendanceFaceVerificationService:
         session_id: UUID,
         student_id: UUID,
         captured_image: bytes,
-        liveness_evidence: LivenessEvidence | None,
+        liveness_evidence: LivenessEvidence,
     ) -> AttendanceFaceVerificationResult:
-        validated_at = self._ensure_utc(self._clock())
+        if liveness_evidence is None:
+            raise ValueError("Liveness evidence is required")
 
-        context = await self._repository.lock_verification_context(
+        received_at = self._ensure_utc(self._clock())
+
+        context = await self._repository.get_verification_context(
             session_id=session_id,
             student_id=student_id,
         )
-        self._validate_context(context, validated_at)
+        self._validate_context(context, received_at)
         assert context is not None
 
-        existing = await self._repository.lock_latest_face_attempt(
+        existing = await self._repository.get_latest_face_attempt(
             context.verification_attempt_id
         )
         if existing is not None and existing.validation_status == "passed":
@@ -153,11 +160,22 @@ class AttendanceFaceVerificationService:
                 "No active face-verification configuration is available."
             )
 
-        comparison = await self._face_comparison_service.compare(
-            reference=reference,
-            captured_image=captured_image,
-            similarity_threshold=float(config.similarity_threshold),
-        )
+        config_id = config.id
+        similarity_threshold = float(config.similarity_threshold)
+
+        # End the snapshot transaction before waiting for inference capacity.
+        await self._session.commit()
+
+        try:
+            comparison = await self._face_comparison_service.compare(
+                reference=reference,
+                captured_image=captured_image,
+                similarity_threshold=similarity_threshold,
+            )
+        except FaceInferenceQueueTimeoutError as error:
+            raise AttendanceFaceVerificationBusyError(
+                "Face verification is busy. Retry shortly."
+            ) from error
 
         if comparison.status not in ATTEMPT_CONSUMING_STATUSES:
             return AttendanceFaceVerificationResult(
@@ -169,39 +187,59 @@ class AttendanceFaceVerificationService:
                 detection_confidence=comparison.detection_confidence,
             )
 
+        context = await self._repository.lock_verification_context(
+            session_id=session_id,
+            student_id=student_id,
+        )
+        self._validate_context(context, received_at)
+        assert context is not None
+
+        existing = await self._repository.lock_latest_face_attempt(
+            context.verification_attempt_id
+        )
+        if existing is not None and existing.validation_status == "passed":
+            raise VerificationClosedError(
+                "Face verification already passed for this attendance attempt."
+            )
+
+        previous_attempt_number = existing.attempt_number if existing else 0
+        if previous_attempt_number >= self._max_attempts:
+            await self._session.rollback()
+            return AttendanceFaceVerificationResult(
+                status=AttendanceFaceVerificationStatus.ATTEMPT_LIMIT_REACHED,
+                attempt_number=previous_attempt_number,
+                can_retry=False,
+            )
+
         attempt_number = previous_attempt_number + 1
-        liveness_passed = True if liveness_evidence is not None else None
+        liveness_passed = True
         biometric_matched = comparison.status is FaceComparisonStatus.MATCHED
         passed = biometric_matched
         can_retry = not passed and attempt_number < self._max_attempts
 
-        await self._repository.save_latest_face_attempt(
-            existing=existing,
+        await self._repository.record_face_attempt(
             verification_attempt_id=context.verification_attempt_id,
             face_profile_id=reference.profile_id,
             attempt_number=attempt_number,
             liveness_passed=liveness_passed,
             quality_passed=self._quality_passed(comparison),
             similarity_score=comparison.similarity_score,
-            verification_config_id=config.id,
+            verification_config_id=config_id,
             validation_status="passed" if passed else "failed",
             failure_reason=(
                 None
                 if passed
-                else self._failure_reason(
-                    comparison,
-                    liveness_passed=liveness_passed,
-                )
+                else self._failure_reason(comparison)
             ),
-            captured_at=validated_at,
-            validated_at=validated_at,
+            captured_at=received_at,
+            validated_at=received_at,
         )
 
         if not passed and not can_retry:
             await self._repository.mark_verification_attempt_failed(
                 context.verification_attempt_id,
                 failure_reason="FACE_ATTEMPT_LIMIT_REACHED",
-                completed_at=validated_at,
+                completed_at=received_at,
             )
 
         await self._session.commit()
@@ -276,15 +314,7 @@ class AttendanceFaceVerificationService:
     @staticmethod
     def _failure_reason(
         comparison: FaceComparisonResult,
-        *,
-        liveness_passed: bool | None,
     ) -> str:
-        if (
-            comparison.status is FaceComparisonStatus.MATCHED
-            and liveness_passed is not True
-        ):
-            return "Valid liveness evidence was not provided"
-
         reason = comparison.failure_reason or comparison.status.value
         return reason[:100]
 
@@ -301,6 +331,7 @@ class AttendanceFaceVerificationService:
 
 __all__ = [
     "AttendanceFaceVerificationError",
+    "AttendanceFaceVerificationBusyError",
     "AttendanceFaceVerificationResult",
     "AttendanceFaceVerificationService",
     "AttendanceFaceVerificationStatus",

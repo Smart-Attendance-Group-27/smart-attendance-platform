@@ -44,35 +44,15 @@ class LivenessEvidence:
     engine: str
 
 
-def validate_optional_liveness_evidence(
-    serialized_evidence: str | None,
-    *,
-    enforcement_enabled: bool,
-    max_age_seconds: int = DEFAULT_MAX_EVIDENCE_AGE_SECONDS,
-    clock: Clock | None = None,
-) -> LivenessEvidence | None:
-    """Validate supplied evidence and enforce its presence when configured."""
-    if serialized_evidence is None:
-        if enforcement_enabled:
-            raise LivenessEvidenceValidationError(
-                "Liveness evidence is required"
-            )
-        return None
-
-    return validate_liveness_evidence(
-        serialized_evidence,
-        max_age_seconds=max_age_seconds,
-        clock=clock,
-    )
-
-
 def validate_liveness_evidence(
-    serialized_evidence: str,
+    serialized_evidence: str | None,
     *,
     max_age_seconds: int = DEFAULT_MAX_EVIDENCE_AGE_SECONDS,
     clock: Clock | None = None,
 ) -> LivenessEvidence:
     """Parse and validate serialized liveness evidence from a client."""
+    if serialized_evidence is None:
+        raise LivenessEvidenceValidationError("Liveness evidence is required")
     if not isinstance(serialized_evidence, str):
         raise LivenessEvidenceValidationError(
             "Liveness evidence must be a JSON string"
@@ -218,5 +198,4 @@ __all__ = [
     "MAX_FUTURE_TOLERANCE_SECONDS",
     "SUPPORTED_CHALLENGES",
     "validate_liveness_evidence",
-    "validate_optional_liveness_evidence",
 ]
