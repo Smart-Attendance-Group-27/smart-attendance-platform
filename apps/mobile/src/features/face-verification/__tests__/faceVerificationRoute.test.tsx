@@ -11,6 +11,7 @@ import FaceVerificationRoute from '../../../app/(student)/attendance/[sessionId]
 
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
+let mockFaceVerificationLivenessMode: 'required' | 'off' | undefined;
 let mockSearchParams: {
   sessionId?: string | string[];
   requiresQr?: string | string[];
@@ -41,20 +42,26 @@ jest.mock('../screens/FaceVerificationScreen', () => {
 
   return {
     FaceVerificationScreen: ({
+      livenessMode,
       onFaceVerified,
       sessionId,
     }: {
+      livenessMode?: 'required' | 'off';
       onFaceVerified: (sessionId: string) => void;
       sessionId: string;
-    }) => (
-      <Pressable
-        accessibilityLabel="Continue after face verification"
-        accessibilityRole="button"
-        onPress={() => onFaceVerified(sessionId)}
-      >
-        <Text>Continue</Text>
-      </Pressable>
-    ),
+    }) => {
+      mockFaceVerificationLivenessMode = livenessMode;
+
+      return (
+        <Pressable
+          accessibilityLabel="Continue after face verification"
+          accessibilityRole="button"
+          onPress={() => onFaceVerified(sessionId)}
+        >
+          <Text>Continue</Text>
+        </Pressable>
+      );
+    },
   };
 });
 
@@ -62,6 +69,7 @@ describe('FaceVerificationRoute', () => {
   beforeEach(() => {
     mockPush.mockClear();
     mockReplace.mockClear();
+    mockFaceVerificationLivenessMode = undefined;
     mockSearchParams = {
       sessionId: 'attendance-session-active',
     };
@@ -70,6 +78,13 @@ describe('FaceVerificationRoute', () => {
       userId: 'student-1',
       accessToken: 'test-access-token',
     };
+  });
+
+  test('uses the required liveness default for normal attendance', async () => {
+    await render(<FaceVerificationRoute />);
+
+    expect(mockFaceVerificationLivenessMode).toBeUndefined();
+    expect(mockFaceVerificationLivenessMode).not.toBe('off');
   });
 
   test('opens Progress rather than QR after face verification', async () => {

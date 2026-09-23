@@ -32,6 +32,11 @@ import type { FaceVerificationResult } from '../types/faceVerification';
 type FaceVerificationScreenProps = {
   sessionId: string;
   faceVerificationService: FaceVerificationService;
+  /**
+   * Controls only the mobile-side liveness flow. `off` is for compatibility
+   * with environments where server enforcement is disabled; it never bypasses
+   * face-service liveness enforcement.
+   */
   livenessMode?: 'required' | 'off';
   mode?: 'attendance' | 'readiness';
   onBack: () => void;

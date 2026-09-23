@@ -1,6 +1,15 @@
-from datetime import datetime
+import importlib.util
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Annotated
+from unittest.mock import patch
 from uuid import UUID
 
+import httpx
+import pytest
+from fastapi import FastAPI, File, Form, UploadFile
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from conftest import (
@@ -22,6 +31,7 @@ from modules.attendance_verification.check_in.exception import (
 from modules.attendance_verification.check_in.route import get_check_in_service
 from modules.attendance_verification.attendance_state import InitialCheckInStatus
 from modules.attendance_verification.face.client import (
+    FaceVerificationServiceClient,
     FaceVerificationServiceError,
     FaceVerificationServiceInvalidRequestError,
     FaceVerificationServiceRejectedError,
@@ -36,7 +46,80 @@ from modules.identity.auth.dependencies import get_authentication_service
 
 SESSION_ID = UUID("40000000-0000-0000-0000-000000000001")
 ATTEMPT_ID = UUID("50000000-0000-0000-0000-000000000001")
+LIVENESS_JSON = (
+    '{"version":1,"method":"mlkit_challenge","passed":true,'
+    '"challenges":["turn_left","eyes_closed_hold"],'
+    '"startedAt":"2026-09-22T08:00:00Z",'
+    '"completedAt":"2026-09-22T08:00:10Z",'
+    '"engine":"uniattend-mobile-liveness"}'
+)
 URL = f"/api/v1/attendance-sessions/{SESSION_ID}/face-verifications"
+LIVENESS_NOW = datetime(2026, 9, 22, 8, 0, 30, tzinfo=UTC)
+
+
+def load_face_liveness_module():
+    module_name = "_integration_face_liveness_evidence"
+    existing = sys.modules.get(module_name)
+    if existing is not None:
+        return existing
+
+    module_path = (
+        Path(__file__).resolve().parents[2]
+        / "face-verification"
+        / "services"
+        / "liveness_evidence.py"
+    )
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Could not load the face-service liveness validator")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def build_enforced_face_app(
+    liveness,
+    *,
+    received_liveness: list[str | None],
+    biometric_attempts: list[bytes],
+    validated_evidence: list[object] | None = None,
+) -> FastAPI:
+    app = FastAPI()
+    downstream_path = (
+        "/internal/v1/attendance-sessions/{session_id}/face-verifications"
+    )
+
+    @app.post(downstream_path)
+    async def enforced_face_verification(
+        session_id: UUID,
+        image: Annotated[UploadFile, File()],
+        liveness_field: Annotated[str | None, Form(alias="liveness")] = None,
+    ):
+        del session_id
+        received_liveness.append(liveness_field)
+        try:
+            evidence = liveness.validate_optional_liveness_evidence(
+                liveness_field,
+                enforcement_enabled=True,
+            )
+        except liveness.LivenessEvidenceValidationError:
+            return JSONResponse(
+                status_code=422,
+                content={"status": "liveness_failure"},
+            )
+
+        if validated_evidence is not None:
+            validated_evidence.append(evidence)
+        biometric_attempts.append(await image.read())
+        return {
+            "status": "passed",
+            "attemptNumber": 1,
+            "canRetry": False,
+        }
+
+    return app
 
 
 class StubFaceVerificationClient:
@@ -190,10 +273,197 @@ def test_forwards_the_liveness_field_when_the_client_sends_one(
             URL,
             headers={"Authorization": f"Bearer {make_access_token()}"},
             files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
-            data={"liveness": "blink-token-123"},
+            data={"liveness": LIVENESS_JSON},
         )
 
-    assert service.calls[0]["liveness"] == "blink-token-123"
+    assert service.calls[0]["liveness"] == LIVENESS_JSON
+
+
+def test_missing_liveness_is_rejected_through_the_backend_chain(
+    jwks_document,
+    make_access_token,
+) -> None:
+    liveness = load_face_liveness_module()
+    received_liveness: list[str | None] = []
+    biometric_attempts: list[bytes] = []
+    face_app = build_enforced_face_app(
+        liveness,
+        received_liveness=received_liveness,
+        biometric_attempts=biometric_attempts,
+    )
+
+    service = FaceVerificationServiceClient(
+        base_url="http://face-verification:8001",
+        timeout_seconds=30,
+    )
+    check_in_service = StubCheckInService()
+    downstream_client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=face_app),
+    )
+
+    with patch(
+        "modules.attendance_verification.face.client.httpx.AsyncClient",
+        return_value=downstream_client,
+    ):
+        with build_client(
+            jwks_document,
+            service,
+            check_in_service,
+        ) as client:
+            response = client.post(
+                URL,
+                headers={"Authorization": f"Bearer {make_access_token()}"},
+                files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+            )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "FACE_VERIFICATION_INVALID_REQUEST",
+        "message": "The capture or its liveness evidence was rejected.",
+    }
+    assert received_liveness == [None]
+    assert biometric_attempts == []
+    assert check_in_service.calls == []
+
+
+@pytest.mark.parametrize(
+    "serialized_liveness",
+    [
+        "{",
+        LIVENESS_JSON.replace('"passed":true', '"passed":false'),
+        LIVENESS_JSON.replace('"version":1', '"version":2'),
+        LIVENESS_JSON.replace(
+            '"startedAt":"2026-09-22T08:00:00Z",'
+            '"completedAt":"2026-09-22T08:00:10Z"',
+            '"startedAt":"2026-09-22T07:57:00Z",'
+            '"completedAt":"2026-09-22T07:58:00Z"',
+        ),
+        LIVENESS_JSON.replace(
+            '"startedAt":"2026-09-22T08:00:00Z",'
+            '"completedAt":"2026-09-22T08:00:10Z"',
+            '"startedAt":"2026-09-22T08:00:30Z",'
+            '"completedAt":"2026-09-22T08:00:36Z"',
+        ),
+        LIVENESS_JSON.replace(
+            '["turn_left","eyes_closed_hold"]',
+            '["turn_left","turn_left"]',
+        ),
+        LIVENESS_JSON.replace("eyes_closed_hold", "smile"),
+        LIVENESS_JSON + (" " * 2048),
+    ],
+    ids=[
+        "malformed-json",
+        "passed-false",
+        "wrong-version",
+        "expired",
+        "future-invalid",
+        "duplicate-challenges",
+        "unsupported-challenge",
+        "oversized-json",
+    ],
+)
+def test_invalid_liveness_is_preserved_and_rejected_through_backend_chain(
+    serialized_liveness: str,
+    jwks_document,
+    make_access_token,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    liveness = load_face_liveness_module()
+    monkeypatch.setattr(liveness, "_utc_now", lambda: LIVENESS_NOW)
+    received_liveness: list[str | None] = []
+    biometric_attempts: list[bytes] = []
+    face_app = build_enforced_face_app(
+        liveness,
+        received_liveness=received_liveness,
+        biometric_attempts=biometric_attempts,
+    )
+    service = FaceVerificationServiceClient(
+        base_url="http://face-verification:8001",
+        timeout_seconds=30,
+    )
+    check_in_service = StubCheckInService()
+    downstream_client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=face_app),
+    )
+
+    with patch(
+        "modules.attendance_verification.face.client.httpx.AsyncClient",
+        return_value=downstream_client,
+    ):
+        with build_client(
+            jwks_document,
+            service,
+            check_in_service,
+        ) as client:
+            response = client.post(
+                URL,
+                headers={"Authorization": f"Bearer {make_access_token()}"},
+                files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+                data={"liveness": serialized_liveness},
+            )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == {
+        "code": "FACE_VERIFICATION_INVALID_REQUEST",
+        "message": "The capture or its liveness evidence was rejected.",
+    }
+    assert received_liveness == [serialized_liveness]
+    assert biometric_attempts == []
+    assert check_in_service.calls == []
+
+
+def test_valid_liveness_allows_face_verification_through_backend_chain(
+    jwks_document,
+    make_access_token,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    liveness = load_face_liveness_module()
+    monkeypatch.setattr(liveness, "_utc_now", lambda: LIVENESS_NOW)
+    received_liveness: list[str | None] = []
+    validated_evidence: list[object] = []
+    biometric_attempts: list[bytes] = []
+    face_app = build_enforced_face_app(
+        liveness,
+        received_liveness=received_liveness,
+        biometric_attempts=biometric_attempts,
+        validated_evidence=validated_evidence,
+    )
+    service = FaceVerificationServiceClient(
+        base_url="http://face-verification:8001",
+        timeout_seconds=30,
+    )
+    downstream_client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=face_app),
+    )
+
+    with patch(
+        "modules.attendance_verification.face.client.httpx.AsyncClient",
+        return_value=downstream_client,
+    ):
+        with build_client(jwks_document, service) as client:
+            response = client.post(
+                URL,
+                headers={"Authorization": f"Bearer {make_access_token()}"},
+                files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+                data={"liveness": LIVENESS_JSON},
+            )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "success",
+        "attemptNumber": 1,
+        "canRetry": False,
+        "initialCheckIn": None,
+    }
+    assert received_liveness == [LIVENESS_JSON]
+    assert len(validated_evidence) == 1
+    evidence = validated_evidence[0]
+    assert evidence.passed is True
+    assert evidence.challenges == ("turn_left", "eyes_closed_hold")
+    assert evidence.engine == "uniattend-mobile-liveness"
+    assert biometric_attempts == [b"jpeg"]
+
+
 
 
 def test_a_pass_checks_the_student_in_and_reports_it(
@@ -282,6 +552,37 @@ def test_maps_last_internal_failure_as_non_retryable(
         "status": "verification_failure",
         "attemptNumber": 3,
         "canRetry": False,
+        "initialCheckIn": None,
+    }
+
+
+@pytest.mark.parametrize("internal_status", ["processing_failed", "model_mismatch"])
+def test_maps_operational_face_failure_as_retryable_verification_failure(
+    internal_status,
+    jwks_document,
+    make_access_token,
+) -> None:
+    service = StubFaceVerificationClient(
+        InternalFaceVerificationResult(
+            status=internal_status,
+            attempt_number=1,
+            can_retry=True,
+        )
+    )
+
+    with build_client(jwks_document, service) as client:
+        response = client.post(
+            URL,
+            headers={"Authorization": f"Bearer {make_access_token()}"},
+            files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+            data={"liveness": LIVENESS_JSON},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "verification_failure",
+        "attemptNumber": 1,
+        "canRetry": True,
         "initialCheckIn": None,
     }
 

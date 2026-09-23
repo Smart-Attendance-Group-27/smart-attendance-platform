@@ -100,6 +100,7 @@ test('uploads an attendance face capture to the Core API', async () => {
     }),
   );
   const requestBody = fetchMock.mock.calls[0][1]?.body as FormData;
+  expect(requestBody.get('image')).not.toBeNull();
   expect(requestBody.get('liveness')).toBeNull();
 });
 
@@ -130,7 +131,9 @@ test('uploads canonical liveness evidence with the final face capture', async ()
     livenessEvidence,
   });
 
+  expect(fetchMock).toHaveBeenCalledTimes(1);
   const requestBody = fetchMock.mock.calls[0][1]?.body as FormData;
+  expect(requestBody.get('image')).not.toBeNull();
   expect(requestBody.get('liveness')).toBe(
     JSON.stringify(livenessEvidence),
   );

@@ -172,7 +172,7 @@ class AttendanceFaceVerificationService:
         attempt_number = previous_attempt_number + 1
         liveness_passed = True if liveness_evidence is not None else None
         biometric_matched = comparison.status is FaceComparisonStatus.MATCHED
-        passed = biometric_matched and liveness_passed is True
+        passed = biometric_matched
         can_retry = not passed and attempt_number < self._max_attempts
 
         await self._repository.save_latest_face_attempt(
@@ -207,11 +207,7 @@ class AttendanceFaceVerificationService:
         await self._session.commit()
 
         return AttendanceFaceVerificationResult(
-            status=(
-                AttendanceFaceVerificationStatus.LIVENESS_FAILURE
-                if biometric_matched and liveness_passed is not True
-                else self._status_for_comparison(comparison.status)
-            ),
+            status=self._status_for_comparison(comparison.status),
             attempt_number=attempt_number,
             can_retry=can_retry,
             similarity_score=comparison.similarity_score,
