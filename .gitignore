@@ -53,3 +53,7 @@ env.bak/*
 venv.bak/
 *.pdf
 /commands.md
+
+# Local shared-development credentials and mock account details
+/mockDetails.txt
+/shared-dev-access-details.local.md

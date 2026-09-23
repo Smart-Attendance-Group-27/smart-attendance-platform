@@ -45,6 +45,10 @@ from modules.notification.preferences.route import router as notification_prefer
 from modules.notification.push.expo_provider import ExpoPushProvider
 from modules.notification.push.repository import PushDeliveryRepository
 from modules.notification.push.worker import PushDeliveryWorker, PushWorkerConfig
+from modules.notification.readiness import (
+    NotificationSchemaReadiness,
+    check_notification_schema_readiness,
+)
 from modules.notification.reminders.scheduler import UpcomingClassReminderScheduler
 from modules.notification.student_notifications.route import (
     router as student_notifications_router,
@@ -77,7 +81,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     push_worker_stop = asyncio.Event()
     push_worker_task: asyncio.Task[None] | None = None
-    if settings.push_worker_enabled:
+    notification_readiness = NotificationSchemaReadiness(False, False)
+    if settings.push_worker_enabled or settings.reminder_scheduler_enabled:
+        try:
+            notification_readiness = await check_notification_schema_readiness(
+                app.state.db_pool,
+            )
+        except Exception as error:
+            logger.error(
+                "Notification background tasks not started: schema preflight failed",
+                extra={"preflight_error_type": type(error).__name__},
+            )
+
+    if settings.push_worker_enabled and notification_readiness.push_worker_ready:
         app.state.push_worker = PushDeliveryWorker(
             repository=PushDeliveryRepository(app.state.db_pool),
             provider=app.state.push_provider,
@@ -96,9 +112,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             app.state.push_worker.run(push_worker_stop),
             name="push-delivery-worker",
         )
+    elif settings.push_worker_enabled:
+        logger.error(
+            "Push delivery worker not started: notification.delivery_attempts.next_attempt_at is missing",
+        )
     reminder_stop = asyncio.Event()
     reminder_task: asyncio.Task[None] | None = None
-    if settings.reminder_scheduler_enabled:
+    if (
+        settings.reminder_scheduler_enabled
+        and notification_readiness.reminder_scheduler_ready
+    ):
         app.state.reminder_scheduler = UpcomingClassReminderScheduler(
             pool=app.state.db_pool,
             interval_seconds=settings.reminder_scheduler_interval_seconds,
@@ -107,6 +130,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         reminder_task = asyncio.create_task(
             app.state.reminder_scheduler.run(reminder_stop),
             name="upcoming-class-reminder-scheduler",
+        )
+    elif settings.reminder_scheduler_enabled:
+        logger.error(
+            "Reminder scheduler not started: upcoming-class idempotency index is missing",
         )
     # Deliberately no connection details here: the URI, user and password must
     # never reach the logs.
