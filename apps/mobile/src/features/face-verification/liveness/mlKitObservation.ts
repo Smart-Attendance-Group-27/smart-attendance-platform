@@ -13,9 +13,10 @@ export type MlKitObservationInput = {
  * Converts one still-image ML Kit result into the camera-independent input
  * consumed by the S2 liveness engine.
  *
- * S1 established that ML Kit's front-camera rotationY already matches the
- * required convention: positive is the user's left and negative is the
- * user's right. The value is therefore intentionally not mirrored here.
+ * Physical-device measurements show that ML Kit's front-camera rotationY is
+ * positive when the user turns right and negative when the user turns left.
+ * Normalize that raw value to the engine convention: positive is user-left
+ * and negative is user-right.
  */
 export function normalizeMlKitFaceObservation({
   faces,
@@ -30,7 +31,7 @@ export function normalizeMlKitFaceObservation({
   const observation: NormalizedFaceObservation = {
     timestampMs,
     faceCount: faces.length,
-    yawDegrees: face?.rotationY ?? null,
+    yawDegrees: face === undefined ? null : -face.rotationY,
     leftEyeOpenProbability: face?.leftEyeOpenProbability ?? null,
     rightEyeOpenProbability: face?.rightEyeOpenProbability ?? null,
     faceAreaRatio: face

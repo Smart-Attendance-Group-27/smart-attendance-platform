@@ -18,13 +18,13 @@ type PipelineStep = {
 const PIPELINE_STEPS: readonly PipelineStep[] = [
   {
     timestampMs: 1_100,
-    yawDegrees: 30,
+    yawDegrees: -30,
     leftEyeOpenProbability: 1,
     rightEyeOpenProbability: 1,
   },
   {
     timestampMs: 1_400,
-    yawDegrees: 30,
+    yawDegrees: -30,
     leftEyeOpenProbability: 1,
     rightEyeOpenProbability: 1,
   },
