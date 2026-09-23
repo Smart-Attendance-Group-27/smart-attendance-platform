@@ -363,12 +363,12 @@ describe('evaluateLivenessObservation eyes-closed hold', () => {
     expect(result.state.challenges[0].holdStartedAtMs).toBeNull();
   });
 
-  test('does not start when either eye equals the 0.10 boundary', () => {
+  test('does not start when either eye equals the 0.15 boundary', () => {
     const result = evaluateLivenessObservation(
       createSessionState({ challenge: 'eyes_closed_hold' }),
       createObservation({
-        leftEyeOpenProbability: 0.09,
-        rightEyeOpenProbability: 0.1,
+        leftEyeOpenProbability: 0.14,
+        rightEyeOpenProbability: 0.15,
       }),
       EVALUATED_AT_MS,
     );
