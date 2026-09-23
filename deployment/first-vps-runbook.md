@@ -109,11 +109,12 @@ Clone it into a new release directory, verify `HEAD`, deploy from that
 directory, and move `current` only after the health checks pass:
 
 ```bash
-sha=<merged-main-sha>
+sha='REPLACE_WITH_FULL_MERGED_SHA'
 release_dir="/opt/uniattend/releases/$sha"
-git clone --depth 1 --branch main \
+git clone --branch main \
   https://github.com/Smart-Attendance-Group-27/smart-attendance-platform.git \
   "$release_dir"
+git -C "$release_dir" checkout --detach "$sha"
 test "$(git -C "$release_dir" rev-parse HEAD)" = "$sha"
 sudo python3 "$release_dir/deployment/ops/set_image_tag.py" --sha "$sha"
 test "$(stat -c %a /etc/uniattend/private.env)" = 600
