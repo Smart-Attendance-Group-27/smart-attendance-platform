@@ -69,8 +69,9 @@ domain can replace them later. Before opening 80/443:
    Keycloak `/admin/*` are blocked at the public edge.
 4. Open 80/tcp, 443/tcp and 443/udp in UFW after Caddy is healthy. Check
    certificate names, browser login, token validation and device flows.
-5. Set the Android `EXPO_PUBLIC_*` URLs to the same HTTPS origins and build a
-   new artifact. A private tunnel build cannot be used from a physical device.
+5. The Android `preview`, `production`, and `production-aab` EAS profiles use
+   these HTTPS origins. Build a new artifact and install it on a physical
+   device. A private tunnel build cannot be used from that device.
 
 Cloudflare R2 is independent of HTTPS. An R2 account and bucket credentials
 are still required for the later photo storage adapter; current enrollment

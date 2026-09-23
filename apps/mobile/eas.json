@@ -14,9 +14,12 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_KEYCLOAK_ISSUER_URL": "https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend",
-        "EXPO_PUBLIC_KEYCLOAK_REALM": "Uni Attend",
-        "EXPO_PUBLIC_KEYCLOAK_CLIENT_ID": "uniattend-mobile"
+        "EXPO_PUBLIC_KEYCLOAK_ISSUER_URL": "https://auth.152-53-33-198.sslip.io/realms/uniattend",
+        "EXPO_PUBLIC_KEYCLOAK_REALM": "uniattend",
+        "EXPO_PUBLIC_KEYCLOAK_CLIENT_ID": "uniattend-mobile",
+        "EXPO_PUBLIC_CORE_API_URL": "https://api.152-53-33-198.sslip.io",
+        "EXPO_PUBLIC_FACE_VERIFICATION_API_URL": "https://face.152-53-33-198.sslip.io",
+        "EXPO_PUBLIC_API_MODE": "api"
       }
     },
     "production": {
@@ -25,9 +28,12 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_KEYCLOAK_ISSUER_URL": "https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend",
-        "EXPO_PUBLIC_KEYCLOAK_REALM": "Uni Attend",
-        "EXPO_PUBLIC_KEYCLOAK_CLIENT_ID": "uniattend-mobile"
+        "EXPO_PUBLIC_KEYCLOAK_ISSUER_URL": "https://auth.152-53-33-198.sslip.io/realms/uniattend",
+        "EXPO_PUBLIC_KEYCLOAK_REALM": "uniattend",
+        "EXPO_PUBLIC_KEYCLOAK_CLIENT_ID": "uniattend-mobile",
+        "EXPO_PUBLIC_CORE_API_URL": "https://api.152-53-33-198.sslip.io",
+        "EXPO_PUBLIC_FACE_VERIFICATION_API_URL": "https://face.152-53-33-198.sslip.io",
+        "EXPO_PUBLIC_API_MODE": "api"
       }
     },
     "production-aab": {
@@ -35,9 +41,12 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_KEYCLOAK_ISSUER_URL": "https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend",
-        "EXPO_PUBLIC_KEYCLOAK_REALM": "Uni Attend",
-        "EXPO_PUBLIC_KEYCLOAK_CLIENT_ID": "uniattend-mobile"
+        "EXPO_PUBLIC_KEYCLOAK_ISSUER_URL": "https://auth.152-53-33-198.sslip.io/realms/uniattend",
+        "EXPO_PUBLIC_KEYCLOAK_REALM": "uniattend",
+        "EXPO_PUBLIC_KEYCLOAK_CLIENT_ID": "uniattend-mobile",
+        "EXPO_PUBLIC_CORE_API_URL": "https://api.152-53-33-198.sslip.io",
+        "EXPO_PUBLIC_FACE_VERIFICATION_API_URL": "https://face.152-53-33-198.sslip.io",
+        "EXPO_PUBLIC_API_MODE": "api"
       }
     }
   },

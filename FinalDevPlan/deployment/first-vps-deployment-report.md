@@ -43,7 +43,7 @@ are not publicly bound. SSH, 80, and 443 are the open inbound ports.
 | 6. Private deployment | Services started in dependency order; tunnel-only health and internal routing passed before public ingress opened. |
 | 7. Validation | Browser admin/lecturer login, student mobile PKCE and Core identity, Face model startup and blank-image inference, container restart, memory, disk, and log checks passed. The test student's previous readiness record was restored after the blank-image check. |
 | 8. SSH tunnel | Windows workstation tunnel to Web, Core, Face, and Keycloak tested. |
-| 9. HTTPS | Temporary `sslip.io` DNS plus Caddy certificates work for all four hostnames; public route restrictions verified. A purchased domain can be cut over later. |
+| 9. HTTPS | Temporary `sslip.io` DNS plus Caddy certificates work for all four hostnames; public route restrictions verified. Mobile EAS profiles point to these HTTPS origins. A purchased domain can be cut over later. |
 | 10. Recovery/monitoring | Daily encrypted Keycloak backup timer enabled; encrypted database backup restored into an isolated container; encrypted realm export decrypted and checked off-host. Host checks and scheduled HTTPS uptime workflow added. |
 | 11. Release | PR #91 is open; review, merge, GHCR publish, and redeployment from merged main are pending. |
 
