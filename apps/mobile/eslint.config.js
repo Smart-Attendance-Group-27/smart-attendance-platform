@@ -9,6 +9,7 @@ module.exports = defineConfig([
     settings: {
       'import/resolver': {
         node: {
+          extensions: ['.js', '.jsx', '.ts', '.tsx'],
           paths: [
             path.resolve(__dirname, 'node_modules'),
             path.resolve(__dirname, '../../node_modules'),
