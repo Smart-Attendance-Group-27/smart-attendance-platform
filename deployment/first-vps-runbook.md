@@ -1,8 +1,9 @@
 # First VPS release runbook
 
 The release uses one netcup VPS. The application and Face Verification have
-separate Compose projects and images. Only SSH is public during the private
-stage. All commands below run on the VPS as `uniattend`, except where noted.
+separate Compose projects and images. The private stage is complete, and
+temporary `sslip.io` HTTPS ingress is now public. All commands below run on
+the VPS as `uniattend`, except where noted.
 
 ## Release inputs
 
@@ -12,7 +13,9 @@ stage. All commands below run on the VPS as `uniattend`, except where noted.
 - `/etc/uniattend/realm.json`: rendered Keycloak realm, mode `0600`.
 - `/etc/uniattend/backup-recipient.txt`: public age recipient only. The
   corresponding private key is kept off the VPS.
-- `/opt/uniattend/releases/<sha>`: exact release files.
+- `/opt/uniattend/releases/<sha>`: exact release files. The current staging
+  SHA is a branch commit built locally on the VPS. Replace it with the merged
+  main SHA and registry images after PR approval and publication.
 - `/opt/uniattend/current`: symlink to the active release.
 
 Generate `private.env` with `prepare_private_env.py`, render the realm with
@@ -88,11 +91,33 @@ sudo systemctl start uniattend-keycloak-backup.service
 ls -lh /opt/uniattend/backups/*.age
 ```
 
-Export the Keycloak realm through the Admin API after client and user changes.
-Back up both the PostgreSQL database and the realm export before identity
-migration. The previous Railway Keycloak URL returned 404 on 2026-09-24;
-nine Supabase users carry old Keycloak IDs, so their login migration requires
-the old realm/DB backup or a controlled account reset and ID reconciliation.
+Run `deployment/ops/export_keycloak_realm.sh` after client and user changes.
+It briefly stops Keycloak, runs the offline realm export, encrypts the result,
+and restarts Keycloak. Copy both the PostgreSQL backup and realm export off
+the VPS; verify decryption and a PostgreSQL restore before student testing.
+
+The previous Railway Keycloak returned 404 on 2026-09-24. Seven role-bearing
+mock users were recreated in the new Keycloak and their Supabase subjects were
+remapped. Their generated credentials are held in the administrator's
+protected local file, outside Git and the VPS. Two extra local mock users
+had historical session, profile, audit or notification records. They were
+marked inactive and unlinked from Keycloak while their data was retained.
+Other seed rows without a previous Keycloak link remain unprovisioned.
+
+After the PR is merged and images are published, use the exact merged SHA:
+
+```bash
+sudo python3 /opt/uniattend/current/deployment/ops/set_image_tag.py \
+  --sha <merged-main-sha>
+test "$(stat -c %a /etc/uniattend/private.env)" = 600
+test "$(stat -c %U /etc/uniattend/private.env)" = uniattend
+/opt/uniattend/current/deployment/ops/deploy_private.sh /opt/uniattend/current
+```
+
+The environment file is in a root-owned directory. Run the tag update with
+`sudo`; the script preserves its original owner and permissions. If GHCR
+packages are private, authenticate Docker with a package-read token before
+pulling images. Keep that token out of the repository and shell history.
 
 ## Health, rollback and shutdown
 

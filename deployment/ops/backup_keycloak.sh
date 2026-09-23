@@ -12,12 +12,12 @@ mkdir -p "$backup_dir"
 
 container=$(docker compose --env-file "$env_file" -f "$release_dir/deployment/compose.app.yml" ps -q keycloak-db)
 test -n "$container"
-day=$(date -u +%Y-%m-%d)
-destination="$backup_dir/keycloak-$day.dump.age"
+stamp=$(date -u +%Y-%m-%dT%H%M%SZ)
+destination="$backup_dir/keycloak-$stamp.dump.age"
 temporary="$destination.tmp"
 if [[ -e "$destination" ]]; then
-  printf 'Backup already exists for %s\n' "$day"
-  exit 0
+  printf 'Backup already exists for %s\n' "$stamp" >&2
+  exit 1
 fi
 trap 'rm -f -- "$temporary"' EXIT
 docker exec "$container" pg_dump -U keycloak -d keycloak -Fc --no-owner --no-acl \
