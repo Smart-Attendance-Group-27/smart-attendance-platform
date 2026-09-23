@@ -8,27 +8,53 @@ import {
 
 import type { FaceVerificationService } from '../services/faceVerificationService';
 import { MockFaceVerificationService } from '../services/mockFaceVerificationService';
+import type { LivenessEvidence } from '../liveness/livenessEvidence';
 import type {
   FaceVerificationRequest,
   FaceVerificationResult,
 } from '../types/faceVerification';
 
-const verificationOutcomes: readonly FaceVerificationResult[] = [
-  { status: 'success' },
-  { status: 'face_not_detected' },
-  { status: 'multiple_faces' },
-  { status: 'liveness_failure' },
-  { status: 'verification_failure' },
+const livenessEvidence: LivenessEvidence = {
+  version: 1,
+  method: 'mlkit_challenge',
+  passed: true,
+  challenges: ['turn_left', 'eyes_closed_hold'],
+  startedAt: '2026-09-23T08:00:00.000Z',
+  completedAt: '2026-09-23T08:00:05.000Z',
+  engine: 'uniattend-mobile-liveness',
+};
+
+const verificationScenarios: readonly {
+  readonly scenario: string;
+  readonly result: FaceVerificationResult;
+}[] = [
+  { scenario: 'successful verification', result: { status: 'success' } },
+  {
+    scenario: 'identity mismatch',
+    result: { status: 'verification_failure', canRetry: true },
+  },
+  {
+    scenario: 'liveness rejection',
+    result: { status: 'liveness_failure', canRetry: true },
+  },
+  {
+    scenario: 'service unavailable',
+    result: { status: 'service_unavailable', canRetry: true },
+  },
+  { scenario: 'no face', result: { status: 'face_not_detected' } },
+  { scenario: 'multiple faces', result: { status: 'multiple_faces' } },
 ];
 
 function createRequest(
   sessionId = 'attendance-session-active',
+  evidence?: LivenessEvidence,
 ): FaceVerificationRequest {
   return {
     sessionId,
     capture: {
       uri: 'mock://face-capture',
     },
+    ...(evidence ? { livenessEvidence: evidence } : {}),
   };
 }
 
@@ -37,15 +63,15 @@ describe('MockFaceVerificationService', () => {
     jest.useRealTimers();
   });
 
-  test.each(verificationOutcomes)(
-    'returns the configured $status outcome',
-    async (configuredResult) => {
+  test.each(verificationScenarios)(
+    'simulates $scenario',
+    async ({ result }) => {
       const service = new MockFaceVerificationService({
-        result: configuredResult,
+        result,
       });
 
       await expect(service.verifyFace(createRequest())).resolves.toEqual(
-        configuredResult,
+        result,
       );
     },
   );
@@ -64,12 +90,16 @@ describe('MockFaceVerificationService', () => {
   });
 
   test('accepts the application capture request without mutating it', async () => {
-    const request: FaceVerificationRequest = createRequest();
+    const request: FaceVerificationRequest = createRequest(
+      'attendance-session-active',
+      livenessEvidence,
+    );
     const originalRequest: FaceVerificationRequest = {
       sessionId: request.sessionId,
       capture: {
         uri: request.capture.uri,
       },
+      livenessEvidence,
     };
     const service = new MockFaceVerificationService({
       result: { status: 'face_not_detected' },
