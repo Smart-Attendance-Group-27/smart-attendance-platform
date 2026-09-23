@@ -118,6 +118,14 @@ async def create_my_attendance_session(
         Depends(get_lecturer_session_service),
     ] = None,  # type: ignore[assignment]
 ) -> LecturerSessionResponse:
+    if body.requires_face_verification and http_request.app.state.settings.pilot_disable_face_attendance:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            {
+                "code": "FACE_ATTENDANCE_NOT_ENABLED",
+                "message": "Face attendance is not enabled for this pilot.",
+            },
+        )
     try:
         session = await session_service.create_for_user(
             http_request.app.state.db_pool,

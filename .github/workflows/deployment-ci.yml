@@ -71,6 +71,14 @@ jobs:
           docker compose --env-file deployment/mvp.env.example -f docker-compose.production.yml config --quiet
           docker compose --env-file deployment/private.env.example -f deployment/compose.app.yml config --quiet
           docker compose --env-file deployment/private.env.example -f deployment/compose.face.yml config --quiet
+          docker compose --env-file deployment/public.env.example -f deployment/compose.ingress.yml config --quiet
+
+      - name: Validate HTTPS ingress rules
+        run: |
+          docker run --rm \
+            --env-file deployment/public.env.example \
+            -v "$PWD/deployment/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10.2-alpine caddy validate --config /etc/caddy/Caddyfile
 
       - name: Rebuild and verify the production schema
         shell: bash

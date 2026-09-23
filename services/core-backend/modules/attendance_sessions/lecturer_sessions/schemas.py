@@ -19,7 +19,7 @@ class CreateSessionRequest(BaseModel):
     check_in_opens_at: datetime | None = Field(default=None, alias="checkInOpensAt")
     check_in_closes_at: datetime | None = Field(default=None, alias="checkInClosesAt")
     late_after_at: datetime | None = Field(default=None, alias="lateAfterAt")
-    requires_face_verification: bool = Field(default=True, alias="requiresFaceVerification")
+    requires_face_verification: bool = Field(default=False, alias="requiresFaceVerification")
     requires_geofence: bool = Field(default=True, alias="requiresGeofence")
     requires_qr: bool = Field(default=False, alias="requiresQr")
 

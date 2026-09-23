@@ -48,9 +48,9 @@ def main() -> None:
         "WEB_KEYCLOAK_CLIENT_SECRET": secrets.token_urlsafe(48),
         "WEB_SESSION_SECRET": secrets.token_urlsafe(48),
         "DYNAMIC_QR_HMAC_SECRET": secrets.token_urlsafe(48),
-        "WEB_BASE_URL": "http://localhost:3000",
-        "KEYCLOAK_PUBLIC_URL": "http://localhost:8080",
-        "KEYCLOAK_EXPECTED_ISSUER": "http://localhost:8080/realms/uniattend",
+        "WEB_BASE_URL": "https://app.152-53-33-198.sslip.io",
+        "KEYCLOAK_PUBLIC_URL": "https://auth.152-53-33-198.sslip.io",
+        "KEYCLOAK_EXPECTED_ISSUER": "https://auth.152-53-33-198.sslip.io/realms/uniattend",
         "KEYCLOAK_REALM_FILE": "/etc/uniattend/realm.json",
     }
     if any("\n" in value or "'" in value for value in values.values()):

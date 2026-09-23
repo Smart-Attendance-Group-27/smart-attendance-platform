@@ -32,7 +32,7 @@ export function CreateSessionButton({ timetableOptions }: { timetableOptions: Ti
   const [sessionTitle, setSessionTitle] = useState("");
   const [scheduledStartAt, setScheduledStartAt] = useState(defaultStartValue);
   const [scheduledEndAt, setScheduledEndAt] = useState(() => defaultEndValue(defaultStartValue()));
-  const [requiresFaceVerification, setRequiresFaceVerification] = useState(true);
+  const [requiresFaceVerification, setRequiresFaceVerification] = useState(false);
   const [requiresQr, setRequiresQr] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
