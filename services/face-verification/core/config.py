@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     face_minimum_detection_confidence: float = Field(default=0.60, ge=0,le=1,)
     face_max_concurrent_inferences: int = Field(default=1, ge=1)
     face_max_attempts: int = Field(default=3, ge=1)
-    liveness_enforcement_enabled: bool = False
+    liveness_enforcement_enabled: bool = True
     liveness_max_age_seconds: int = Field(default=120, gt=0)
 
     # The Core Backend owns Keycloak validation and student-profile lookup.
