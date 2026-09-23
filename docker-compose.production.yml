@@ -47,8 +47,8 @@ services:
       FACE_MINIMUM_DETECTION_CONFIDENCE: ${FACE_MINIMUM_DETECTION_CONFIDENCE:-0.60}
       FACE_MAX_CONCURRENT_INFERENCES: ${FACE_MAX_CONCURRENT_INFERENCES:-1}
       FACE_MAX_ATTEMPTS: ${FACE_MAX_ATTEMPTS:-3}
-      # First MVP release: liveness integration is deliberately deferred.
-      LIVENESS_ENFORCEMENT_ENABLED: "false"
+      # Integrated attendance requires evidence; explicit false is legacy-only.
+      LIVENESS_ENFORCEMENT_ENABLED: ${LIVENESS_ENFORCEMENT_ENABLED:-true}
       LIVENESS_MAX_AGE_SECONDS: ${LIVENESS_MAX_AGE_SECONDS:-120}
       CORE_API_URL: http://core-api:8000
       CORE_API_TIMEOUT_SECONDS: ${FACE_CORE_API_TIMEOUT_SECONDS:-5}
