@@ -1,7 +1,7 @@
 // @vitest-environment node
 //
 // oidc.ts is server-only code with no DOM dependency.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -9,10 +9,21 @@ beforeEach(() => {
   process.env.KEYCLOAK_ISSUER = "http://localhost:8080/realms/uniattend";
   process.env.KEYCLOAK_CLIENT_ID = "uniattend-web";
   process.env.KEYCLOAK_CLIENT_SECRET = "test-secret";
+  delete process.env.KEYCLOAK_INTERNAL_ISSUER;
 });
 
-const { buildAuthorizationUrl, buildEndSessionUrl, generatePkcePair, generateRandomToken, isKeycloakConfigured } =
-  await import("@/lib/auth/oidc");
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+const {
+  buildAuthorizationUrl,
+  buildEndSessionUrl,
+  generatePkcePair,
+  generateRandomToken,
+  getOidcDiscovery,
+  isKeycloakConfigured,
+} = await import("@/lib/auth/oidc");
 
 const SAMPLE_DISCOVERY = {
   issuer: "http://localhost:8080/realms/uniattend",
@@ -21,6 +32,34 @@ const SAMPLE_DISCOVERY = {
   endSessionEndpoint: "http://localhost:8080/realms/uniattend/protocol/openid-connect/logout",
   jwksUri: "http://localhost:8080/realms/uniattend/protocol/openid-connect/certs",
 };
+
+describe("getOidcDiscovery", () => {
+  it("keeps browser endpoints public and routes server endpoints over Docker", async () => {
+    process.env.KEYCLOAK_INTERNAL_ISSUER = "http://keycloak:8080/realms/uniattend";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            authorization_endpoint: `${SAMPLE_DISCOVERY.issuer}/protocol/openid-connect/auth`,
+            token_endpoint: `${SAMPLE_DISCOVERY.issuer}/protocol/openid-connect/token`,
+            end_session_endpoint: `${SAMPLE_DISCOVERY.issuer}/protocol/openid-connect/logout`,
+            jwks_uri: `${SAMPLE_DISCOVERY.issuer}/protocol/openid-connect/certs`,
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    await expect(getOidcDiscovery()).resolves.toEqual({
+      issuer: SAMPLE_DISCOVERY.issuer,
+      authorizationEndpoint: SAMPLE_DISCOVERY.authorizationEndpoint,
+      tokenEndpoint: "http://keycloak:8080/realms/uniattend/protocol/openid-connect/token",
+      endSessionEndpoint: SAMPLE_DISCOVERY.endSessionEndpoint,
+      jwksUri: "http://keycloak:8080/realms/uniattend/protocol/openid-connect/certs",
+    });
+  });
+});
 
 describe("isKeycloakConfigured", () => {
   it("is true when all three env vars are set", () => {

@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import { decryptSession, deleteSession, readSessionCookie, updateSessionRefreshToken, type SessionPayload } from "./session";
+import { decryptSession, readSessionCookie, updateSessionRefreshToken, type SessionPayload } from "./session";
 import { WebRole } from "./roles";
 import { getOidcDiscovery, refreshTokens, TokenResponse } from "./oidc";
 
@@ -59,8 +59,9 @@ async function refreshOrSignOut(session: SessionPayload): Promise<TokenResponse>
     tokens = await refreshTokens({ discovery, refreshToken: session.refreshToken });
   } catch {
     // Refresh token expired/revoked at Keycloak — the user must sign in again.
-    await deleteSession();
-    redirect("/login");
+    // Cookie writes are forbidden while this function is called during a
+    // Server Component render. A Route Handler clears the unusable session.
+    redirect("/api/auth/clear-session");
   }
 
   try {

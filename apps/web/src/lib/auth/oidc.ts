@@ -45,15 +45,17 @@ export async function getOidcDiscovery(): Promise<OidcDiscovery> {
   }
   const doc = (await response.json()) as Record<string, unknown>;
 
-  const authorizationEndpoint = String(doc.authorization_endpoint).replace(internalIssuer, issuer);
-  const endSessionEndpoint = String(doc.end_session_endpoint).replace(internalIssuer, issuer);
+  const publicEndpoint = (value: unknown) => String(value).replace(internalIssuer, issuer);
+  const internalEndpoint = (value: unknown) => String(value).replace(issuer, internalIssuer);
 
   return {
     issuer,
-    authorizationEndpoint,
-    tokenEndpoint: String(doc.token_endpoint),
-    endSessionEndpoint,
-    jwksUri: String(doc.jwks_uri),
+    // These endpoints are followed by the user's browser.
+    authorizationEndpoint: publicEndpoint(doc.authorization_endpoint),
+    endSessionEndpoint: publicEndpoint(doc.end_session_endpoint),
+    // These endpoints are called by the web container itself.
+    tokenEndpoint: internalEndpoint(doc.token_endpoint),
+    jwksUri: internalEndpoint(doc.jwks_uri),
   };
 }
 
