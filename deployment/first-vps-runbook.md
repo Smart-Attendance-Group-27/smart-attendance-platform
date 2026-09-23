@@ -104,14 +104,22 @@ had historical session, profile, audit or notification records. They were
 marked inactive and unlinked from Keycloak while their data was retained.
 Other seed rows without a previous Keycloak link remain unprovisioned.
 
-After the PR is merged and images are published, use the exact merged SHA:
+After the PR is merged and images are published, use the exact merged SHA.
+Clone it into a new release directory, verify `HEAD`, deploy from that
+directory, and move `current` only after the health checks pass:
 
 ```bash
-sudo python3 /opt/uniattend/current/deployment/ops/set_image_tag.py \
-  --sha <merged-main-sha>
+sha=<merged-main-sha>
+release_dir="/opt/uniattend/releases/$sha"
+git clone --depth 1 --branch main \
+  https://github.com/Smart-Attendance-Group-27/smart-attendance-platform.git \
+  "$release_dir"
+test "$(git -C "$release_dir" rev-parse HEAD)" = "$sha"
+sudo python3 "$release_dir/deployment/ops/set_image_tag.py" --sha "$sha"
 test "$(stat -c %a /etc/uniattend/private.env)" = 600
 test "$(stat -c %U /etc/uniattend/private.env)" = uniattend
-/opt/uniattend/current/deployment/ops/deploy_private.sh /opt/uniattend/current
+"$release_dir/deployment/ops/deploy_private.sh" "$release_dir"
+ln -sfn "$release_dir" /opt/uniattend/current
 ```
 
 The environment file is in a root-owned directory. Run the tag update with
