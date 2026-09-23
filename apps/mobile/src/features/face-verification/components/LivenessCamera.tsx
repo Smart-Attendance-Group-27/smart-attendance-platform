@@ -52,7 +52,10 @@ export type LivenessCameraResult = {
 };
 
 const defaultControllerFactory: LivenessControllerFactory = (captureSource) =>
-  createLivenessSessionController({ captureSource });
+  createLivenessSessionController({
+    captureSource,
+    challengePreparationMs: 5_000,
+  });
 
 const EMPTY_SNAPSHOT: LivenessSessionSnapshot = {
   status: 'idle',
@@ -64,6 +67,7 @@ const EMPTY_SNAPSHOT: LivenessSessionSnapshot = {
   timeoutReason: null,
   finalPhoto: null,
   livenessEvidence: null,
+  preparingChallenge: false,
 };
 
 const EMPTY_CONTROLLER: LivenessSessionController = {
@@ -71,6 +75,7 @@ const EMPTY_CONTROLLER: LivenessSessionController = {
   claimFinalPhoto: () => null,
   dispose: () => undefined,
   getSnapshot: () => EMPTY_SNAPSHOT,
+  retryCurrentChallenge: () => undefined,
   restart: () => undefined,
   start: () => undefined,
   subscribe: () => () => undefined,
@@ -79,7 +84,7 @@ const EMPTY_CONTROLLER: LivenessSessionController = {
 const CHALLENGE_INSTRUCTIONS: Record<LivenessChallenge, string> = {
   turn_left: 'Turn your head left',
   turn_right: 'Turn your head right',
-  eyes_closed_hold: 'Blink — close both eyes briefly and reopen them',
+  eyes_closed_hold: 'Close both eyes and hold',
 };
 
 export function LivenessCamera({
@@ -200,7 +205,7 @@ export function LivenessCamera({
       setCameraKey((key) => key + 1);
       return;
     }
-    controller?.restart();
+    controller?.retryCurrentChallenge();
   };
 
   const cancel = () => {
@@ -336,14 +341,24 @@ function getStatusContent(
       return {
         progress: `Challenge ${snapshot.completedChallengeCount + 1} of ${snapshot.challengeCount}`,
         title: CHALLENGE_INSTRUCTIONS[snapshot.activeChallenge],
-        message: 'Keep your face visible while we check your movement.',
+        message: snapshot.preparingChallenge
+          ? snapshot.completedChallengeCount > 0
+            ? 'Previous challenge complete. Get ready—the next check starts in 5 seconds.'
+            : 'Get into position. Capturing starts in 5 seconds.'
+          : snapshot.activeChallenge === 'eyes_closed_hold'
+            ? 'Keep both eyes fully closed until this challenge is confirmed.'
+            : 'Keep your face visible while we check your movement.',
       };
     }
 
     return {
       progress: 'Final check',
-      title: 'Look straight at the camera',
-      message: 'Hold still briefly while we confirm your frontal position.',
+      title: snapshot.preparingChallenge
+        ? 'Challenges complete'
+        : 'Look straight at the camera',
+      message: snapshot.preparingChallenge
+        ? 'Face forward now. Your final photo will be captured in 5 seconds.'
+        : 'Hold still briefly while we confirm your frontal position.',
     };
   }
 

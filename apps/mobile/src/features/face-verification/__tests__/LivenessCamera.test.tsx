@@ -123,6 +123,9 @@ function createFakeController(): FakeController {
     }),
     dispose: jest.fn(),
     getSnapshot: () => snapshot,
+    retryCurrentChallenge: jest.fn(() => {
+      setSnapshot(createSnapshot('running', sessionState));
+    }),
     restart: jest.fn(() => {
       setSnapshot(createSnapshot('running', sessionState));
     }),
@@ -166,6 +169,7 @@ function createSnapshot(
     timeoutReason,
     finalPhoto,
     livenessEvidence,
+    preparingChallenge: false,
   };
 }
 
@@ -224,6 +228,25 @@ describe('LivenessCamera', () => {
     expect(fake.controller.start).toHaveBeenCalledTimes(1);
   });
 
+  test('shows preparation guidance before challenge capture starts', async () => {
+    const fake = createFakeController();
+    const screen = await render(
+      <LivenessCamera controllerFactory={() => fake.controller} />,
+    );
+    await screen.findByText('Turn your head left');
+
+    await act(async () => {
+      fake.setSnapshot({
+        ...createSnapshot('running', fake.sessionState),
+        preparingChallenge: true,
+      });
+    });
+
+    expect(
+      screen.getByText('Get into position. Capturing starts in 5 seconds.'),
+    ).toBeTruthy();
+  });
+
   test('shows the friendly eyes-closed instruction without renaming the challenge', async () => {
     const fake = createFakeController();
     const screen = await render(
@@ -238,12 +261,12 @@ describe('LivenessCamera', () => {
 
     expect(screen.getByText('Challenge 2 of 2')).toBeTruthy();
     expect(
-      screen.getByText('Blink — close both eyes briefly and reopen them'),
+      screen.getByText('Close both eyes and hold'),
     ).toBeTruthy();
     expect(secondState.challenges[1].challenge).toBe('eyes_closed_hold');
   });
 
-  test('shows a recoverable local failure and restarts through the controller', async () => {
+  test('shows a recoverable local failure and retries through the controller', async () => {
     const fake = createFakeController();
     const onSuccess = jest.fn();
     const screen = await render(
@@ -270,7 +293,7 @@ describe('LivenessCamera', () => {
     expect(onSuccess).not.toHaveBeenCalled();
 
     await fireEvent.press(screen.getByRole('button', { name: 'Try Again' }));
-    expect(fake.controller.restart).toHaveBeenCalledTimes(1);
+    expect(fake.controller.retryCurrentChallenge).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('Turn your head left')).toBeTruthy();
   });
 
