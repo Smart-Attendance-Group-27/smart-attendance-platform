@@ -3,6 +3,10 @@ from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
 
+class FaceInferenceQueueTimeoutError(RuntimeError):
+    """Raised when inference capacity is unavailable within the configured wait."""
+
+
 # Acceptable outcomes returned after analyzing a captured image.
 class FaceAnalysisStatus(StrEnum):
     SUCCESS = "success"
@@ -76,3 +80,11 @@ class FaceEngine(Protocol):
         """Analyze encoded image bytes and return one normalized embedding."""
 
         ...
+
+
+__all__ = [
+    "FaceAnalysisResult",
+    "FaceAnalysisStatus",
+    "FaceEngine",
+    "FaceInferenceQueueTimeoutError",
+]

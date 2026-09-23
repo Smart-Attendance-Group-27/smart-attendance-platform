@@ -17,13 +17,14 @@ from api.schemas.attendance import (
 from core.config import Settings
 from services.attendance_face_verification_service import (
     AttendanceFaceVerificationService,
+    AttendanceFaceVerificationBusyError,
     AttendanceFaceVerificationUnavailableError,
     VerificationClosedError,
     VerificationNotStartedError,
 )
 from services.liveness_evidence import (
     LivenessEvidenceValidationError,
-    validate_optional_liveness_evidence,
+    validate_liveness_evidence,
 )
 
 
@@ -57,9 +58,8 @@ async def verify_attendance_face(
     ] = None,
 ) -> AttendanceFaceVerificationResponse | JSONResponse:
     try:
-        liveness_evidence = validate_optional_liveness_evidence(
+        liveness_evidence = validate_liveness_evidence(
             liveness,
-            enforcement_enabled=settings.liveness_enforcement_enabled,
             max_age_seconds=settings.liveness_max_age_seconds,
         )
     except LivenessEvidenceValidationError:
@@ -90,6 +90,11 @@ async def verify_attendance_face(
     except AttendanceFaceVerificationUnavailableError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+    except AttendanceFaceVerificationBusyError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(error),
         ) from error
 

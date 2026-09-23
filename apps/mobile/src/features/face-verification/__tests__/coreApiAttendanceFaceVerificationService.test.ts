@@ -194,6 +194,29 @@ test.each([
   },
 );
 
+test('accepts attempt zero for a non-consuming verification failure', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue(
+    response({
+      status: 'verification_failure',
+      attemptNumber: 0,
+      canRetry: true,
+    }),
+  );
+  const service = new CoreApiAttendanceFaceVerificationService(
+    new CoreApiClient({ baseUrl, getAccessToken: () => token }),
+  );
+
+  await expect(
+    service.verifyFace({
+      sessionId: 'attendance-session',
+      capture: { uri: 'file:///capture.jpg' },
+    }),
+  ).resolves.toEqual({
+    status: 'verification_failure',
+    canRetry: true,
+  });
+});
+
 test('keeps a network failure retryable and separate from liveness rejection', async () => {
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   jest.spyOn(global, 'fetch').mockRejectedValue(new Error('offline'));

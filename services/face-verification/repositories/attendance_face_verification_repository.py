@@ -27,15 +27,41 @@ class AttendanceFaceVerificationRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def get_verification_context(
+        self,
+        *,
+        session_id: UUID,
+        student_id: UUID,
+    ) -> AttendanceVerificationContext | None:
+        return await self._verification_context(
+            session_id=session_id,
+            student_id=student_id,
+            lock=False,
+        )
+
     async def lock_verification_context(
         self,
         *,
         session_id: UUID,
         student_id: UUID,
     ) -> AttendanceVerificationContext | None:
+        return await self._verification_context(
+            session_id=session_id,
+            student_id=student_id,
+            lock=True,
+        )
+
+    async def _verification_context(
+        self,
+        *,
+        session_id: UUID,
+        student_id: UUID,
+        lock: bool,
+    ) -> AttendanceVerificationContext | None:
+        lock_clause = "FOR UPDATE OF attempt" if lock else ""
         result = await self._session.execute(
             text(
-                """
+                f"""
                 SELECT
                     attempt.id AS verification_attempt_id,
                     attempt.status AS verification_status,
@@ -59,7 +85,7 @@ class AttendanceFaceVerificationRepository:
                   ON attendance_session.id = attempt.session_id
                 WHERE attempt.session_id = :session_id
                   AND attempt.student_id = :student_id
-                FOR UPDATE OF attempt
+                {lock_clause}
                 """
             ),
             {"session_id": session_id, "student_id": student_id},
@@ -81,11 +107,31 @@ class AttendanceFaceVerificationRepository:
             cancelled_at=row["cancelled_at"],
         )
 
+    async def get_latest_face_attempt(
+        self,
+        verification_attempt_id: UUID,
+    ) -> FaceValidationAttempt | None:
+        return await self._latest_face_attempt(
+            verification_attempt_id,
+            lock=False,
+        )
+
     async def lock_latest_face_attempt(
         self,
         verification_attempt_id: UUID,
     ) -> FaceValidationAttempt | None:
-        result = await self._session.execute(
+        return await self._latest_face_attempt(
+            verification_attempt_id,
+            lock=True,
+        )
+
+    async def _latest_face_attempt(
+        self,
+        verification_attempt_id: UUID,
+        *,
+        lock: bool,
+    ) -> FaceValidationAttempt | None:
+        statement = (
             select(FaceValidationAttempt)
             .where(
                 FaceValidationAttempt.verification_attempt_id
@@ -93,14 +139,17 @@ class AttendanceFaceVerificationRepository:
             )
             .order_by(FaceValidationAttempt.attempt_number.desc())
             .limit(1)
-            .with_for_update()
+        )
+        if lock:
+            statement = statement.with_for_update()
+        result = await self._session.execute(
+            statement
         )
         return result.scalar_one_or_none()
 
-    async def save_latest_face_attempt(
+    async def record_face_attempt(
         self,
         *,
-        existing: FaceValidationAttempt | None,
         verification_attempt_id: UUID,
         face_profile_id: UUID,
         attempt_number: int,
@@ -113,7 +162,7 @@ class AttendanceFaceVerificationRepository:
         captured_at: datetime,
         validated_at: datetime,
     ) -> FaceValidationAttempt:
-        record = existing or FaceValidationAttempt(
+        record = FaceValidationAttempt(
             verification_attempt_id=verification_attempt_id,
             face_profile_id=face_profile_id,
             attempt_number=attempt_number,
@@ -135,9 +184,7 @@ class AttendanceFaceVerificationRepository:
         record.captured_at = captured_at
         record.validated_at = validated_at
 
-        if existing is None:
-            self._session.add(record)
-
+        self._session.add(record)
         await self._session.flush()
         return record
 

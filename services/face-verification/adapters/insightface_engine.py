@@ -6,7 +6,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, Protocol
 
 from core.config import Settings
-from services.face_engine import (FaceAnalysisResult,FaceAnalysisStatus,FaceEngine,)
+from services.face_engine import (FaceAnalysisResult,FaceAnalysisStatus,FaceEngine,FaceInferenceQueueTimeoutError,)
 
 
 __all__ = [
@@ -28,9 +28,10 @@ def create_configured_insightface_engine(settings: Settings,) -> InsightFaceEngi
             settings.face_minimum_detection_confidence
         ),
         max_concurrent_inferences=settings.face_max_concurrent_inferences,
+        inference_queue_timeout_seconds=settings.face_inference_queue_timeout_seconds,
     )
 
-def create_insightface_engine(*,model_name: str,providers: Sequence[str],context_id: int,detection_size: tuple[int, int],minimum_detection_confidence: float,max_concurrent_inferences: int,) -> InsightFaceEngine:
+def create_insightface_engine(*,model_name: str,providers: Sequence[str],context_id: int,detection_size: tuple[int, int],minimum_detection_confidence: float,max_concurrent_inferences: int,inference_queue_timeout_seconds: float,) -> InsightFaceEngine:
 
     try:
         import cv2
@@ -61,6 +62,7 @@ def create_insightface_engine(*,model_name: str,providers: Sequence[str],context
         model_name=model_name,
         minimum_detection_confidence=minimum_detection_confidence,
         max_concurrent_inferences=max_concurrent_inferences,
+        inference_queue_timeout_seconds=inference_queue_timeout_seconds,
     )
 
 # InsightFace's FaceAnalysis object follows this interface.
@@ -77,7 +79,7 @@ class InsightFaceEngine(FaceEngine):
     """Adapt InsightFace output to the application's FaceEngine contract."""
 
     def __init__(self,*,analyzer: InsightFaceAnalyzer,image_decoder: ImageDecoder,model_name: str,
-        minimum_detection_confidence: float,max_concurrent_inferences: int,) -> None:
+        minimum_detection_confidence: float,max_concurrent_inferences: int,inference_queue_timeout_seconds: float,) -> None:
         
         if not model_name.strip():
             raise ValueError("Model name cannot be blank")
@@ -88,11 +90,15 @@ class InsightFaceEngine(FaceEngine):
         if max_concurrent_inferences < 1:
             raise ValueError("Maximum concurrent inferences must be at least 1")
 
+        if inference_queue_timeout_seconds <= 0:
+            raise ValueError("Inference queue timeout must be greater than zero")
+
         self._analyzer = analyzer
         self._image_decoder = image_decoder
         self._model_name = model_name
         self._minimum_detection_confidence = (minimum_detection_confidence)
         self._inference_semaphore = asyncio.Semaphore(max_concurrent_inferences)
+        self._inference_queue_timeout_seconds = inference_queue_timeout_seconds
 
     async def analyze(self, image: bytes) -> FaceAnalysisResult:
         """Decode one image and return one normalized face embedding."""
@@ -111,10 +117,24 @@ class InsightFaceEngine(FaceEngine):
             return self._failure(status=FaceAnalysisStatus.PROCESSING_FAILED,face_count=0,reason="Image could not be decoded",)
 
         try:
-            # semaphore limits how many calls use this model simultaneously.
-            async with self._inference_semaphore:
-                faces = await asyncio.to_thread(self._analyzer.get,decoded_image,)
+            # Bound queue wait separately so an acquired slot may finish inference.
+            try:
+                await asyncio.wait_for(
+                    self._inference_semaphore.acquire(),
+                    timeout=self._inference_queue_timeout_seconds,
+                )
+            except TimeoutError as error:
+                raise FaceInferenceQueueTimeoutError(
+                    "Face inference capacity is temporarily unavailable"
+                ) from error
 
+            try:
+                faces = await asyncio.to_thread(self._analyzer.get,decoded_image,)
+            finally:
+                self._inference_semaphore.release()
+
+        except FaceInferenceQueueTimeoutError:
+            raise
         except Exception:
             # Do not return internal model details to an API caller.
             return self._failure(status=FaceAnalysisStatus.PROCESSING_FAILED,face_count=0,reason="Face analysis failed",)

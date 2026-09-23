@@ -7,7 +7,6 @@ from services.liveness_evidence import (
     LivenessEvidenceValidationError,
     MAX_EVIDENCE_BYTES,
     validate_liveness_evidence,
-    validate_optional_liveness_evidence,
 )
 
 
@@ -257,26 +256,14 @@ def test_rejects_blank_engine() -> None:
         validate(evidence(engine=" "))
 
 
-def test_allows_missing_evidence_when_enforcement_is_disabled() -> None:
-    result = validate_optional_liveness_evidence(
-        None,
-        enforcement_enabled=False,
-        clock=lambda: NOW,
-    )
-
-    assert result is None
-
-
-def test_rejects_missing_evidence_when_enforcement_is_enabled() -> None:
+def test_rejects_missing_evidence() -> None:
     with pytest.raises(LivenessEvidenceValidationError, match="required"):
-        validate_optional_liveness_evidence(
+        validate_liveness_evidence(
             None,
-            enforcement_enabled=True,
             clock=lambda: NOW,
         )
 
 
-@pytest.mark.parametrize("enforcement_enabled", [False, True])
 @pytest.mark.parametrize(
     "serialized_evidence",
     [
@@ -288,23 +275,20 @@ def test_rejects_missing_evidence_when_enforcement_is_enabled() -> None:
         ),
     ],
 )
-def test_rejects_invalid_supplied_evidence_in_every_enforcement_mode(
-    enforcement_enabled: bool,
+def test_rejects_invalid_supplied_evidence(
     serialized_evidence: str,
 ) -> None:
     with pytest.raises(LivenessEvidenceValidationError):
-        validate_optional_liveness_evidence(
+        validate_liveness_evidence(
             serialized_evidence,
-            enforcement_enabled=enforcement_enabled,
             clock=lambda: NOW,
         )
 
 
 def test_uses_configured_maximum_age_for_supplied_evidence() -> None:
     with pytest.raises(LivenessEvidenceValidationError, match="expired"):
-        validate_optional_liveness_evidence(
+        validate_liveness_evidence(
             evidence(),
-            enforcement_enabled=False,
             max_age_seconds=10,
             clock=lambda: NOW,
         )
