@@ -22,12 +22,17 @@ import {
   typography,
 } from '../../../theme';
 import { AttendanceProgressSteps } from '../../attendance/components/AttendanceProgressSteps';
+import {
+  LivenessCamera,
+  type LivenessCameraResult,
+} from '../components/LivenessCamera';
 import type { FaceVerificationService } from '../services/faceVerificationService';
 import type { FaceVerificationResult } from '../types/faceVerification';
 
 type FaceVerificationScreenProps = {
   sessionId: string;
   faceVerificationService: FaceVerificationService;
+  livenessMode?: 'required' | 'off';
   mode?: 'attendance' | 'readiness';
   onBack: () => void;
   onFaceVerified: (sessionId: string) => void;
@@ -167,6 +172,16 @@ const statusContent: Record<
     },
     title: 'Verification could not confirm liveness',
     message: 'Keep your face visible and steady, then try again.',
+    tone: 'error',
+  },
+  service_unavailable: {
+    icon: {
+      ios: 'exclamationmark.circle.fill',
+      android: 'error',
+      web: 'error',
+    },
+    title: 'Face verification is temporarily unavailable',
+    message: 'The verification service is unavailable. Please try again.',
     tone: 'error',
   },
   verification_failure: {
@@ -531,6 +546,7 @@ function VerificationAction({
 export function FaceVerificationScreen({
   sessionId,
   faceVerificationService,
+  livenessMode = 'required',
   mode = 'attendance',
   onBack,
   onFaceVerified,
@@ -541,27 +557,166 @@ export function FaceVerificationScreen({
   });
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
+  const [livenessSessionKey, setLivenessSessionKey] = useState(0);
   const cameraRef = useRef<CameraView>(null);
   const activeRequest = useRef(0);
   const isMounted = useRef(true);
   const isOpeningCamera = useRef(false);
   const isProcessing = useRef(false);
+  const isRestartingLiveness = useRef(false);
+  const hasExited = useRef(false);
   const hasContinued = useRef(false);
+  const pendingLivenessResult = useRef<LivenessCameraResult | null>(null);
+  const acceptedLivenessResult = useRef<LivenessCameraResult | null>(null);
+  const livenessSessionKeyRef = useRef(0);
+  const discardedLivenessResults = useRef(
+    new WeakSet<LivenessCameraResult>(),
+  );
   const isReadinessCheck = mode === 'readiness';
+
+  const discardLivenessResult = async (result: LivenessCameraResult) => {
+    if (discardedLivenessResults.current.has(result)) {
+      return;
+    }
+
+    discardedLivenessResults.current.add(result);
+    await result.photo.delete().catch(() => undefined);
+  };
 
   useEffect(() => {
     isMounted.current = true;
+    const discardedResults = discardedLivenessResults.current;
 
     return () => {
       isMounted.current = false;
+      hasExited.current = true;
       isOpeningCamera.current = false;
       isProcessing.current = false;
       activeRequest.current += 1;
+      const livenessResult = pendingLivenessResult.current;
+      pendingLivenessResult.current = null;
+      if (
+        livenessResult &&
+        !discardedResults.has(livenessResult)
+      ) {
+        discardedResults.add(livenessResult);
+        void livenessResult.photo.delete().catch(() => undefined);
+      }
     };
   }, []);
 
+  const acceptLivenessResult = (
+    result: LivenessCameraResult,
+    sessionKey: number,
+  ) => {
+    if (
+      !isMounted.current ||
+      hasExited.current ||
+      sessionKey !== livenessSessionKeyRef.current ||
+      isProcessing.current ||
+      acceptedLivenessResult.current
+    ) {
+      if (acceptedLivenessResult.current !== result) {
+        void discardLivenessResult(result);
+      }
+      return;
+    }
+
+    acceptedLivenessResult.current = result;
+    isRestartingLiveness.current = false;
+    pendingLivenessResult.current = result;
+    isProcessing.current = true;
+    const requestId = activeRequest.current + 1;
+    activeRequest.current = requestId;
+    setState({ status: 'processing' });
+
+    void (async () => {
+      let restartLiveness = false;
+
+      try {
+        const verificationResult = await faceVerificationService.verifyFace({
+          sessionId,
+          capture: { uri: result.photo.uri },
+          livenessEvidence: result.livenessEvidence,
+        });
+
+        if (!isMounted.current || activeRequest.current !== requestId) {
+          return;
+        }
+
+        if (verificationResult.status === 'liveness_failure') {
+          restartLiveness = true;
+        } else {
+          setState(verificationResult);
+        }
+      } catch {
+        if (isMounted.current && activeRequest.current === requestId) {
+          setState({ status: 'unexpected_error' });
+        }
+      } finally {
+        if (pendingLivenessResult.current === result) {
+          pendingLivenessResult.current = null;
+          await discardLivenessResult(result);
+        }
+
+        if (activeRequest.current === requestId) {
+          isProcessing.current = false;
+
+          if (restartLiveness && isMounted.current) {
+            acceptedLivenessResult.current = null;
+            const nextSessionKey = livenessSessionKeyRef.current + 1;
+            livenessSessionKeyRef.current = nextSessionKey;
+            setLivenessSessionKey(nextSessionKey);
+            setState({ status: 'ready' });
+          }
+        }
+      }
+    })();
+  };
+
+  const cancelAndExit = () => {
+    if (hasExited.current) {
+      return;
+    }
+
+    hasExited.current = true;
+    isOpeningCamera.current = false;
+    isProcessing.current = false;
+    isRestartingLiveness.current = false;
+    activeRequest.current += 1;
+    livenessSessionKeyRef.current += 1;
+    acceptedLivenessResult.current = null;
+
+    const livenessResult = pendingLivenessResult.current;
+    pendingLivenessResult.current = null;
+    if (livenessResult) {
+      void discardLivenessResult(livenessResult);
+    }
+
+    onBack();
+  };
+
+  const retryRequiredLiveness = () => {
+    if (
+      hasExited.current ||
+      !canRetryWithFreshLiveness(state) ||
+      isProcessing.current ||
+      isRestartingLiveness.current
+    ) {
+      return;
+    }
+
+    isRestartingLiveness.current = true;
+    acceptedLivenessResult.current = null;
+    const nextSessionKey = livenessSessionKeyRef.current + 1;
+    livenessSessionKeyRef.current = nextSessionKey;
+    setLivenessSessionKey(nextSessionKey);
+    setState({ status: 'ready' });
+  };
+
   const openCamera = async () => {
     if (
+      hasExited.current ||
       isOpeningCamera.current ||
       isProcessing.current ||
       hasContinued.current
@@ -602,6 +757,7 @@ export function FaceVerificationScreen({
 
   const verifyFace = async () => {
     if (
+      hasExited.current ||
       isProcessing.current ||
       hasContinued.current ||
       !cameraReady ||
@@ -660,7 +816,11 @@ export function FaceVerificationScreen({
   };
 
   const continueToResult = () => {
-    if (state.status !== 'success' || hasContinued.current) {
+    if (
+      hasExited.current ||
+      state.status !== 'success' ||
+      hasContinued.current
+    ) {
       return;
     }
 
@@ -683,11 +843,12 @@ export function FaceVerificationScreen({
   const processing = state.status === 'processing';
   const showReadinessStage =
     isReadinessCheck && isVerificationOutcomeState(state.status);
+  const livenessRequired = livenessMode === 'required';
 
   return (
     <ScreenContainer scrollable contentContainerStyle={styles.screenContent}>
       <ScreenHeader
-        onBack={onBack}
+        onBack={cancelAndExit}
         title={isReadinessCheck ? 'Face Readiness Check' : 'Face Verification'}
       />
 
@@ -695,7 +856,18 @@ export function FaceVerificationScreen({
         <AttendanceProgressSteps phase="face" />
       )}
 
-      {showReadinessStage ? (
+      {livenessRequired ? (
+        state.status === 'ready' ? (
+          <LivenessCamera
+            key={livenessSessionKey}
+            onSuccess={(result) => {
+              acceptLivenessResult(result, livenessSessionKey);
+            }}
+          />
+        ) : (
+          <VerificationStage content={content} processing={processing} />
+        )
+      ) : showReadinessStage ? (
         <VerificationStage content={content} processing={processing} />
       ) : (
         <FaceCameraPreview
@@ -711,33 +883,65 @@ export function FaceVerificationScreen({
         />
       )}
 
-      {showReadinessStage ? null : (
+      {livenessRequired || showReadinessStage ? null : (
         <StatusCard content={content} processing={processing} />
       )}
 
-      <View style={styles.action}>
-        <VerificationAction
-          cameraReady={cameraReady}
-          continueAccessibilityLabel={
-            isReadinessCheck
-              ? 'Return to dashboard'
-              : 'Continue to QR scanner'
-          }
-          continueTitle={isReadinessCheck ? 'Done' : 'Continue'}
-          onContinue={continueToResult}
-          onExit={onBack}
-          onOpenCamera={() => void openCamera()}
-          onVerify={() => {
-            if (isReadinessCheck && isVerificationFailureState(state.status)) {
-              void openCamera();
-              return;
+      {livenessRequired ? (
+        state.status === 'success' ? (
+          <View style={styles.action}>
+            <AppButton
+              accessibilityLabel={
+                isReadinessCheck
+                  ? 'Return to dashboard'
+                  : 'Continue to attendance progress'
+              }
+              onPress={continueToResult}
+              title={isReadinessCheck ? 'Done' : 'Continue'}
+            />
+          </View>
+        ) : canRetryWithFreshLiveness(state) ? (
+          <View style={styles.action}>
+            <AppButton
+              accessibilityLabel="Retry face verification"
+              onPress={retryRequiredLiveness}
+              title="Try Again"
+            />
+          </View>
+        ) : 'canRetry' in state && state.canRetry === false ? (
+          <View style={styles.action}>
+            <AppButton
+              accessibilityLabel="Return to attendance session"
+              onPress={cancelAndExit}
+              title="Return to Session"
+            />
+          </View>
+        ) : null
+      ) : (
+        <View style={styles.action}>
+          <VerificationAction
+            cameraReady={cameraReady}
+            continueAccessibilityLabel={
+              isReadinessCheck
+                ? 'Return to dashboard'
+                : 'Continue to attendance progress'
             }
+            continueTitle={isReadinessCheck ? 'Done' : 'Continue'}
+            onContinue={continueToResult}
+            onExit={cancelAndExit}
+            onOpenCamera={() => void openCamera()}
+            onVerify={() => {
+              if (isReadinessCheck && isVerificationFailureState(state.status)) {
+                void openCamera();
+                return;
+              }
 
-            void verifyFace();
-          }}
-          state={state}
-        />
-      </View>
+              void verifyFace();
+            }}
+            state={state}
+          />
+        </View>
+      )}
 
       <View
         accessible
@@ -776,9 +980,23 @@ function isVerificationFailureState(
     status === 'face_not_detected' ||
     status === 'multiple_faces' ||
     status === 'liveness_failure' ||
+    status === 'service_unavailable' ||
     status === 'verification_failure' ||
     status === 'unexpected_error'
   );
+}
+
+function canRetryWithFreshLiveness(
+  state: FaceVerificationUiState,
+): boolean {
+  if (
+    !isVerificationFailureState(state.status) ||
+    state.status === 'liveness_failure'
+  ) {
+    return false;
+  }
+
+  return !('canRetry' in state) || state.canRetry !== false;
 }
 
 const styles = StyleSheet.create({

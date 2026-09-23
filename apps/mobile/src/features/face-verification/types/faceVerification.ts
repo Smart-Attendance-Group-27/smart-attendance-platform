@@ -1,3 +1,5 @@
+import type { LivenessEvidence } from '../liveness/livenessEvidence';
+
 export type FaceCaptureInput = {
   uri: string;
 };
@@ -5,6 +7,7 @@ export type FaceCaptureInput = {
 export type FaceVerificationRequest = {
   sessionId: string;
   capture: FaceCaptureInput;
+  livenessEvidence?: LivenessEvidence;
 };
 
 export type FaceVerificationResult =
@@ -12,4 +15,5 @@ export type FaceVerificationResult =
   | { status: 'face_not_detected'; canRetry?: boolean }
   | { status: 'multiple_faces'; canRetry?: boolean }
   | { status: 'liveness_failure'; canRetry?: boolean }
+  | { status: 'service_unavailable'; canRetry: true }
   | { status: 'verification_failure'; canRetry?: boolean };

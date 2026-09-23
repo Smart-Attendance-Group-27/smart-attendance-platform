@@ -72,7 +72,7 @@ describe('FaceVerificationRoute', () => {
     };
   });
 
-  test('opens Progress with the normalized session ID after face verification', async () => {
+  test('opens Progress rather than QR after face verification', async () => {
     mockSearchParams = {
       sessionId: [' attendance-session-active ', 'ignored-session'],
       requiresQr: '1',
@@ -92,6 +92,7 @@ describe('FaceVerificationRoute', () => {
         sessionId: 'attendance-session-active',
       },
     });
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   test('uses Progress for sessions without QR too', async () => {
@@ -114,6 +115,7 @@ describe('FaceVerificationRoute', () => {
         sessionId: 'attendance-session-active',
       },
     });
+    expect(mockPush).not.toHaveBeenCalled();
   });
 
   test('keeps the friendly fallback for a missing session ID', async () => {

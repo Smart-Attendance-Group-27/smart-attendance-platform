@@ -14,12 +14,14 @@ import { FaceVerificationGuidanceItem } from '../components/FaceVerificationGuid
 
 type FaceIntroductionScreenProps = {
   sessionId: string;
+  livenessMode?: 'required' | 'off';
   onBack: () => void;
   onBeginVerification: (sessionId: string) => void;
 };
 
 export function FaceIntroductionScreen({
   sessionId,
+  livenessMode = 'required',
   onBack,
   onBeginVerification,
 }: FaceIntroductionScreenProps) {
@@ -80,8 +82,9 @@ export function FaceIntroductionScreen({
           Get ready for face verification
         </Text>
         <Text style={styles.introductionText}>
-          We&apos;ll use the camera to verify your face and confirm liveness
-          before recording attendance.
+          {livenessMode === 'required'
+            ? "First, follow two camera prompts to confirm you're present. Then we'll verify your face before recording attendance."
+            : "We'll use the camera to verify your face before recording attendance."}
         </Text>
       </View>
 
@@ -97,6 +100,16 @@ export function FaceIntroductionScreen({
           message="Hold your device at eye level and keep your full face centered in the frame."
           title="Position your face"
         />
+        {livenessMode === 'required' ? (
+          <>
+            <View style={styles.divider} />
+            <FaceVerificationGuidanceItem
+              icon={{ ios: 'person.fill', android: 'person', web: 'person' }}
+              message="You will complete two actions: turn your head left, turn your head right, or blink by holding both eyes closed until prompted and then reopening them."
+              title="Follow the prompts"
+            />
+          </>
+        ) : null}
         <View style={styles.divider} />
         <FaceVerificationGuidanceItem
           icon={{ ios: 'person.fill', android: 'person', web: 'person' }}
