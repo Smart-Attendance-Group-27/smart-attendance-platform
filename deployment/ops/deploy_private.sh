@@ -2,6 +2,7 @@
 set -euo pipefail
 
 release_dir=${1:?Pass the absolute release directory}
+image_source=${2:-registry}
 env_file=/etc/uniattend/private.env
 app_compose="$release_dir/deployment/compose.app.yml"
 face_compose="$release_dir/deployment/compose.face.yml"
@@ -33,8 +34,13 @@ wait_healthy() {
 
 "${app[@]}" config --quiet
 "${face[@]}" config --quiet
-"${app[@]}" pull
-"${face[@]}" pull
+if [[ "$image_source" == registry ]]; then
+  "${app[@]}" pull
+  "${face[@]}" pull
+elif [[ "$image_source" != local-images ]]; then
+  printf 'Image source must be registry or local-images\n' >&2
+  exit 2
+fi
 
 "${app[@]}" up -d keycloak-db redis
 wait_healthy uniattend-app-keycloak-db-1 120
