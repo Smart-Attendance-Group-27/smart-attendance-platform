@@ -310,7 +310,7 @@ def test_operational_failures_do_not_consume_an_attempt(
     session.commit.assert_not_awaited()
 
 
-def test_legacy_missing_liveness_does_not_persist_a_false_success() -> None:
+def test_legacy_missing_liveness_allows_a_biometric_match() -> None:
     service, session, repository, _ = build_service(
         comparison=FaceComparisonResult(
             status=FaceComparisonStatus.MATCHED,
@@ -328,14 +328,44 @@ def test_legacy_missing_liveness_does_not_persist_a_false_success() -> None:
         )
     )
 
-    assert result.status is AttendanceFaceVerificationStatus.LIVENESS_FAILURE
+    assert result.status is AttendanceFaceVerificationStatus.PASSED
+    assert result.attempt_number == 1
+    assert result.can_retry is False
+    saved = repository.save_latest_face_attempt.await_args.kwargs
+    assert saved["liveness_passed"] is None
+    assert saved["validation_status"] == "passed"
+    assert saved["failure_reason"] is None
+    repository.mark_verification_attempt_failed.assert_not_awaited()
+    session.commit.assert_awaited_once()
+
+
+def test_legacy_missing_liveness_preserves_a_biometric_mismatch() -> None:
+    service, session, repository, _ = build_service(
+        comparison=FaceComparisonResult(
+            status=FaceComparisonStatus.NOT_MATCHED,
+            similarity_score=0.31,
+            similarity_threshold=0.5,
+            failure_reason="Face similarity was below the required threshold",
+        )
+    )
+
+    result = asyncio.run(
+        service.verify(
+            session_id=SESSION_ID,
+            student_id=STUDENT_ID,
+            captured_image=b"capture",
+            liveness_evidence=None,
+        )
+    )
+
+    assert result.status is AttendanceFaceVerificationStatus.FAILED
     assert result.attempt_number == 1
     assert result.can_retry is True
     saved = repository.save_latest_face_attempt.await_args.kwargs
     assert saved["liveness_passed"] is None
     assert saved["validation_status"] == "failed"
     assert saved["failure_reason"] == (
-        "Valid liveness evidence was not provided"
+        "Face similarity was below the required threshold"
     )
     repository.mark_verification_attempt_failed.assert_not_awaited()
     session.commit.assert_awaited_once()

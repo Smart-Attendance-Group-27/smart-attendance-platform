@@ -57,6 +57,12 @@ export class CoreApiAttendanceFaceVerificationService
   ): Promise<FaceVerificationResult> {
     const formData = new FormData();
     formData.append('image', new File(request.capture.uri));
+    if (request.livenessEvidence) {
+      formData.append(
+        'liveness',
+        JSON.stringify(request.livenessEvidence),
+      );
+    }
 
     const result = await this.coreApiClient.postFormData<unknown>(
       `/api/v1/attendance-sessions/${encodeURIComponent(
@@ -66,6 +72,20 @@ export class CoreApiAttendanceFaceVerificationService
     );
 
     if (result.status !== 'ok') {
+      if (
+        result.status === 'invalid-request' &&
+        result.errorCode === 'FACE_VERIFICATION_INVALID_REQUEST'
+      ) {
+        return { status: 'liveness_failure', canRetry: true };
+      }
+
+      if (
+        result.status === 'server-error' &&
+        result.errorCode === 'FACE_VERIFICATION_SERVICE_ERROR'
+      ) {
+        return { status: 'service_unavailable', canRetry: true };
+      }
+
       return {
         status: 'verification_failure',
         canRetry: result.status !== 'conflict',

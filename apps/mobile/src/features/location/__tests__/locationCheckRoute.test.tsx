@@ -137,10 +137,14 @@ describe('LocationCheckRoute', () => {
     };
     const screen = await render(<LocationCheckRoute />);
 
-    fireEvent.press(screen.getByRole('button', {
+    await fireEvent.press(screen.getByRole('button', {
       name: 'Allow location access and check classroom location',
     }));
-    fireEvent.press(await screen.findByRole('button', { name: 'View attendance progress' }));
+    await fireEvent.press(
+      await screen.findByRole('button', {
+        name: 'View attendance progress',
+      }),
+    );
 
     expect(mockReplace).toHaveBeenCalledWith({
       pathname: '/(student)/attendance/[sessionId]/progress',

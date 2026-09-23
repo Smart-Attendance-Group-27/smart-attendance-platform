@@ -5,6 +5,7 @@ import { FaceIntroductionScreen } from '../screens/FaceIntroductionScreen';
 
 type ScreenProps = {
   sessionId: string;
+  livenessMode?: 'required' | 'off';
   onBack: () => void;
   onBeginVerification: (sessionId: string) => void;
 };
@@ -22,7 +23,7 @@ function renderScreen(props: ScreenProps) {
 }
 
 describe('FaceIntroductionScreen', () => {
-  test('shows the preparation explanation and required guidance', async () => {
+  test('explains the required liveness actions before identity verification', async () => {
     const props = createScreenProps();
     const { getByRole, getByText } = await renderScreen(props);
 
@@ -32,7 +33,7 @@ describe('FaceIntroductionScreen', () => {
     expect(getByText('Get ready for face verification')).toBeTruthy();
     expect(
       getByText(
-        "We'll use the camera to verify your face and confirm liveness before recording attendance.",
+        "First, follow two camera prompts to confirm you're present. Then we'll verify your face before recording attendance.",
       ),
     ).toBeTruthy();
 
@@ -50,12 +51,44 @@ describe('FaceIntroductionScreen', () => {
       ),
     ).toBeTruthy();
 
+    expect(getByText('Follow the prompts')).toBeTruthy();
+    expect(
+      getByText(
+        'You will complete two actions: turn your head left, turn your head right, or blink by holding both eyes closed until prompted and then reopening them.',
+      ),
+    ).toBeTruthy();
+
     expect(getByText('Keep still')).toBeTruthy();
     expect(
       getByText(
         'Stay still and look directly at the camera while verification is in progress.',
       ),
     ).toBeTruthy();
+  });
+
+  test('keeps legacy mode free of liveness-required instructions', async () => {
+    const props = createScreenProps();
+    const { getByText, queryByText } = await renderScreen({
+      ...props,
+      livenessMode: 'off',
+    });
+
+    expect(
+      getByText(
+        "We'll use the camera to verify your face before recording attendance.",
+      ),
+    ).toBeTruthy();
+    expect(queryByText('Follow the prompts')).toBeNull();
+    expect(queryByText(/turn your head|holding both eyes/i)).toBeNull();
+  });
+
+  test('does not expose liveness implementation details', async () => {
+    const props = createScreenProps();
+    const { queryByText } = await renderScreen(props);
+
+    expect(
+      queryByText(/ML Kit|probabilit|yaw|JSON|HTTP 422/i),
+    ).toBeNull();
   });
 
   test('shows Location completed, Face current, and Complete pending', async () => {
