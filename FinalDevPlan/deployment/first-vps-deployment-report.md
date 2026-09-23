@@ -16,7 +16,8 @@ The pilot stack is live over trusted HTTPS on temporary `sslip.io` names. Web,
 Core, Keycloak, Redis, Keycloak PostgreSQL, Face Verification, and Caddy are
 healthy. Face Verification is a separate Compose project and container, with
 one inference worker and a persistent model-cache volume. The current VPS
-images were built from the release branch for staging. The final immutable
+images were built from staging SHA
+`9ccd433ffad45061d05ba45eef9b6190e07ece67`. The final immutable
 GHCR release and redeployment from the **merged main SHA** depend on PR #91
 approval and merge.
 
