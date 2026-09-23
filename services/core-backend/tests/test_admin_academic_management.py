@@ -255,3 +255,17 @@ async def test_roster_query_is_scoped_to_offering() -> None:
     query, argument = connection.fetch.await_args.args
     assert "enrolment.course_offering_id=$1" in query
     assert argument == OFFERING_ID
+
+
+@pytest.mark.asyncio
+async def test_reference_options_use_profile_status_for_people() -> None:
+    connection = AsyncMock()
+    connection.fetch.return_value = []
+
+    await AdminAcademicDataRepository().list_reference_options(connection)
+
+    queries = [call.args[0] for call in connection.fetch.await_args_list]
+    lecturer_query = next(query for query in queries if "lecturer_profiles" in query)
+    student_query = next(query for query in queries if "student_profiles" in query)
+    assert "profile_status='active'" in lecturer_query
+    assert "profile_status='active'" in student_query
