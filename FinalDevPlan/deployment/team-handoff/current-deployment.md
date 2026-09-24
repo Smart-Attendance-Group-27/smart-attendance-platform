@@ -62,11 +62,10 @@ realm file is `/etc/uniattend/realm.json`. Never commit or print them.
   proves the non-face attendance outcome; Manushan confirmed that the
   successful attempt was on his physical Android phone at the configured
   test location. See the pilot guide for how to repeat it.
-- Manushan reports manually checking static and dynamic QR. A read-only live
-  database check confirms one accepted dynamic scan in the closed pilot
-  session. Static QR batches are present, but no accepted static scan is
-  recorded. Keep the reported static test distinct from the verified dynamic
-  attendance result until its outcome is documented.
+- Manushan confirmed he tested dynamic QR only. A read-only live database
+  check confirms one accepted dynamic scan in the closed pilot session.
+  Static QR batches are present, but no accepted static scan is recorded;
+  static QR remains untested in the physical attendance pilot.
 - The mock lecturers' 20 historical MOCK401–403 test sessions were removed
   after an encrypted Supabase backup. The original mock courses remained.
   `PILOT101` has one lecturer, one enrolled mock student, and its own test

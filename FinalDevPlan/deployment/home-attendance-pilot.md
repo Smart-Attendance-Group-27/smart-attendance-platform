@@ -41,11 +41,10 @@ Session
 `e0bf254f-7bd4-485c-95bb-0a1f55a79488` was cancelled without attendance.
 The exact location reading is kept out of Git.
 
-Manushan also reports checking both the static and dynamic QR flows manually.
-The live database independently confirms one accepted dynamic QR scan for the
-closed pilot session. Static QR batches exist, but no accepted static scan is
-currently recorded in the live database; record the static test outcome
-separately from the verified final-present result.
+Manushan confirmed he tested the dynamic QR flow only. The live database
+independently confirms one accepted dynamic QR scan for the closed pilot
+session. Static QR remains untested in the attendance pilot; existing static
+batches in the database do not establish a successful student scan.
 
 ## Repeat a check-in yourself
 
@@ -74,7 +73,7 @@ separately from the verified final-present result.
    **Final: Present** in the student's attendance progress. Record any actual
    error message if a step fails.
 
-## Repeat the static or dynamic QR check
+## Repeat the dynamic QR check or test static QR
 
 Create another `PILOT101` session and turn on **Enable QR checks** while
 keeping face verification off. After the student completes geofence check-in,
@@ -83,9 +82,9 @@ for one QR value that lasts until its configured expiry, or **Dynamic** for a
 value that rotates at the selected refresh interval. Start a required batch,
 then choose **Scan QR** on the phone's attendance progress and scan the
 displayed code. Confirm the batch shows a pass for the student before closing
-the session and checking final attendance. For a static acceptance record,
-capture the batch mode, accepted scan, and final outcome without saving the
-QR value itself in Git.
+the session and checking final attendance. Static QR still needs this
+physical-device check. For its acceptance record, capture the batch mode,
+accepted scan, and final outcome without saving the QR value itself in Git.
 
 ## Limits and cleanup
 
