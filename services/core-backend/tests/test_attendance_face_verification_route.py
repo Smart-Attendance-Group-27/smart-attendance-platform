@@ -184,6 +184,37 @@ def build_client(
     return TestClient(app, raise_server_exceptions=False)
 
 
+def test_pilot_disables_existing_session_face_routes_before_downstream_calls(
+    jwks_document,
+    make_access_token,
+) -> None:
+    service = StubFaceVerificationClient()
+    repository = StubFaceProgressRepository(passed=False)
+    check_in_service = StubCheckInService()
+    app_client = build_client(jwks_document, service, check_in_service)
+    app_client.app.state.settings.pilot_disable_face_attendance = True
+    app_client.app.dependency_overrides[get_face_progress_repository] = (
+        lambda: repository
+    )
+    headers = {"Authorization": f"Bearer {make_access_token()}"}
+
+    with app_client as client:
+        progress = client.get(URL, headers=headers)
+        verification = client.post(
+            URL,
+            headers=headers,
+            files={"image": ("capture.jpg", b"jpeg", "image/jpeg")},
+        )
+
+    assert progress.status_code == 409
+    assert verification.status_code == 409
+    assert progress.json()["detail"]["code"] == "FACE_ATTENDANCE_NOT_ENABLED"
+    assert verification.json()["detail"]["code"] == "FACE_ATTENDANCE_NOT_ENABLED"
+    assert repository.calls == []
+    assert service.calls == []
+    assert check_in_service.calls == []
+
+
 def test_reports_that_face_verification_already_passed(
     jwks_document,
     make_access_token,

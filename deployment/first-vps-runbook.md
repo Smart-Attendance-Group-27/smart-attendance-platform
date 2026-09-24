@@ -81,7 +81,10 @@ continues to use approved local input files.
 
 The backup timer runs daily at 02:30 UTC and writes a dated encrypted
 `pg_dump` under `/opt/uniattend/backups`. Copy the `.age` file off the VPS
-regularly. The age private key must stay on the administrator's workstation.
+regularly and verify the copy before the local 30-day retention window ends.
+The backup script removes local database dumps older than 30 days only after
+creating a new encrypted dump successfully. The age private key must stay on
+the administrator's workstation.
 The first archive should be decrypted and restored to an isolated throwaway
 PostgreSQL container before student testing. Never test a restore against the
 live Keycloak volume.
@@ -96,6 +99,15 @@ Run `deployment/ops/export_keycloak_realm.sh` after client and user changes.
 It briefly stops Keycloak, runs the offline realm export, encrypts the result,
 and restarts Keycloak. Copy both the PostgreSQL backup and realm export off
 the VPS; verify decryption and a PostgreSQL restore before student testing.
+
+The administrator's Windows workstation runs
+`deployment/ops/pull_keycloak_backups.ps1` after the VPS timer. It copies only
+encrypted database dumps into the protected local backup directory and checks
+their SHA-256 hashes against the VPS. The scheduled task should run daily at
+08:15 Asia/Colombo and when the administrator logs on, so missed daily pulls
+can catch up before the VPS's 30-day local retention expires. Check its last
+result and the local files weekly; realm exports must still be copied and
+verified manually after identity changes.
 
 The previous Railway Keycloak returned 404 on 2026-09-24. Seven role-bearing
 mock users were recreated in the new Keycloak and their Supabase subjects were
@@ -126,8 +138,12 @@ ln -sfn "$release_dir" /opt/uniattend/current
 
 The environment file is in a root-owned directory. Run the tag update with
 `sudo`; the script preserves its original owner and permissions. If GHCR
-packages are private, authenticate Docker with a package-read token before
-pulling images. Keep that token out of the repository and shell history.
+packages are private, pipe a classic `read:packages` token from the protected
+workstation file into `deploy_registry_release.sh` over SSH instead of running
+`deploy_private.sh` directly. Pass the release directory and GitHub username
+to the wrapper. It stores Docker login data only in a temporary directory and
+removes it when the pull and health checks finish. Keep the token out of the
+repository, command arguments and shell history.
 
 ## Health, rollback and shutdown
 
