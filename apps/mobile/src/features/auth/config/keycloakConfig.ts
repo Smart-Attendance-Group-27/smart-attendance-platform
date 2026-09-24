@@ -13,13 +13,23 @@ type KeycloakPublicEnv = Record<string, string | undefined> & {
   readonly EXPO_PUBLIC_KEYCLOAK_REALM?: string;
 };
 
+// Expo inlines public variables only when each process.env property is
+// referenced directly. Keep the injectable object for tests and local flows.
+const bundledPublicEnv: KeycloakPublicEnv = {
+  EXPO_PUBLIC_KEYCLOAK_BASE_URL: process.env.EXPO_PUBLIC_KEYCLOAK_BASE_URL,
+  EXPO_PUBLIC_KEYCLOAK_CLIENT_ID: process.env.EXPO_PUBLIC_KEYCLOAK_CLIENT_ID,
+  EXPO_PUBLIC_KEYCLOAK_HOST: process.env.EXPO_PUBLIC_KEYCLOAK_HOST,
+  EXPO_PUBLIC_KEYCLOAK_ISSUER_URL: process.env.EXPO_PUBLIC_KEYCLOAK_ISSUER_URL,
+  EXPO_PUBLIC_KEYCLOAK_REALM: process.env.EXPO_PUBLIC_KEYCLOAK_REALM,
+};
+
 const readPublicEnv = (env: KeycloakPublicEnv, name: keyof KeycloakPublicEnv) =>
   env[name]?.trim() || undefined;
 
 const buildIssuerUrl = (baseUrl: string, realm: string) =>
   `${baseUrl}/realms/${encodeURIComponent(realm)}`;
 
-export function buildKeycloakAuthConfig(env: KeycloakPublicEnv = process.env) {
+export function buildKeycloakAuthConfig(env: KeycloakPublicEnv = bundledPublicEnv) {
   const keycloakRealm =
     readPublicEnv(env, 'EXPO_PUBLIC_KEYCLOAK_REALM') || defaultKeycloakRealm;
 
