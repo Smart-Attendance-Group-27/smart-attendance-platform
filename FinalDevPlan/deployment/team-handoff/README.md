@@ -14,6 +14,8 @@ Read these files in order:
    procedure.
 3. [Access and credentials](access-and-credentials.md) — what Manushan should
    grant to each collaborator and what must stay out of Git and agent prompts.
+4. [Local developer setup](developer-setup.md) — isolated database, current
+   authentication choices, service guides, and PR checks.
 
 The live server is **not** running the latest `main`: its application release
 is `cf72fa47f529674e4510586e12e5f4d0a6540ebf`. Always compare the live
