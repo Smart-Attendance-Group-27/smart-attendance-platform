@@ -11,7 +11,7 @@ beforeEach(() => {
   process.env.KEYCLOAK_CLIENT_SECRET = "test-secret";
 });
 
-const { buildAuthorizationUrl, buildEndSessionUrl, generatePkcePair, generateRandomToken, isKeycloakConfigured } =
+const { buildAuthorizationUrl, buildEndSessionUrl, generatePkcePair, generateRandomToken, getOidcDiscovery, isKeycloakConfigured } =
   await import("@/lib/auth/oidc");
 
 const SAMPLE_DISCOVERY = {
@@ -21,6 +21,36 @@ const SAMPLE_DISCOVERY = {
   endSessionEndpoint: "http://localhost:8080/realms/uniattend/protocol/openid-connect/logout",
   jwksUri: "http://localhost:8080/realms/uniattend/protocol/openid-connect/certs",
 };
+
+describe("getOidcDiscovery", () => {
+  it("keeps browser URLs public and uses the internal route for server requests", async () => {
+    process.env.KEYCLOAK_INTERNAL_ISSUER = "http://keycloak:8080/realms/uniattend";
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        issuer: SAMPLE_DISCOVERY.issuer,
+        authorization_endpoint: SAMPLE_DISCOVERY.authorizationEndpoint,
+        token_endpoint: SAMPLE_DISCOVERY.tokenEndpoint,
+        end_session_endpoint: SAMPLE_DISCOVERY.endSessionEndpoint,
+        jwks_uri: SAMPLE_DISCOVERY.jwksUri,
+      }), { status: 200 }),
+    );
+
+    try {
+      const discovery = await getOidcDiscovery();
+      expect(fetchMock).toHaveBeenCalledWith(
+        "http://keycloak:8080/realms/uniattend/.well-known/openid-configuration",
+        { cache: "no-store" },
+      );
+      expect(discovery.authorizationEndpoint).toBe(SAMPLE_DISCOVERY.authorizationEndpoint);
+      expect(discovery.endSessionEndpoint).toBe(SAMPLE_DISCOVERY.endSessionEndpoint);
+      expect(discovery.tokenEndpoint).toBe("http://keycloak:8080/realms/uniattend/protocol/openid-connect/token");
+      expect(discovery.jwksUri).toBe("http://keycloak:8080/realms/uniattend/protocol/openid-connect/certs");
+    } finally {
+      fetchMock.mockRestore();
+      delete process.env.KEYCLOAK_INTERNAL_ISSUER;
+    }
+  });
+});
 
 describe("isKeycloakConfigured", () => {
   it("is true when all three env vars are set", () => {

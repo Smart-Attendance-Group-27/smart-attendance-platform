@@ -3,7 +3,7 @@ import binascii
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,11 +15,11 @@ class Settings(BaseSettings):
     app_environment: str = "development"
 
     db_uri: str | None = None
-    db_host: str
+    db_host: str | None = None
     db_port: int = 5432
     db_name: str = "postgres"
-    db_user: str
-    db_password: SecretStr
+    db_user: str | None = None
+    db_password: SecretStr | None = None
     db_ssl_mode: str = "require"
 
     db_pool_min_size: int = Field(default=1, ge=1)
@@ -57,6 +57,17 @@ class Settings(BaseSettings):
             return None
 
         return value
+
+    @model_validator(mode="after")
+    def validate_database_configuration(self) -> "Settings":
+        if self.db_uri:
+            return self
+        if not self.db_host or not self.db_user or not self.db_password:
+            raise ValueError(
+                "Database configuration is incomplete. Set DB_URI, or set "
+                "DB_HOST, DB_USER and DB_PASSWORD."
+            )
+        return self
 
     @field_validator("core_api_url")
     @classmethod

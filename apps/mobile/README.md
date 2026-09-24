@@ -13,25 +13,27 @@ For the complete local PostgreSQL, Keycloak, FastAPI, USB forwarding, and
 physical-phone walkthrough, see
 [`docs/geofence-validation-demo.md`](../../docs/geofence-validation-demo.md).
 
-## Shared Keycloak Login
+## First VPS pilot
 
 The mobile app uses Keycloak for credential entry. The app must not collect and
 submit a student's university password directly.
 
-For normal team development, point the app at the shared deployed Keycloak
-realm:
+The `preview`, `production`, and `production-aab` EAS profiles now target the
+first VPS pilot. For a local Expo run, copy `.env.example` and use:
 
 ```text
-EXPO_PUBLIC_KEYCLOAK_ISSUER_URL=https://keycloak-production-be79.up.railway.app/realms/Uni%20Attend
-EXPO_PUBLIC_KEYCLOAK_REALM="Uni Attend"
+EXPO_PUBLIC_KEYCLOAK_ISSUER_URL=https://auth.152-53-33-198.sslip.io/realms/uniattend
+EXPO_PUBLIC_KEYCLOAK_REALM=uniattend
 EXPO_PUBLIC_KEYCLOAK_CLIENT_ID=uniattend-mobile
+EXPO_PUBLIC_CORE_API_URL=https://api.152-53-33-198.sslip.io
+EXPO_PUBLIC_FACE_VERIFICATION_API_URL=https://face.152-53-33-198.sslip.io
+EXPO_PUBLIC_API_MODE=api
 ```
 
 Do not put passwords, tokens or client secrets in `EXPO_PUBLIC_*` variables;
 the mobile client is public and uses Authorization Code Flow with PKCE.
 
-The Core API still runs locally during development. For Android emulator
-testing, use:
+For local Core API development on an Android emulator, use:
 
 ```text
 EXPO_PUBLIC_CORE_API_URL=http://10.0.2.2:8000

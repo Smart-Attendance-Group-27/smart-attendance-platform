@@ -17,6 +17,9 @@ def _build_database_url(settings: Settings) -> URL:
             query=query,
         )
 
+    if not settings.db_host or not settings.db_user or not settings.db_password:
+        raise ValueError("Database configuration is incomplete")
+
     return URL.create(
         drivername="postgresql+asyncpg",
         username=settings.db_user,

@@ -1,0 +1,39 @@
+name: uniattend-ingress
+
+services:
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    environment:
+      APP_HOST: ${APP_HOST:?Set APP_HOST}
+      API_HOST: ${API_HOST:?Set API_HOST}
+      AUTH_HOST: ${AUTH_HOST:?Set AUTH_HOST}
+      FACE_HOST: ${FACE_HOST:?Set FACE_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - services
+    mem_limit: 256m
+    cpus: 0.25
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  services:
+    name: uniattend-services
+    external: true
+
+volumes:
+  caddy-data:
+  caddy-config:

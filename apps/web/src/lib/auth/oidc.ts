@@ -45,15 +45,27 @@ export async function getOidcDiscovery(): Promise<OidcDiscovery> {
   }
   const doc = (await response.json()) as Record<string, unknown>;
 
+  if (doc.issuer !== issuer) {
+    throw new Error("Keycloak discovery issuer does not match KEYCLOAK_ISSUER.");
+  }
+
+  const toInternalUrl = (value: unknown): string => {
+    const url = String(value);
+    if (!url.startsWith(`${issuer}/`)) {
+      throw new Error("Keycloak discovery endpoint is outside the configured issuer.");
+    }
+    return `${internalIssuer}${url.slice(issuer.length)}`;
+  };
+
   const authorizationEndpoint = String(doc.authorization_endpoint).replace(internalIssuer, issuer);
   const endSessionEndpoint = String(doc.end_session_endpoint).replace(internalIssuer, issuer);
 
   return {
     issuer,
     authorizationEndpoint,
-    tokenEndpoint: String(doc.token_endpoint),
+    tokenEndpoint: toInternalUrl(doc.token_endpoint),
     endSessionEndpoint,
-    jwksUri: String(doc.jwks_uri),
+    jwksUri: toInternalUrl(doc.jwks_uri),
   };
 }
 

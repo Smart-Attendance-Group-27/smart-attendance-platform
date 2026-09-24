@@ -1,0 +1,10 @@
+[Unit]
+Description=Encrypt a UniAttend Keycloak PostgreSQL backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=uniattend
+Group=uniattend
+ExecStart=/opt/uniattend/current/deployment/ops/backup_keycloak.sh

@@ -47,6 +47,20 @@ def test_core_api_url_removes_trailing_slash() -> None:
     assert settings.core_api_url == "http://localhost:8000"
 
 
+def test_database_uri_is_sufficient_without_split_credentials() -> None:
+    settings = Settings(
+        db_uri="postgresql://user:password@localhost:5432/postgres",
+        face_embedding_encryption_key=(
+            "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+        ),
+        _env_file=None,
+    )
+
+    assert settings.db_host is None
+    assert settings.db_user is None
+    assert settings.db_password is None
+
+
 def test_liveness_settings_accept_explicit_values() -> None:
     settings = Settings(
         db_host="localhost",

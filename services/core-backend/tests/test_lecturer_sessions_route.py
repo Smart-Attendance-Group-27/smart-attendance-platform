@@ -338,6 +338,39 @@ def test_create_session(client: TestClient, service: StubLecturerSessionService,
     assert response.json()["id"] == str(SESSION_ID)
 
 
+def test_pilot_rejects_face_required_session(
+    client: TestClient,
+    service: StubLecturerSessionService,
+    make_access_token,
+) -> None:
+    client.app.state.settings.pilot_disable_face_attendance = True
+    response = client.post(
+        SESSIONS_URL,
+        json=build_create_payload(),
+        headers=authorize(lecturer_token(make_access_token)),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "FACE_ATTENDANCE_NOT_ENABLED"
+    assert service.calls == []
+
+
+def test_pilot_allows_session_without_face(
+    client: TestClient,
+    service: StubLecturerSessionService,
+    make_access_token,
+) -> None:
+    client.app.state.settings.pilot_disable_face_attendance = True
+    response = client.post(
+        SESSIONS_URL,
+        json=build_create_payload(requiresFaceVerification=False),
+        headers=authorize(lecturer_token(make_access_token)),
+    )
+
+    assert response.status_code == 201
+    assert service.calls == ["create"]
+
+
 def test_create_session_rejects_non_lecturer_role(client: TestClient, make_access_token) -> None:
     response = client.post(
         SESSIONS_URL,

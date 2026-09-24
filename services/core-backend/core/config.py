@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     # Internal service URL for the separately deployed face-verification API.
     face_verification_service_url: str | None = "http://localhost:8001"
     face_verification_timeout_seconds: float = Field(default=30, gt=0)
+    pilot_disable_face_attendance: bool = False
 
     # Expo Push Notification Service.
     # expo_push_timeout_seconds: how long to wait for a response from Expo.

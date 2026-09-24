@@ -1,0 +1,35 @@
+{$APP_HOST} {
+  encode zstd gzip
+  reverse_proxy web:3000
+}
+
+{$API_HOST} {
+  @internal path /internal/*
+  respond @internal 404
+  reverse_proxy core-api:8000
+}
+
+{$AUTH_HOST} {
+  @admin path /admin /admin/*
+  respond @admin 404
+  reverse_proxy keycloak:8080
+}
+
+{$FACE_HOST} {
+  @internal path /internal/*
+  respond @internal 404
+
+  @health path /health /health/db
+  handle @health {
+    reverse_proxy face-verification:8001
+  }
+
+  @readiness path /api/v1/face-verification/readiness /api/v1/face-verification/readiness/*
+  handle @readiness {
+    reverse_proxy face-verification:8001
+  }
+
+  handle {
+    respond 404
+  }
+}
