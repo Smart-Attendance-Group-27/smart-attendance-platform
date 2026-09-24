@@ -45,7 +45,7 @@ signed in through Keycloak on a physical Android phone. The first attendance
 attempt was away from its classroom and stopped at the location-accuracy
 gate. Manushan later completed a non-face `PILOT101` check-in on the physical
 phone at the configured pilot location: geofence passed after one
-low-accuracy retry, the required QR batch passed, and closing the session
+low-accuracy retry, the required dynamic QR batch passed, and closing the session
 recorded final present.
 
 Core and Face `/internal/*`, Keycloak `/admin/*`, and public Face attendance
@@ -62,7 +62,7 @@ are not publicly bound. SSH, 80, and 443 are the open inbound ports.
 | 4. Images | Four production images built from the merged main SHA on the VPS; the main-branch CI also published all four private GHCR images successfully. |
 | 5. Data | Supabase TLS and schema gate passed. No unnecessary migrations replayed. Prechange and postchange encrypted Supabase backups verified. Production Keycloak DB and realm initialized; mock identities remapped. |
 | 6. Private deployment | Services started in dependency order; tunnel-only health and internal routing passed before public ingress opened. |
-| 7. Validation | Browser admin/lecturer login passed in staging. Student mobile PKCE, Core identity, and the pilot face guard passed again after release. Face model startup and blank-image inference, container restart, memory, disk, and log checks passed. The test student's previous readiness record was restored after the blank-image check. A physical Android phone completed a later `PILOT101` non-face session: passed geofence, initial check-in, QR 1/1, and final present. |
+| 7. Validation | Browser admin/lecturer login passed in staging. Student mobile PKCE, Core identity, and the pilot face guard passed again after release. Face model startup and blank-image inference, container restart, memory, disk, and log checks passed. The test student's previous readiness record was restored after the blank-image check. A physical Android phone completed a later `PILOT101` non-face session: passed geofence, initial check-in, dynamic QR 1/1, and final present. |
 | 8. SSH tunnel | Windows workstation tunnel to Web, Core, Face, and Keycloak tested. |
 | 9. HTTPS | Temporary `sslip.io` DNS plus Caddy certificates work for all four hostnames; public route restrictions verified. The Android APK used these HTTPS origins for physical-device Keycloak login and live Core data. A purchased domain can be cut over later. |
 | 10. Recovery/monitoring | Daily encrypted Keycloak backup timer and 30-day local retention enabled. The 08:15 workstation task succeeded; a post-release encrypted dump was copied and checksum-verified off-host. Database restore and realm export verification passed earlier. Host checks and HTTPS uptime workflow are active. |
@@ -146,11 +146,16 @@ Android phone there. The live `PILOT101` session
 `c15d8257-0ee9-485a-b74c-48a9cf6dfe78` required geofence and QR, with
 face verification off. Its geofence records show one
 `LOCATION_ACCURACY_TOO_LOW` retry followed by a passed decision. Student
-state shows an initial check-in, QR progress **1/1 required batch passed**,
+state shows an initial check-in, dynamic QR progress **1/1 required batch passed**,
 and final **present** after the lecturer closed the session. A second
 `PILOT101` session was cancelled without attendance. Manushan confirmed the
 successful check-in used his phone at the configured test location; exact
 coordinates and raw readings are not in this report.
+
+Manushan also reports manually checking static and dynamic QR. A read-only
+live database check confirms the accepted pilot scan used a dynamic batch.
+Static batches exist, but there is no recorded accepted static scan, so the
+static check is not counted as a verified attendance outcome here.
 
 Before this later test, 20 historical MOCK401–403 test sessions were removed
 from the two mock lecturers' dashboards after a verified encrypted Supabase
