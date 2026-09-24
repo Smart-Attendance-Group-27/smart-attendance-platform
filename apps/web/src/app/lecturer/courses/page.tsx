@@ -1,13 +1,13 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Notice } from "@/components/ui/Notice";
 import { Card } from "@/components/ui/Card";
-import { DataTable, CellPrimary } from "@/components/ui/DataTable";
+import { DataTable } from "@/components/ui/DataTable";
 import { ActivityList } from "@/components/ui/ActivityList";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
+import { AssignedCoursesCard } from "@/components/lecturer/AssignedCoursesCard";
 import { getLecturerCourses } from "@/services/lecturerService";
-import { courseStatusDisplay } from "@/lib/status";
-import { LecturerCourse, TimetableEntry } from "@/types/lecturer";
+import { TimetableEntry } from "@/types/lecturer";
 
 export default async function LecturerCoursesPage() {
   const { semesterLabel, courses, timetable, sourceStatus } = await getLecturerCourses();
@@ -26,43 +26,7 @@ export default async function LecturerCoursesPage() {
         administrative review.
       </Notice>
 
-      <Card
-        title="Assigned courses"
-        subtitle={semesterLabel}
-        flush
-        actions={
-          <>
-            <Button>Filter</Button>
-            <Button>Export list</Button>
-          </>
-        }
-      >
-        <DataTable<LecturerCourse>
-          emptyTitle="No assigned courses yet"
-          emptyDescription="Courses synchronised from University systems will appear here."
-          columns={[
-            { key: "code", header: "Code", render: (row) => <span className="font-semibold text-[var(--link)]">{row.courseCode}</span> },
-            {
-              key: "course",
-              header: "Course",
-              render: (row) => <CellPrimary primary={row.courseName} secondary={row.scheduleSummary} />,
-            },
-            { key: "lecturer", header: "Lecturer", render: (row) => row.lecturerName },
-            { key: "enrolled", header: "Enrolled", render: (row) => row.enrolledCount },
-            { key: "attendance", header: "Attendance", render: (row) => `${row.attendanceRatePercent}%` },
-            {
-              key: "status",
-              header: "Status",
-              render: (row) => {
-                const display = courseStatusDisplay(row.status);
-                return <StatusBadge tone={display.tone}>{display.label}</StatusBadge>;
-              },
-            },
-          ]}
-          rows={courses}
-          getRowKey={(row) => row.courseId}
-        />
-      </Card>
+      <AssignedCoursesCard courses={courses} semesterLabel={semesterLabel} />
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="lg:col-span-8">
