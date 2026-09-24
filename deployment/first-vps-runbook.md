@@ -138,8 +138,12 @@ ln -sfn "$release_dir" /opt/uniattend/current
 
 The environment file is in a root-owned directory. Run the tag update with
 `sudo`; the script preserves its original owner and permissions. If GHCR
-packages are private, authenticate Docker with a package-read token before
-pulling images. Keep that token out of the repository and shell history.
+packages are private, pipe a classic `read:packages` token from the protected
+workstation file into `deploy_registry_release.sh` over SSH instead of running
+`deploy_private.sh` directly. Pass the release directory and GitHub username
+to the wrapper. It stores Docker login data only in a temporary directory and
+removes it when the pull and health checks finish. Keep the token out of the
+repository, command arguments and shell history.
 
 ## Health, rollback and shutdown
 
