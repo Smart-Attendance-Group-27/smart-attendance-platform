@@ -57,11 +57,16 @@ realm file is `/etc/uniattend/realm.json`. Never commit or print them.
   deployment. The physical Android pilot APK also logged in mock students.
 - The first `PILOT101` non-face attendance attempt had a low-accuracy retry.
   The next geofence decision passed. Live student state then showed an initial
-  check-in, QR progress **1/1 required batch passed**, and final **present**
-  after the session closed. A second `PILOT101` session was cancelled. This
+  check-in, **dynamic QR** progress **1/1 required batch passed**, and final
+  **present** after the session closed. A second `PILOT101` session was cancelled. This
   proves the non-face attendance outcome; Manushan confirmed that the
   successful attempt was on his physical Android phone at the configured
   test location. See the pilot guide for how to repeat it.
+- Manushan reports manually checking static and dynamic QR. A read-only live
+  database check confirms one accepted dynamic scan in the closed pilot
+  session. Static QR batches are present, but no accepted static scan is
+  recorded. Keep the reported static test distinct from the verified dynamic
+  attendance result until its outcome is documented.
 - The mock lecturers' 20 historical MOCK401–403 test sessions were removed
   after an encrypted Supabase backup. The original mock courses remained.
   `PILOT101` has one lecturer, one enrolled mock student, and its own test

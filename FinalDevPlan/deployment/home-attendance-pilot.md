@@ -19,7 +19,7 @@ administrator setup record rather than repeated in this repository.
 | Lecturer | `lecutere01@lectuere.uniattend.test` |
 | Enrolled student | `230737r@student.uniattend.test` |
 | Timetable | Thursday 08:00–20:00, `PILOT-01`, valid through 2026-12-20 |
-| Current sessions | One closed with final present and QR 1/1; one cancelled |
+| Current sessions | One closed with final present and a dynamic QR pass (1/1); one cancelled |
 
 Both mock lecturer accounts had empty attendance-session lists immediately
 after the reset. A
@@ -33,12 +33,19 @@ protected `C:\Users\LOQ\.uniattend-backups` directory.
 
 After setup, `lecutere01` created two `PILOT101` sessions. Live records now
 show session `c15d8257-0ee9-485a-b74c-48a9cf6dfe78` closed with a passed
-geofence after one low-accuracy retry, one initial check-in, one required QR
-batch passed, and final **present**. Manushan confirmed that the successful
-attempt was on his physical Android phone at the configured test location.
+geofence after one low-accuracy retry, one initial check-in, one required
+**dynamic QR** batch passed, and final **present**. Manushan confirmed that
+the successful attempt was on his physical Android phone at the configured
+test location.
 Session
 `e0bf254f-7bd4-485c-95bb-0a1f55a79488` was cancelled without attendance.
 The exact location reading is kept out of Git.
+
+Manushan also reports checking both the static and dynamic QR flows manually.
+The live database independently confirms one accepted dynamic QR scan for the
+closed pilot session. Static QR batches exist, but no accepted static scan is
+currently recorded in the live database; record the static test outcome
+separately from the verified final-present result.
 
 ## Repeat a check-in yourself
 
@@ -67,15 +74,18 @@ The exact location reading is kept out of Git.
    **Final: Present** in the student's attendance progress. Record any actual
    error message if a step fails.
 
-## Optional second run with QR
+## Repeat the static or dynamic QR check
 
 Create another `PILOT101` session and turn on **Enable QR checks** while
 keeping face verification off. After the student completes geofence check-in,
-use **Manage QR batches** on the lecturer's session page to start a required
-QR batch. On the phone's attendance progress, choose **Scan QR** and scan the
-lecturer's displayed code. Confirm the required batch passed, then close the
-session and check the final attendance. This tests the full non-face path
-with both location and QR.
+use **Manage QR batches** on the lecturer's session page. Choose **Static**
+for one QR value that lasts until its configured expiry, or **Dynamic** for a
+value that rotates at the selected refresh interval. Start a required batch,
+then choose **Scan QR** on the phone's attendance progress and scan the
+displayed code. Confirm the batch shows a pass for the student before closing
+the session and checking final attendance. For a static acceptance record,
+capture the batch mode, accepted scan, and final outcome without saving the
+QR value itself in Git.
 
 ## Limits and cleanup
 

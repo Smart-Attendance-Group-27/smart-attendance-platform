@@ -9,9 +9,9 @@ the pilot data is already live.
 
 1. Recheck [PR #96](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/96)
    and [PR #97](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/97)
-   against current `main`. Review their latest commits and CI. PR #96 should
-   be updated with any confirmed successful physical-device pilot evidence
-   before it is treated as the final deployment report.
+   against current `main`. Review their latest commits and CI. PR #96 now
+   records the confirmed physical-device pilot; carry any later verified
+   static QR result into that report before treating it as static acceptance.
 2. Merge approved PRs in a clear order. A new head commit may require a fresh
    review under the repository's stale-approval protection. Do not dismiss
    reviews just to clear the merge gate.
@@ -34,7 +34,7 @@ known. A merge alone does not meet this acceptance.
 ## 2. Preserve and repeat the attendance pilot evidence
 
 The live `PILOT101` records already show one closed non-face session with a
-passed geofence, initial check-in, QR 1/1, and final present, plus one
+passed geofence, initial check-in, dynamic QR 1/1, and final present, plus one
 cancelled session. Manushan confirmed that the successful attempt used his
 physical Android phone at the private test location. This completes the
 first non-face attendance acceptance check. Preserve the session ID,
@@ -45,8 +45,11 @@ Git. The [pilot guide](../home-attendance-pilot.md) has repeatable steps.
 
 **Observed acceptance:** lecturer session was closed with one present; student
 state has an initial check-in and final present; geofence passed after one
-accuracy retry; one required QR batch passed. Retain these facts without
-copying raw location samples or credentials into a PR.
+accuracy retry; one required dynamic QR batch passed. Manushan also reports
+checking static QR, but the live database has no accepted static scan. Record
+its exact outcome separately or repeat a student scan if static acceptance is
+required. Retain these facts without copying raw location samples, QR values,
+or credentials into a PR.
 
 ## 3. Finish face enrollment and attendance as separate reviewed work
 
