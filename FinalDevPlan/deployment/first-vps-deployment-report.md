@@ -152,10 +152,10 @@ and final **present** after the lecturer closed the session. A second
 successful check-in used his phone at the configured test location; exact
 coordinates and raw readings are not in this report.
 
-Manushan also reports manually checking static and dynamic QR. A read-only
-live database check confirms the accepted pilot scan used a dynamic batch.
-Static batches exist, but there is no recorded accepted static scan, so the
-static check is not counted as a verified attendance outcome here.
+Manushan clarified that he tested dynamic QR only. A read-only live database
+check confirms the accepted pilot scan used a dynamic batch. Static batches
+exist, but there is no recorded accepted static scan; static QR remains
+untested in the physical attendance pilot.
 
 Before this later test, 20 historical MOCK401–403 test sessions were removed
 from the two mock lecturers' dashboards after a verified encrypted Supabase
