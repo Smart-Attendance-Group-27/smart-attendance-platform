@@ -2,7 +2,7 @@
 
 **Owner:** Manushan
 
-**Snapshot:** 2026-09-24 07:10 UTC
+**Snapshot:** 2026-09-24 08:30 UTC
 
 **Audience:** teammates and their coding agents working on the two-month MVP pilot
 
@@ -19,11 +19,11 @@ Read these files in order:
 5. [Face attendance enablement](face-attendance-enablement.md) — next-release
    configuration, verified prerequisites, runtime flow, limits, and acceptance.
 
-The live server is **not** running the latest `main`: its application release
-is `cf72fa47f529674e4510586e12e5f4d0a6540ebf`. Always compare the live
-release symlink, current `main`, and open PRs before acting. This handoff is a
-dated snapshot; recheck live state rather than treating it as a permanent
-configuration specification.
+The live server was released from merged `main` commit
+`d0152d947f18e9204252cd597fd9e49e618c00a4`. Always compare the live
+release symlink, current `main`, and open PRs before acting. A new merge does
+not deploy itself. This handoff is a dated snapshot; recheck live state before
+acting.
 
 ## Start here for an AI-assisted task
 

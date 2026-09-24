@@ -5,32 +5,36 @@ evidence for each change. Do not apply the seed or the full migration set to
 the existing Supabase database: the first release's schema gate passed, and
 the pilot data is already live.
 
-## 1. Finish the current review and release chain
+## 1. Use the merged-main release path for future changes
 
-1. Recheck every open deployment PR against current `main`, including the EAS
-   ownership change and the face-attendance enablement change. Review their
-   latest commits and CI. PR #96 and PR #97 are already merged and their
-   evidence is part of the current deployment history.
-2. Merge approved PRs in a clear order. A new head commit may require a fresh
-   review under the repository's stale-approval protection. Do not dismiss
-   reviews just to clear the merge gate.
-3. Release the exact resulting merged `main` SHA. The present VPS uses local
-   images built from a merged SHA because private GHCR pulls require a
-   separate read-package credential. Main CI still publishes commit-tagged
-   images. Follow `deployment/first-vps-runbook.md` and retain the current
-   release for rollback. For the face-attendance release, set
-   `PILOT_DISABLE_FACE_ATTENDANCE=false` only with the enablement guide's
-   prerequisites and acceptance checks.
-4. Run post-release HTTPS health, Keycloak login, Core token, `PILOT101`
-   course visibility, Face health, and private-route checks. Specifically
-   verify `GET /api/v1/administrators/me/academic-options` is HTTP 200 with
-   an administrator token after PR #97 is deployed. Record new image IDs and
-   the active `/opt/uniattend/current` target. Do not change the Keycloak or
-   Supabase databases merely to roll out the admin query fix.
+PRs [#96](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/96)
+and [#97](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/97)
+merged. Release `d0152d947f18e9204252cd597fd9e49e618c00a4` is live. Its
+CI, service health, public HTTPS, private-route, Keycloak token, pilot course,
+and authenticated admin academic-options checks passed. The previous
+`cf72fa47f529674e4510586e12e5f4d0a6540ebf` release is retained for
+rollback. Face attendance remains disabled.
 
-**Acceptance:** all release containers healthy, tests and protected GitHub
-checks green, the selected SHA recorded, admin options 200, and rollback path
-known. A merge alone does not meet this acceptance.
+For the next change:
+
+1. Create a feature or fix branch from current `main`, review it through a PR
+   into `main`, and wait for the merged commit's CI. A new head commit may
+   require a fresh review under stale-approval protection.
+2. Release that exact merged `main` SHA, following
+   [the runbook](../../../deployment/first-vps-runbook.md). The VPS currently
+   builds local images from the selected SHA because private GHCR pulls need
+   a separate read-package credential. Main CI also publishes commit-tagged
+   images. A merge alone does not deploy the VPS.
+3. Verify HTTPS health, Keycloak login, Core token, `PILOT101` visibility,
+   Face health, private-route restrictions, and the changed feature. Record
+   the active release SHA and image IDs, then retain the prior release for
+   rollback. Preserve `PILOT_DISABLE_FACE_ATTENDANCE=true` until the separate
+   face acceptance work is complete.
+
+Carry any later verified static QR result into the deployment evidence before
+treating static QR as accepted. The admin options endpoint passed its
+authenticated API check; repeat the browser course-management form flow when
+that UI next changes.
 
 ## 2. Preserve and repeat the attendance pilot evidence
 
