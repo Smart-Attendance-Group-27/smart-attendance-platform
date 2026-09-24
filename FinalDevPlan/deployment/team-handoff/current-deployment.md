@@ -1,6 +1,6 @@
 # Current MVP deployment
 
-**Observed:** 2026-09-24 07:10 UTC. Recheck before a release or data change.
+**Observed:** 2026-09-24 08:30 UTC. Recheck before a release or data change.
 
 ## Runtime and release identity
 
@@ -8,15 +8,26 @@
 | --- | --- |
 | Owner and lifetime | Manushan; netcup VPS 1000 G12.5 for a roughly two-month university pilot |
 | Host | Debian 13 x86_64 at `152.53.33.198`; 4 vCPU, 7.8 GiB RAM, 125 GB root disk, 2 GiB swap |
-| Running source | `/opt/uniattend/current` points to `/opt/uniattend/releases/cf72fa47f529674e4510586e12e5f4d0a6540ebf` |
-| Repository `main` | `7f6790101864179534422b95ef08e5542d800958` at this snapshot; includes PR #93's mobile liveness feedback but is not the running release |
-| Pending documentation and fix | [PR #96](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/96) records physical pilot evidence; [PR #97](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/97) fixes admin academic options and carries this handoff. Check their current review and CI status before merging. |
-| Images | Web, Core, Face, and Keycloak were built on the VPS from the exact running SHA. Main-branch CI also publishes private GHCR images tagged by commit SHA. Do not infer that a new GHCR image is deployed. |
+| Running source | `/opt/uniattend/current` points to `/opt/uniattend/releases/d0152d947f18e9204252cd597fd9e49e618c00a4` |
+| Repository `main` | `d0152d947f18e9204252cd597fd9e49e618c00a4` at this snapshot |
+| Merged changes | [PR #96](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/96) records physical pilot evidence; [PR #97](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/97) fixes admin academic options and carries this handoff. Both merged on 2026-09-24. |
+| Images | Web, Core, Face, and Keycloak were built on the VPS from the exact running SHA. Main-branch CI passed and published private GHCR images with the same SHA. The VPS runs its locally built images. |
 
 At the snapshot, Web, Core, Keycloak, Keycloak PostgreSQL, Redis, Face
 Verification, and Caddy were running; all six application containers with
 health checks were healthy. Host memory used was about 2.5 GiB and root disk
-usage 14%. These are point-in-time readings, not load-test results.
+usage 14%. These are point-in-time readings, not load-test results. The prior
+`cf72fa47f529674e4510586e12e5f4d0a6540ebf` release remains available for
+application rollback.
+
+Locally built release image IDs:
+
+| Service | Image ID |
+| --- | --- |
+| Web | `sha256:49b6af3e8dd80dff0f61f8cf814f10c21a08a810957d5d5a6040b82119d64546` |
+| Core | `sha256:770a561cd655b204c1d107c7ef339f3f307633ef6c4d41b41222b30c6694d2b0` |
+| Face | `sha256:4ebd7a446a8d6567c9968863d78372f1bfacd6245181f511e48b88ca4ea06acd` |
+| Keycloak | `sha256:21f94e6001d1b02070a1dfc1e4c46b823263b85877492e194e4d093ab9950712` |
 
 ## Architecture and URLs
 
@@ -49,8 +60,15 @@ realm file is `/etc/uniattend/realm.json`. Never commit or print them.
 ## What has been observed
 
 - The four public URLs above returned HTTPS 200 with certificate validation
-  from the owner workstation on 2026-09-24. The hourly GitHub uptime workflow
-  checks the same origins.
+  from the owner workstation after the `d0152d9` release on 2026-09-24.
+  Public Core and Face `/internal/*` and Keycloak `/admin/*` returned 404.
+  The hourly GitHub uptime workflow checks the public origins.
+- A pilot administrator completed Keycloak authorization code login with
+  PKCE after release. Core accepted the token, and
+  `GET /api/v1/administrators/me/academic-options` returned HTTP 200 with
+  classroom, department, lecturer, semester, and student option groups.
+  A read-only database check found the active `PILOT101` course and its
+  offering. No migration or seed was run for this release.
 - Browser administrator and lecturer logins, student OIDC authorization code
   with PKCE, Core token validation, Supabase reads, Redis, Face model startup,
   blank-image inference, and intentional container restart were tested during
@@ -78,11 +96,6 @@ realm file is `/etc/uniattend/realm.json`. Never commit or print them.
   readiness are available, but face verification is **not** an attendance
   requirement in the current pilot. Merged mobile liveness feedback in `main`
   does not change this deployed guard.
-- The running Core admin academic-options endpoint returns HTTP 500 because
-  it filters lecturer and student profiles by a nonexistent `status` column.
-  PR #97 changes both filters to `profile_status`; the fix is not live until
-  that PR is merged and a new release is deployed. The prepared lecturer and
-  student attendance paths are usable without this admin selector.
 - Cloudflare R2 has no account or bucket yet. The reference-photo R2
   enrollment adapter is separate future product work. The current enrollment
   CLI accepts approved local files; do not claim that R2 photos are active in
