@@ -12,24 +12,36 @@
 **Initial PR:** [#91](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/91),
 merged as `575509055556a1b19a088c126b96746dea6e0e57`
 
+**Follow-up PR:** [#94](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/94),
+merged as `cf72fa47f529674e4510586e12e5f4d0a6540ebf`
+
+**Active release:** `cf72fa47f529674e4510586e12e5f4d0a6540ebf`
+
 ## Current status
 
 The pilot stack is live over trusted HTTPS on temporary `sslip.io` names. Web,
 Core, Keycloak, Redis, Keycloak PostgreSQL, Face Verification, and Caddy are
 healthy. Face Verification is a separate Compose project and container, with
-one inference worker and a persistent model-cache volume. The current VPS
-images were built from staging SHA
-`9ccd433ffad45061d05ba45eef9b6190e07ece67`. PR #91 was merged while
-review fixes were still being prepared. Those fixes are in a follow-up branch;
-the final immutable GHCR release and redeployment from its **merged main SHA**
-remain pending.
+one inference worker and a persistent model-cache volume. The four VPS images
+were built from the exact merged main commit above and are tagged with its
+full SHA. The same commit's four images were also published to private GHCR by
+[Deployment CI](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/actions/runs/35948132716).
+Manushan selected a direct VPS build for this two-month pilot, so the running
+local image IDs below are the release record rather than GHCR pull digests.
 
 | Service | Pilot URL | Check |
 | --- | --- | --- |
 | Web | <https://app.152-53-33-198.sslip.io/login> | HTTPS 200; administrator and lecturer browser logins passed |
-| Core | <https://api.152-53-33-198.sslip.io/health/db> | HTTPS 200; student bearer token accepted by `/api/v1/me` |
-| Keycloak | <https://auth.152-53-33-198.sslip.io/realms/uniattend/> | HTTPS discovery 200; mobile authorization code with PKCE passed |
+| Core | <https://api.152-53-33-198.sslip.io/health/db> | HTTPS 200; post-release student bearer token accepted by `/api/v1/me` |
+| Keycloak | <https://auth.152-53-33-198.sslip.io/realms/uniattend/> | HTTPS discovery 200; post-release mobile authorization code with PKCE passed |
 | Face | <https://face.152-53-33-198.sslip.io/health/db> | HTTPS 200; blank-image live inference returned `no_face` |
+
+HTTPS, database, container-health, student PKCE, and Core identity checks were
+repeated after the main-SHA deployment. The live Core GET and POST face
+attendance routes both returned `FACE_ATTENDANCE_NOT_ENABLED` as configured.
+Role-based browser login and blank-image inference were performed on the
+staging build before the final source merge. Student login and attendance on
+a physical device remain outstanding.
 
 Core and Face `/internal/*`, Keycloak `/admin/*`, and public Face attendance
 routes return 404 at the proxy. Database, Redis, and service management ports
@@ -42,21 +54,32 @@ are not publicly bound. SSH, 80, and 443 are the open inbound ports.
 | 1. Baseline | Started from current main; isolated release branch and worktree; CI suites passed. |
 | 2. Runtime | Separate application and Face Compose projects, private shared network, health checks, resource limits. |
 | 3. Configuration | Protected `/etc/uniattend/private.env` and realm file; reused the existing face embedding key; generated new VPS secrets. |
-| 4. Images | Four production images build in CI and on the VPS. GHCR publication is configured for merged main commits and remains pending merge. |
+| 4. Images | Four production images built from the merged main SHA on the VPS; the main-branch CI also published all four private GHCR images successfully. |
 | 5. Data | Supabase TLS and schema gate passed. No unnecessary migrations replayed. Prechange and postchange encrypted Supabase backups verified. Production Keycloak DB and realm initialized; mock identities remapped. |
 | 6. Private deployment | Services started in dependency order; tunnel-only health and internal routing passed before public ingress opened. |
-| 7. Validation | Browser admin/lecturer login, student mobile PKCE and Core identity, Face model startup and blank-image inference, container restart, memory, disk, and log checks passed. The test student's previous readiness record was restored after the blank-image check. A local Android APK was built and inspected, but no physical device was available for installation. |
+| 7. Validation | Browser admin/lecturer login passed in staging. Student mobile PKCE, Core identity, and the pilot face guard passed again after release. Face model startup and blank-image inference, container restart, memory, disk, and log checks passed. The test student's previous readiness record was restored after the blank-image check. A local Android APK was built and inspected, but no physical device was available for installation. |
 | 8. SSH tunnel | Windows workstation tunnel to Web, Core, Face, and Keycloak tested. |
 | 9. HTTPS | Temporary `sslip.io` DNS plus Caddy certificates work for all four hostnames; public route restrictions verified. Mobile configuration and a locally built Android APK point to these HTTPS origins. A purchased domain can be cut over later. |
-| 10. Recovery/monitoring | Daily encrypted Keycloak backup timer enabled; 30-day local retention is in the follow-up release. Workstation daily/logon pull copied a fresh archive and verified its SHA-256; encrypted database backup restored into an isolated container; encrypted realm export decrypted and checked off-host. Host checks and scheduled HTTPS uptime workflow added. |
-| 11. Release | PR #91 was merged. A follow-up PR carries the Android issuer fix and deployment review fixes. GHCR publication and redeployment from the final merged main SHA are pending. |
+| 10. Recovery/monitoring | Daily encrypted Keycloak backup timer and 30-day local retention enabled. The 08:15 workstation task succeeded; a post-release encrypted dump was copied and checksum-verified off-host. Database restore and realm export verification passed earlier. Host checks and HTTPS uptime workflow are active. |
+| 11. Release | PRs #91 and #94 merged; main CI passed and published images; exact merged SHA deployed, public HTTPS and private routing checked. |
 
-At the last check, the host used 2.3 GiB of 7.8 GiB RAM and 13 GiB of 125 GiB
-disk. Face used approximately 714 MiB of its 2 GiB limit, Keycloak 559 MiB
-of 1.75 GiB, and Web 122 MiB of 768 MiB. The Face model cache occupies
+Phases 1–6, 8, 10, and 11 are complete. Phases 7 and 9 remain partial for
+the physical Android-device login and attendance test. A permanent domain
+is optional for this pilot because the four temporary names have trusted TLS.
+
+At the post-release check, the host used 2.3 GiB of 7.8 GiB RAM and 16 GiB
+of 125 GiB disk. Face used approximately 669 MiB of its 2 GiB limit,
+Keycloak 509 MiB of 1.75 GiB, and Web 104 MiB of 768 MiB. The Face model cache occupies
 approximately 601 MiB. Europe-to-Seoul new pooled database queries measured
 about 1.7 seconds; this is acceptable for a small functional pilot but must
 be observed during concurrent attendance testing.
+
+| Image | VPS image ID |
+| --- | --- |
+| Web | `sha256:583b84df098abe53b556055a4012aa4ae95d08df6220b25c35c67c95cf41dd0b` |
+| Core API | `sha256:20376e561474156d1d112c3cb581b6cc39ac48f6ef2b41b9624c1f5c5e49bdc3` |
+| Face Verification | `sha256:5753efa5728685434229175fc3a689b100fadc67fc81797c03cb35c4484af12f` |
+| Keycloak | `sha256:829568838b382bb2ef980a18602ea51f1ee1f40e89a2077a57527d8ac9c80a74` |
 
 ## Recovery artifacts
 
@@ -66,14 +89,17 @@ before and after identity remapping, the encrypted Keycloak backup, encrypted
 realm export, and the private recovery keys. The Keycloak backup was actually
 restored to a separate PostgreSQL container with no network. The realm export
 was decrypted off-host and its clients and users verified. The VPS retains
-only the age **public recipient**, not the private key. The daily Keycloak
-workstation now has a daily 08:15 Asia/Colombo and logon scheduled task to
+only the age **public recipient**, not the private key. The administrator's
+workstation has a daily 08:15 Asia/Colombo and logon scheduled task to
 pull and checksum-verify new encrypted dumps. The scheduled task's test run
-returned success and copied a fresh `2026-09-24` archive. Check its last
+returned success at 08:15, and a post-release
+`keycloak-2026-09-24T024942Z.dump.age` archive was copied and verified.
+Check its last
 result weekly, since a powered-off workstation cannot pull until it next
-starts. After the follow-up release is deployed, the retention job will
-delete local Keycloak database dumps older than 30 days after a successful
-replacement; the off-host copy must be verified before then.
+starts. The retention job deletes local Keycloak database dumps older than
+30 days only after a successful replacement; the off-host copy must be
+verified before then. A protected 0600 copy of the pre-release environment
+is at `/etc/uniattend/private.env.pre-cf72fa4` for rollback.
 
 ## Android pilot artifact
 
@@ -114,16 +140,14 @@ Change them after handoff.
 
 ## Remaining acceptance work
 
-1. Review and merge the follow-up deployment PR, confirm GHCR images publish,
-   and redeploy the exact merged main SHA. Run smoke tests once more.
-2. Install the local pilot APK on an Android physical device and run a
+1. Install the local pilot APK on an Android physical device and run a
    supervised attendance pilot. Expo EAS access for `manushanhasanka` is
    unavailable on the `techumeda55` project, so a hosted preview build
    remains unavailable. Attendance face enforcement remains disabled while
    liveness is unfinished; existing face-required sessions cannot complete
    through the pilot API and must be replaced with non-face pilot sessions.
-3. Create a Cloudflare account and private R2 bucket when approved reference
+2. Create a Cloudflare account and private R2 bucket when approved reference
    photos are ready. The enrollment storage adapter is a separate product PR;
    R2 is not active in this release.
-4. Check the workstation backup task weekly and exercise the two-month
+3. Check the workstation backup task weekly and exercise the two-month
    shutdown/export plan before cancelling the VPS.
