@@ -30,6 +30,7 @@ import type { CourseService } from '../../courses/services/courseService';
 import type { Course } from '../../courses/mockCoursesData';
 import type { QrProgress } from '../../qr/types/qrProgress';
 import type { QrProgressService } from '../../qr/services/qrProgressService';
+import { formatGreeting } from '../utils/greeting';
 
 type DashboardScreenProps = {
   activeSessionService?: ActiveAttendanceSessionService;
@@ -66,6 +67,7 @@ export function DashboardScreen({
   const [courseCards, setCourseCards] = useState<CourseSummary[]>([]);
   const [requiresReadinessCheck, setRequiresReadinessCheck] = useState(false);
   const [userName, setUserName] = useState<string>('');
+  const [greetingTime, setGreetingTime] = useState(() => new Date());
   const hasFocusedDashboard = useRef(false);
 
   const today = useMemo(() => new Date(), []);
@@ -163,6 +165,13 @@ export function DashboardScreen({
       mounted = false;
     };
   }, [activeSessionService, courseService, faceVerificationApiService, profileService, service]);
+
+  // The tab stays mounted, so recompute the greeting whenever it regains focus.
+  useFocusEffect(
+    useCallback(() => {
+      setGreetingTime(new Date());
+    }, []),
+  );
 
   // The dashboard remains mounted while attendance routes are open. Refresh
   // the student-specific session state when focus returns so a completed
@@ -264,7 +273,7 @@ export function DashboardScreen({
 
         <View style={styles.greeting}>
           <Text accessibilityRole="header" style={styles.greetingTitle}>
-            {`Good morning, ${userName || 'student'}`}
+            {formatGreeting(userName, greetingTime)}
           </Text>
           <Text style={styles.period}>{`${dateString} · ${semesterText}`}</Text>
         </View>
