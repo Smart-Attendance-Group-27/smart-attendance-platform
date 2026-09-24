@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
-import { AppButton } from '../../../components/ui';
+import { AppButton, ScreenContainer } from '../../../components/ui';
 import { lightColors, spacing, typography } from '../../../theme';
 import type { AttendanceService } from '../services/attendanceService';
 import type { MyAttendance } from '../types/myAttendance';
@@ -99,11 +99,11 @@ export function AttendanceProgressScreen({
   }, [attendance?.sessionState, load]);
 
   return (
-    <View style={styles.root}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
-      >
+    <ScreenContainer
+      scrollable
+      contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
+    >
         <Text accessibilityRole="header" style={styles.title}>Attendance progress</Text>
         {loading ? <ActivityIndicator accessibilityLabel="Loading attendance progress" /> : null}
         {error ? (
@@ -198,14 +198,12 @@ export function AttendanceProgressScreen({
             <AppButton title="Return home" onPress={onReturnHome} variant="secondary" />
           </>
         ) : null}
-      </ScrollView>
-    </View>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: lightColors.background },
-  content: { padding: spacing.lg, gap: spacing.md },
+  content: { gap: spacing.md, paddingBottom: spacing.xxl },
   title: { ...typography.screenTitle, color: lightColors.textPrimary },
   course: { ...typography.supporting, color: lightColors.primaryInteraction, fontWeight: '700' },
   session: { ...typography.sectionTitle, color: lightColors.textPrimary },
