@@ -100,6 +100,15 @@ It briefly stops Keycloak, runs the offline realm export, encrypts the result,
 and restarts Keycloak. Copy both the PostgreSQL backup and realm export off
 the VPS; verify decryption and a PostgreSQL restore before student testing.
 
+The administrator's Windows workstation runs
+`deployment/ops/pull_keycloak_backups.ps1` after the VPS timer. It copies only
+encrypted database dumps into the protected local backup directory and checks
+their SHA-256 hashes against the VPS. The scheduled task should run daily at
+08:15 Asia/Colombo and when the administrator logs on, so missed daily pulls
+can catch up before the VPS's 30-day local retention expires. Check its last
+result and the local files weekly; realm exports must still be copied and
+verified manually after identity changes.
+
 The previous Railway Keycloak returned 404 on 2026-09-24. Seven role-bearing
 mock users were recreated in the new Keycloak and their Supabase subjects were
 remapped. Their generated credentials are held in the administrator's

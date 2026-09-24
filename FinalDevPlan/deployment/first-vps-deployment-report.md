@@ -48,7 +48,7 @@ are not publicly bound. SSH, 80, and 443 are the open inbound ports.
 | 7. Validation | Browser admin/lecturer login, student mobile PKCE and Core identity, Face model startup and blank-image inference, container restart, memory, disk, and log checks passed. The test student's previous readiness record was restored after the blank-image check. A local Android APK was built and inspected, but no physical device was available for installation. |
 | 8. SSH tunnel | Windows workstation tunnel to Web, Core, Face, and Keycloak tested. |
 | 9. HTTPS | Temporary `sslip.io` DNS plus Caddy certificates work for all four hostnames; public route restrictions verified. Mobile configuration and a locally built Android APK point to these HTTPS origins. A purchased domain can be cut over later. |
-| 10. Recovery/monitoring | Daily encrypted Keycloak backup timer enabled with a 30-day local retention window; encrypted database backup restored into an isolated container; encrypted realm export decrypted and checked off-host. Host checks and scheduled HTTPS uptime workflow added. |
+| 10. Recovery/monitoring | Daily encrypted Keycloak backup timer enabled; 30-day local retention is in the follow-up release. Workstation daily/logon pull copied a fresh archive and verified its SHA-256; encrypted database backup restored into an isolated container; encrypted realm export decrypted and checked off-host. Host checks and scheduled HTTPS uptime workflow added. |
 | 11. Release | PR #91 was merged. A follow-up PR carries the Android issuer fix and deployment review fixes. GHCR publication and redeployment from the final merged main SHA are pending. |
 
 At the last check, the host used 2.3 GiB of 7.8 GiB RAM and 13 GiB of 125 GiB
@@ -67,10 +67,13 @@ realm export, and the private recovery keys. The Keycloak backup was actually
 restored to a separate PostgreSQL container with no network. The realm export
 was decrypted off-host and its clients and users verified. The VPS retains
 only the age **public recipient**, not the private key. The daily Keycloak
-backup is still local to the VPS until each new archive is copied off-host.
-The retention job deletes local Keycloak database dumps older than 30 days
-after a successful replacement; the off-host copy must be verified before
-then.
+workstation now has a daily 08:15 Asia/Colombo and logon scheduled task to
+pull and checksum-verify new encrypted dumps. The scheduled task's test run
+returned success and copied a fresh `2026-09-24` archive. Check its last
+result weekly, since a powered-off workstation cannot pull until it next
+starts. After the follow-up release is deployed, the retention job will
+delete local Keycloak database dumps older than 30 days after a successful
+replacement; the off-host copy must be verified before then.
 
 ## Android pilot artifact
 
@@ -122,5 +125,5 @@ Change them after handoff.
 3. Create a Cloudflare account and private R2 bucket when approved reference
    photos are ready. The enrollment storage adapter is a separate product PR;
    R2 is not active in this release.
-4. Arrange a recurring off-host copy of new Keycloak backup files and exercise
-   the two-month shutdown/export plan before cancelling the VPS.
+4. Check the workstation backup task weekly and exercise the two-month
+   shutdown/export plan before cancelling the VPS.
