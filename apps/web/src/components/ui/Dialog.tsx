@@ -26,9 +26,9 @@ export function Dialog({ open, title, onClose, children }: DialogProps) {
       ref={ref}
       onClose={onClose}
       aria-labelledby={titleId}
-      className="w-full max-w-md border border-[var(--line)] p-0 shadow-lg backdrop:bg-black/40"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto border border-[var(--line)] bg-[var(--surface)] p-0 text-[var(--text)] shadow-lg backdrop:bg-black/40"
     >
-      <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
+      <div className="sticky top-0 flex items-center justify-between border-b border-[var(--line)] bg-[var(--surface)] px-4 py-3">
         <h2 id={titleId} className="text-sm font-semibold text-[var(--text)]">
           {title}
         </h2>
