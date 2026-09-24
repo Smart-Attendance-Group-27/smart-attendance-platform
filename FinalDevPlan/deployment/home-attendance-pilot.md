@@ -2,7 +2,7 @@
 
 **Owner:** Manushan  
 **Prepared:** 2026-09-24  
-**Status:** Course and classroom ready; Manushan creates and runs the sessions
+**Status:** Non-face physical-device attendance completed and verified
 
 ## Prepared test data
 
@@ -19,9 +19,10 @@ administrator setup record rather than repeated in this repository.
 | Lecturer | `lecutere01@lectuere.uniattend.test` |
 | Enrolled student | `230737r@student.uniattend.test` |
 | Timetable | Thursday 08:00–20:00, `PILOT-01`, valid through 2026-12-20 |
-| Starting sessions | None; the lecturer creates the first one |
+| Current sessions | One closed with final present and QR 1/1; one cancelled |
 
-Both mock lecturer accounts now have empty attendance-session lists. A
+Both mock lecturer accounts had empty attendance-session lists immediately
+after the reset. A
 verified encrypted Supabase archive was made immediately before removing the
 20 historical sessions of MOCK401, MOCK402, and MOCK403. Their dependent
 attendance, verification, geofence, and QR rows were removed in the same
@@ -30,7 +31,16 @@ the pilot course is separate. Historical audit logs were retained. The
 recovery archive and the exact removed IDs are in the administrator's
 protected `C:\Users\LOQ\.uniattend-backups` directory.
 
-## Run the first check-in yourself
+After setup, `lecutere01` created two `PILOT101` sessions. Live records now
+show session `c15d8257-0ee9-485a-b74c-48a9cf6dfe78` closed with a passed
+geofence after one low-accuracy retry, one initial check-in, one required QR
+batch passed, and final **present**. Manushan confirmed that the successful
+attempt was on his physical Android phone at the configured test location.
+Session
+`e0bf254f-7bd4-485c-95bb-0a1f55a79488` was cancelled without attendance.
+The exact location reading is kept out of Git.
+
+## Repeat a check-in yourself
 
 1. Be at the supplied test location. Turn on the phone's Location service and
    allow precise location for UniAttend. A view of the sky or a window may
