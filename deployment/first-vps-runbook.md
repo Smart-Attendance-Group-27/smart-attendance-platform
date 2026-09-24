@@ -81,7 +81,10 @@ continues to use approved local input files.
 
 The backup timer runs daily at 02:30 UTC and writes a dated encrypted
 `pg_dump` under `/opt/uniattend/backups`. Copy the `.age` file off the VPS
-regularly. The age private key must stay on the administrator's workstation.
+regularly and verify the copy before the local 30-day retention window ends.
+The backup script removes local database dumps older than 30 days only after
+creating a new encrypted dump successfully. The age private key must stay on
+the administrator's workstation.
 The first archive should be decrypted and restored to an isolated throwaway
 PostgreSQL container before student testing. Never test a restore against the
 live Keycloak volume.

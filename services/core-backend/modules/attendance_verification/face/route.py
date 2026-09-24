@@ -53,6 +53,18 @@ def get_face_progress_repository() -> AttendanceFaceProgressRepository:
     return AttendanceFaceProgressRepository()
 
 
+def _require_face_attendance_enabled(request: Request) -> None:
+    settings = request.app.state.settings
+    if settings.pilot_disable_face_attendance:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=error_detail(
+                "FACE_ATTENDANCE_NOT_ENABLED",
+                "Face attendance is not enabled for this pilot.",
+            ),
+        )
+
+
 @router.get("", response_model=AttendanceFaceProgressResponse)
 async def get_attendance_face_progress(
     session_id: UUID,
@@ -63,6 +75,7 @@ async def get_attendance_face_progress(
         Depends(get_face_progress_repository),
     ],
 ) -> AttendanceFaceProgressResponse:
+    _require_face_attendance_enabled(request)
     passed = await repository.has_passed(
         request.app.state.db_pool,
         user_id=current_student.user_id,
@@ -112,6 +125,7 @@ async def verify_attendance_face(
         Form(description="On-device liveness evidence, passed through as-is"),
     ] = None,
 ) -> AttendanceFaceVerificationResponse:
+    _require_face_attendance_enabled(request)
     if liveness is not None and len(liveness) > MAX_LIVENESS_CHARS:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
