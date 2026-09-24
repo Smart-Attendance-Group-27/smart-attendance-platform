@@ -171,6 +171,33 @@ export async function refreshTokens(params: {
   return requestTokens(params.discovery.tokenEndpoint, body);
 }
 
+export async function terminateKeycloakSession(params: {
+  discovery: OidcDiscovery;
+  refreshToken: string;
+}): Promise<void> {
+  const { clientId, clientSecret } = requireConfig();
+  const logoutEndpoint = params.discovery.tokenEndpoint.replace(/\/token$/, "/logout");
+  if (logoutEndpoint === params.discovery.tokenEndpoint) {
+    throw new Error("Keycloak token endpoint cannot be converted to a logout endpoint.");
+  }
+
+  const body = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    refresh_token: params.refreshToken,
+  });
+  const response = await fetch(logoutEndpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Keycloak logout endpoint returned ${response.status}.`);
+  }
+}
+
 export type VerifiedIdentity = {
   sub: string;
   name: string;
