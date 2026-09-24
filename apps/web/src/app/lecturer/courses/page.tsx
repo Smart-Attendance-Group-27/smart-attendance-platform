@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { ActivityList } from "@/components/ui/ActivityList";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Button } from "@/components/ui/Button";
+import { CorrectionRequestButton } from "@/components/lecturer/CorrectionRequestButton";
 import { AssignedCoursesCard } from "@/components/lecturer/AssignedCoursesCard";
 import { getLecturerCourses } from "@/services/lecturerService";
 import { TimetableEntry } from "@/types/lecturer";
@@ -17,7 +17,19 @@ export default async function LecturerCoursesPage() {
       <PageHeader
         title="My courses and timetable"
         description="View authorised academic data for assigned courses."
-        actions={<Button variant="primary">Request data correction</Button>}
+        actions={
+          <CorrectionRequestButton
+            requestType="course_data"
+            variant="primary"
+            buttonLabel="Request data correction"
+            dialogTitle="Request data correction"
+            targetLabel="Course"
+            targets={courses.map((course) => ({
+              id: course.courseId,
+              label: `${course.courseCode} · ${course.courseName}`,
+            }))}
+          />
+        }
       />
 
       <Notice title="Read-only academic information.">
@@ -34,7 +46,18 @@ export default async function LecturerCoursesPage() {
             title="Weekly timetable"
             subtitle="Read-only"
             flush
-            actions={<Button>Request timetable correction</Button>}
+            actions={
+              <CorrectionRequestButton
+                requestType="timetable"
+                buttonLabel="Request timetable correction"
+                dialogTitle="Request timetable correction"
+                targetLabel="Timetable entry"
+                targets={timetable.map((entry) => ({
+                  id: entry.id,
+                  label: `${entry.courseCode} · ${entry.day} ${entry.timeRange} · ${entry.room}`,
+                }))}
+              />
+            }
           >
             <DataTable<TimetableEntry>
               emptyTitle="No timetable entries yet"

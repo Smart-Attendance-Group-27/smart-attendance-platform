@@ -10,6 +10,7 @@ import {
   mockLecturerTimetable,
 } from "@/mocks/fixtures/lecturerLive";
 import type { LecturerQrBatch } from "@/types/lecturer";
+import type { CorrectionCategory, CorrectionRequestType } from "@/lib/correctionRequests";
 
 export type ApiLecturerCourse = {
   courseOfferingId: string;
@@ -243,6 +244,25 @@ export function voidLecturerQrBatch(
     `/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/qr-batches/${encodeURIComponent(qrSessionId)}/void`,
     { method: "POST", body: { reason } },
   );
+}
+
+export type ApiCorrectionRequest = {
+  id: string;
+  requestType: CorrectionRequestType;
+  category: CorrectionCategory;
+  courseOfferingId: string;
+  timetableEntryId: string | null;
+  status: string;
+};
+
+export function submitLecturerCorrectionRequest(body: {
+  requestType: CorrectionRequestType;
+  category: CorrectionCategory;
+  courseOfferingId?: string;
+  timetableEntryId?: string;
+  description: string;
+}): Promise<ApiCorrectionRequest> {
+  return coreBackendFetch("/api/v1/lecturers/me/correction-requests", { method: "POST", body });
 }
 
 export function activateLecturerSession(sessionId: string): Promise<ApiLecturerSession> {
