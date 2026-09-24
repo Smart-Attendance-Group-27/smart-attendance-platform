@@ -41,9 +41,12 @@ repeated after the main-SHA deployment. The live Core GET and POST face
 attendance routes both returned `FACE_ATTENDANCE_NOT_ENABLED` as configured.
 Role-based browser login and blank-image inference were performed on the
 staging build before the final source merge. Two mock students subsequently
-signed in through Keycloak on a physical Android phone. A complete attendance
-check-in remains outstanding because the phone was away from the selected
-classroom, and its location readings failed the accuracy gate.
+signed in through Keycloak on a physical Android phone. The first attendance
+attempt was away from its classroom and stopped at the location-accuracy
+gate. Manushan later completed a non-face `PILOT101` check-in on the physical
+phone at the configured pilot location: geofence passed after one
+low-accuracy retry, the required QR batch passed, and closing the session
+recorded final present.
 
 Core and Face `/internal/*`, Keycloak `/admin/*`, and public Face attendance
 routes return 404 at the proxy. Database, Redis, and service management ports
@@ -59,16 +62,16 @@ are not publicly bound. SSH, 80, and 443 are the open inbound ports.
 | 4. Images | Four production images built from the merged main SHA on the VPS; the main-branch CI also published all four private GHCR images successfully. |
 | 5. Data | Supabase TLS and schema gate passed. No unnecessary migrations replayed. Prechange and postchange encrypted Supabase backups verified. Production Keycloak DB and realm initialized; mock identities remapped. |
 | 6. Private deployment | Services started in dependency order; tunnel-only health and internal routing passed before public ingress opened. |
-| 7. Validation | Browser admin/lecturer login passed in staging. Student mobile PKCE, Core identity, and the pilot face guard passed again after release. Face model startup and blank-image inference, container restart, memory, disk, and log checks passed. The test student's previous readiness record was restored after the blank-image check. A physical Android phone opened the mock course and session; two real location attempts reached the backend and the app reported low accuracy. No attendance record was created. |
+| 7. Validation | Browser admin/lecturer login passed in staging. Student mobile PKCE, Core identity, and the pilot face guard passed again after release. Face model startup and blank-image inference, container restart, memory, disk, and log checks passed. The test student's previous readiness record was restored after the blank-image check. A physical Android phone completed a later `PILOT101` non-face session: passed geofence, initial check-in, QR 1/1, and final present. |
 | 8. SSH tunnel | Windows workstation tunnel to Web, Core, Face, and Keycloak tested. |
 | 9. HTTPS | Temporary `sslip.io` DNS plus Caddy certificates work for all four hostnames; public route restrictions verified. The Android APK used these HTTPS origins for physical-device Keycloak login and live Core data. A purchased domain can be cut over later. |
 | 10. Recovery/monitoring | Daily encrypted Keycloak backup timer and 30-day local retention enabled. The 08:15 workstation task succeeded; a post-release encrypted dump was copied and checksum-verified off-host. Database restore and realm export verification passed earlier. Host checks and HTTPS uptime workflow are active. |
 | 11. Release | PRs #91 and #94 merged; main CI passed and published images; exact merged SHA deployed, public HTTPS and private routing checked. |
 
-Phases 1–6 and 8–11 are complete. Phase 7 remains partial for a successful
-physical-device attendance check-in at an approved classroom. A permanent
-domain is optional for this pilot because the four temporary names have
-trusted TLS, including on the physical phone.
+Phases 1–11 are complete for the agreed first deployment scope, which keeps
+face attendance disabled while liveness is unfinished. A permanent domain is
+optional for this pilot because the four temporary names have trusted TLS,
+including on the physical phone.
 
 At the post-release check, the host used 2.3 GiB of 7.8 GiB RAM and 16 GiB
 of 125 GiB disk. Face used approximately 669 MiB of its 2 GiB limit,
@@ -137,6 +140,23 @@ attendance state had no initial check-in or final attendance. The temporary
 session `87d70d08-e30f-4f2d-a8ff-459008b33a8a` was cancelled after the
 test. No mock GPS location was used.
 
+After a separate pilot classroom and `PILOT101` course were prepared at the
+location Manushan supplied privately, he completed attendance on the physical
+Android phone there. The live `PILOT101` session
+`c15d8257-0ee9-485a-b74c-48a9cf6dfe78` required geofence and QR, with
+face verification off. Its geofence records show one
+`LOCATION_ACCURACY_TOO_LOW` retry followed by a passed decision. Student
+state shows an initial check-in, QR progress **1/1 required batch passed**,
+and final **present** after the lecturer closed the session. A second
+`PILOT101` session was cancelled without attendance. Manushan confirmed the
+successful check-in used his phone at the configured test location; exact
+coordinates and raw readings are not in this report.
+
+Before this later test, 20 historical MOCK401–403 test sessions were removed
+from the two mock lecturers' dashboards after a verified encrypted Supabase
+backup. A second encrypted archive of the prepared pilot state was verified.
+The original mock courses remained, and historical audit logs were retained.
+
 ## Identity migration
 
 The old Railway Keycloak is unreachable. Seven previously linked, role-bearing
@@ -164,14 +184,11 @@ Change them after handoff.
 
 ## Remaining acceptance work
 
-1. Run an attendance check-in with a physical phone at an approved classroom
-   and confirm the resulting attendance state. The tested phone was elsewhere
-   and could only exercise the accuracy rejection. Expo EAS access for
-   `manushanhasanka` is unavailable on the `techumeda55` project, so a hosted
-   preview build remains unavailable. Attendance face enforcement remains
-   disabled while liveness is unfinished; existing face-required sessions
-   cannot complete through the pilot API and must be replaced with non-face
-   pilot sessions.
+1. Attendance face enforcement remains disabled while liveness is unfinished;
+   existing face-required sessions cannot complete through the pilot API and
+   must be replaced with non-face pilot sessions. Expo EAS access for
+   `manushanhasanka` remains unavailable on the `techumeda55` project, so a
+   hosted preview build is unavailable; the local APK was used successfully.
 2. Create a Cloudflare account and private R2 bucket when approved reference
    photos are ready. The enrollment storage adapter is a separate product PR;
    R2 is not active in this release.
