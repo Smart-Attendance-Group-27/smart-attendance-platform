@@ -26,3 +26,8 @@ test -s "$temporary"
 chmod 600 "$temporary"
 mv -- "$temporary" "$destination"
 printf 'Encrypted Keycloak backup created: %s\n' "$(basename "$destination")"
+
+# Keep a bounded local recovery window. Copy and verify archives off the VPS
+# regularly; this cleanup affects only dated Keycloak database dumps here.
+find "$backup_dir" -maxdepth 1 -type f -name 'keycloak-*.dump.age' \
+  -mtime +30 -print -delete
