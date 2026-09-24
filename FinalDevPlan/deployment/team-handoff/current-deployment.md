@@ -69,6 +69,10 @@ realm file is `/etc/uniattend/realm.json`. Never commit or print them.
   classroom, department, lecturer, semester, and student option groups.
   A read-only database check found the active `PILOT101` course and its
   offering. No migration or seed was run for this release.
+- An interrupted release attempt stopped after Keycloak recreation. The first
+  managed retry hit a Git ownership check and restored the previous image
+  tag and Keycloak container. The corrected managed job completed with all
+  application health checks passing before the `current` link changed.
 - Browser administrator and lecturer logins, student OIDC authorization code
   with PKCE, Core token validation, Supabase reads, Redis, Face model startup,
   blank-image inference, and intentional container restart were tested during
