@@ -1,7 +1,9 @@
 # Deployment team handoff
 
-**Owner:** Manushan  
-**Snapshot:** 2026-09-24 07:10 UTC  
+**Owner:** Manushan
+
+**Snapshot:** 2026-09-24 07:10 UTC
+
 **Audience:** teammates and their coding agents working on the two-month MVP pilot
 
 Read these files in order:
