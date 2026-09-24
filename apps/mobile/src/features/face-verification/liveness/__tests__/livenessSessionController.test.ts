@@ -94,6 +94,48 @@ function waitForSnapshot(
 }
 
 describe('createLivenessSessionController', () => {
+  test('waits five seconds before capturing a displayed challenge', async () => {
+    let currentTime = 1_000;
+    let finishPreparation: (() => void) | undefined;
+    const wait = jest.fn(() => new Promise<void>((resolve) => {
+      finishPreparation = resolve;
+    }));
+    const sample = createMockSample(observation(6_100, {
+      faceCount: 0,
+      faceAreaRatio: 0,
+      yawDegrees: null,
+    }));
+    const captureSample = jest.fn(async () => {
+      currentTime = 6_100;
+      return sample;
+    });
+    const controller = createLivenessSessionController({
+      captureSource: { captureSample },
+      challengePreparationMs: 5_000,
+      now: () => currentTime,
+      random: () => 0,
+      wait,
+    });
+
+    controller.start();
+
+    expect(controller.getSnapshot().preparingChallenge).toBe(true);
+    expect(controller.getSnapshot().activeChallenge).toBe('turn_left');
+    expect(wait).toHaveBeenCalledWith(5_000);
+    expect(captureSample).not.toHaveBeenCalled();
+
+    currentTime = 6_000;
+    finishPreparation?.();
+    const result = await waitForSnapshot(
+      controller,
+      ({ status }) => status === 'failed',
+    );
+
+    expect(captureSample).toHaveBeenCalledTimes(1);
+    expect(result.preparingChallenge).toBe(false);
+    expect(result.sessionState?.phaseStartedAtMs).toBe(6_000);
+  });
+
   test('retains only the frontal image that completes a successful session', async () => {
     let currentTime = 1_000;
     const sequence = createSequenceSource(passingObservations(), (timestampMs) => {
@@ -220,6 +262,54 @@ describe('createLivenessSessionController', () => {
     expect(result.livenessEvidence).toBeNull();
     expect(sample.photo.delete).toHaveBeenCalledTimes(1);
     expect(captureSample).toHaveBeenCalledTimes(1);
+  });
+
+  test('retries the current challenge without discarding a completed challenge', async () => {
+    let currentTime = 1_000;
+    const sequence = createSequenceSource([
+      observation(1_000, { yawDegrees: 30 }),
+      observation(1_300, { yawDegrees: 30 }),
+      observation(7_301, { yawDegrees: 0 }),
+      observation(7_500, { yawDegrees: -30 }),
+      observation(7_800, { yawDegrees: -30 }),
+      observation(7_900),
+      observation(8_400),
+    ], (timestampMs) => {
+      currentTime = timestampMs;
+    });
+    const controller = createLivenessSessionController({
+      captureSource: sequence.captureSource,
+      now: () => currentTime,
+      random: () => 0,
+    });
+
+    controller.start();
+    const timedOut = await waitForSnapshot(
+      controller,
+      ({ status }) => status === 'timed_out',
+    );
+
+    expect(timedOut.timeoutReason).toBe('challenge_timeout');
+    expect(timedOut.completedChallengeCount).toBe(1);
+    expect(timedOut.sessionState?.challenges[0].progress).toBe('completed');
+    expect(timedOut.sessionState?.currentChallengeIndex).toBeNull();
+
+    controller.retryCurrentChallenge();
+    const retried = controller.getSnapshot();
+    expect(retried.status).toBe('running');
+    expect(retried.completedChallengeCount).toBe(1);
+    expect(retried.sessionState?.challenges[0].progress).toBe('completed');
+    expect(retried.sessionState?.challenges[1].progress).toBe('active');
+
+    const result = await waitForSnapshot(
+      controller,
+      ({ status }) => status === 'passed',
+    );
+    expect(result.completedChallengeCount).toBe(2);
+    expect(result.livenessEvidence?.challenges).toEqual([
+      'turn_left',
+      'turn_right',
+    ]);
   });
 
   test('restart replaces the session and deletes a stale in-flight image', async () => {

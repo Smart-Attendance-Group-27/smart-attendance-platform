@@ -37,7 +37,7 @@ describe('normalizeMlKitFaceObservation', () => {
     expect(observation).toEqual({
       timestampMs: 1_500,
       faceCount: 1,
-      yawDegrees: 32,
+      yawDegrees: -32,
       leftEyeOpenProbability: 0.85,
       rightEyeOpenProbability: 0.9,
       faceAreaRatio: 0.1,
@@ -46,9 +46,9 @@ describe('normalizeMlKitFaceObservation', () => {
   });
 
   test.each([
-    { rotationY: 25, expectedYaw: 25 },
-    { rotationY: -25, expectedYaw: -25 },
-  ])('preserves the established front-camera yaw sign', ({
+    { rotationY: 25, expectedYaw: -25 },
+    { rotationY: -25, expectedYaw: 25 },
+  ])('normalizes raw front-camera yaw to the engine convention', ({
     rotationY,
     expectedYaw,
   }) => {

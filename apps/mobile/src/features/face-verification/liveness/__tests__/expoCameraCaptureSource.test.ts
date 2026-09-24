@@ -59,7 +59,7 @@ describe('createExpoCameraCaptureSource', () => {
     expect(sample.observation).toEqual({
       timestampMs: 4_000,
       faceCount: 1,
-      yawDegrees: 28,
+      yawDegrees: -28,
       leftEyeOpenProbability: 0.8,
       rightEyeOpenProbability: 0.9,
       faceAreaRatio: 0.1,
