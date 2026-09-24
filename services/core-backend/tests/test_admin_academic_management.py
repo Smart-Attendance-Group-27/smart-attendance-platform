@@ -92,6 +92,21 @@ def timetable(status: str = "active") -> AdminTimetableEntryRecord:
     )
 
 
+@pytest.mark.asyncio
+async def test_academic_options_query_uses_profile_status_columns() -> None:
+    class OptionsConnection:
+        async def fetch(self, query: str):
+            if "FROM academic.lecturer_profiles" in query:
+                assert "WHERE profile_status='active'" in query
+            if "FROM academic.student_profiles" in query:
+                assert "WHERE profile_status='active'" in query
+            return []
+
+    options = await AdminAcademicDataRepository().list_reference_options(OptionsConnection())
+
+    assert set(options) == {"departments", "semesters", "lecturers", "students", "classrooms"}
+
+
 @pytest.fixture
 def pool() -> FakePool:
     class Transaction:

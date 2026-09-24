@@ -328,8 +328,8 @@ class AdminAcademicDataRepository:
         queries = {
             "departments": "SELECT id, department_name AS label FROM academic.departments WHERE status='active' ORDER BY label",
             "semesters": f"SELECT semester.id, {_SEMESTER_LABEL_EXPR} AS label FROM academic.semesters semester JOIN academic.academic_years academic_year ON academic_year.id=semester.academic_year_id WHERE semester.status='active' ORDER BY academic_year.start_date DESC, semester.semester_number",
-            "lecturers": "SELECT id, TRIM(CONCAT_WS(' ', first_name, NULLIF(middle_name,''), last_name)) AS label FROM academic.lecturer_profiles WHERE status='active' ORDER BY label",
-            "students": "SELECT id, registration_number || ' - ' || TRIM(CONCAT_WS(' ', first_name, NULLIF(middle_name,''), last_name)) AS label FROM academic.student_profiles WHERE status='active' ORDER BY registration_number",
+            "lecturers": "SELECT id, TRIM(CONCAT_WS(' ', first_name, NULLIF(middle_name,''), last_name)) AS label FROM academic.lecturer_profiles WHERE profile_status='active' ORDER BY label",
+            "students": "SELECT id, registration_number || ' - ' || TRIM(CONCAT_WS(' ', first_name, NULLIF(middle_name,''), last_name)) AS label FROM academic.student_profiles WHERE profile_status='active' ORDER BY registration_number",
             "classrooms": "SELECT id, classroom_code AS label FROM academic.classrooms WHERE status='active' ORDER BY classroom_code",
         }
         result: dict[str, list[AcademicOptionRecord]] = {}
