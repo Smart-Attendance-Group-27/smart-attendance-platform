@@ -1,6 +1,7 @@
 # Current MVP deployment
 
-**Observed:** 2026-09-24 08:30 UTC. Recheck before a release or data change.
+**Observed:** 2026-09-25 after the face-attendance release. Recheck before a
+release or data change.
 
 ## Runtime and release identity
 
@@ -8,26 +9,27 @@
 | --- | --- |
 | Owner and lifetime | Manushan; netcup VPS 1000 G12.5 for a roughly two-month university pilot |
 | Host | Debian 13 x86_64 at `152.53.33.198`; 4 vCPU, 7.8 GiB RAM, 125 GB root disk, 2 GiB swap |
-| Running source | `/opt/uniattend/current` points to `/opt/uniattend/releases/d0152d947f18e9204252cd597fd9e49e618c00a4` |
-| Repository `main` | `d0152d947f18e9204252cd597fd9e49e618c00a4` at this snapshot |
-| Merged changes | [PR #96](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/96) records physical pilot evidence; [PR #97](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/97) fixes admin academic options and carries this handoff. Both merged on 2026-09-24. |
+| Running source | `/opt/uniattend/current` points to `/opt/uniattend/releases/5cb1ca71369184cd85776750b14084f779887a50` |
+| Repository `main` | `5cb1ca71369184cd85776750b14084f779887a50` at this snapshot |
+| Merged changes | [PR #100](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/100) enables the configurable face-attendance path. Earlier PRs #96 and #97 carry the physical non-face pilot evidence and admin academic-options fix. |
 | Images | Web, Core, Face, and Keycloak were built on the VPS from the exact running SHA. Main-branch CI passed and published private GHCR images with the same SHA. The VPS runs its locally built images. |
 
 At the snapshot, Web, Core, Keycloak, Keycloak PostgreSQL, Redis, Face
 Verification, and Caddy were running; all six application containers with
 health checks were healthy. Host memory used was about 2.5 GiB and root disk
-usage 14%. These are point-in-time readings, not load-test results. The prior
-`cf72fa47f529674e4510586e12e5f4d0a6540ebf` release remains available for
+usage 14%. Face used about 703 MiB of its 2 GiB limit. These are point-in-time
+readings, not load-test results. The prior
+`d0152d947f18e9204252cd597fd9e49e618c00a4` release remains available for
 application rollback.
 
 Locally built release image IDs:
 
 | Service | Image ID |
 | --- | --- |
-| Web | `sha256:49b6af3e8dd80dff0f61f8cf814f10c21a08a810957d5d5a6040b82119d64546` |
-| Core | `sha256:770a561cd655b204c1d107c7ef339f3f307633ef6c4d41b41222b30c6694d2b0` |
-| Face | `sha256:4ebd7a446a8d6567c9968863d78372f1bfacd6245181f511e48b88ca4ea06acd` |
-| Keycloak | `sha256:21f94e6001d1b02070a1dfc1e4c46b823263b85877492e194e4d093ab9950712` |
+| Web | `sha256:c9845d65454774000b4406ad8e1b3caacf2272fe027bc1bf5b84bc54dc65c587` |
+| Core | `sha256:b5bd57d28be51a69ef757b9525c8238d15ae7d9ecebb4013b2fbb25427afa15d` |
+| Face | `sha256:595c8733dd0c5f8ba066339c06f7c45c06d55a6c3eb3ea59031eb26848fcdd5d` |
+| Keycloak | `sha256:aa23c300d64bdfe4599ba169c788375e1eb8c1d1bd29260278a829af418be5f9` |
 
 ## Architecture and URLs
 
@@ -60,7 +62,7 @@ realm file is `/etc/uniattend/realm.json`. Never commit or print them.
 ## What has been observed
 
 - The four public URLs above returned HTTPS 200 with certificate validation
-  from the owner workstation after the `d0152d9` release on 2026-09-24.
+  from the owner workstation after the `5cb1ca7` release on 2026-09-25.
   Public Core and Face `/internal/*` and Keycloak `/admin/*` returned 404.
   The hourly GitHub uptime workflow checks the public origins.
 - A pilot administrator completed Keycloak authorization code login with
@@ -69,6 +71,16 @@ realm file is `/etc/uniattend/realm.json`. Never commit or print them.
   classroom, department, lecturer, semester, and student option groups.
   A read-only database check found the active `PILOT101` course and its
   offering. No migration or seed was run for this release.
+- PR #100's exact merged SHA was built on the VPS and deployed in dependency
+  order. Core reports `PILOT_DISABLE_FACE_ATTENDANCE=false`; its Face URL is
+  the private Docker service. Face loaded `buffalo_l` on CPU with one
+  concurrent inference and fresh liveness evidence limited to 120 seconds.
+  All containers became healthy before the release symlink changed.
+- A read-only post-release database audit found one active verification
+  configuration at threshold `0.50000` and three encrypted, generated,
+  readiness-passed 512-dimensional profiles. The enrolled `PILOT101` student
+  has a ready `buffalo_l` version `1` profile. No embedding value, key, image,
+  or token was printed during the audit.
 - An interrupted release attempt stopped after Keycloak recreation. The first
   managed retry hit a Git ownership check and restored the previous image
   tag and Keycloak container. The corrected managed job completed with all
@@ -96,18 +108,23 @@ realm file is `/etc/uniattend/realm.json`. Never commit or print them.
 
 ## Current limits
 
-- Core sets `PILOT_DISABLE_FACE_ATTENDANCE=true`. Face service health and
-  readiness are available, but face verification is **not** an attendance
-  requirement in the current pilot. Merged mobile liveness feedback in `main`
-  does not change this deployed guard.
+- Core sets `PILOT_DISABLE_FACE_ATTENDANCE=false`, so any eligible course can
+  create a face-required attendance session. Deployment and stored-profile
+  readiness have passed, but a real physical-device face match, initial
+  check-in, and final attendance result have not yet been recorded for this
+  release. The current client-generated liveness evidence is validated for
+  supported challenges, success, and age, but it is not cryptographically
+  bound to a server-issued challenge.
 - Cloudflare R2 has no account or bucket yet. The reference-photo R2
   enrollment adapter is separate future product work. The current enrollment
   CLI accepts approved local files; do not claim that R2 photos are active in
   this deployment.
-- The arm64 pilot APK is debug-signed for internal testing and held outside
-  Git on the owner's workstation. EAS hosted access to the existing Expo
-  project was unavailable at initial deployment. A domain change requires a
-  new mobile build with matching OIDC/API URLs.
+- An EAS preview APK is available from build
+  `75470b13-cbc9-43ef-94bb-758c823a370c`; its verified local copy and checksum
+  are held outside Git on the owner's workstation. It uses a different signer
+  from the older debug APK, so Android must uninstall the older build before
+  installing it. A domain change requires a new mobile build with matching
+  OIDC/API URLs.
 
 ## Recovery and monitoring
 

@@ -2,7 +2,7 @@
 
 **Owner:** Manushan
 
-**Snapshot:** 2026-09-24 08:30 UTC
+**Snapshot:** 2026-09-25 after the face-attendance release
 
 **Audience:** teammates and their coding agents working on the two-month MVP pilot
 
@@ -16,11 +16,11 @@ Read these files in order:
    grant to each collaborator and what must stay out of Git and agent prompts.
 4. [Local developer setup](developer-setup.md) — isolated database, current
    authentication choices, service guides, and PR checks.
-5. [Face attendance enablement](face-attendance-enablement.md) — next-release
+5. [Face attendance enablement](face-attendance-enablement.md) — deployed
    configuration, verified prerequisites, runtime flow, limits, and acceptance.
 
 The live server was released from merged `main` commit
-`d0152d947f18e9204252cd597fd9e49e618c00a4`. Always compare the live
+`5cb1ca71369184cd85776750b14084f779887a50`. Always compare the live
 release symlink, current `main`, and open PRs before acting. A new merge does
 not deploy itself. This handoff is a dated snapshot; recheck live state before
 acting.
@@ -34,9 +34,9 @@ checks before editing. The task brief should include these boundaries:
 - Use a branch from current `main`; keep each reviewed change in its own PR.
 - Distinguish deployed SHA from source SHA. A merge does not deploy the VPS.
 - Do not rerun database migrations or delete shared data from a fresh clone.
-- Treat the value observed in the current deployment as authoritative. The
-  next face-attendance release changes the switch only after the checks in the
-  enablement guide pass.
+- Treat the value observed in the current deployment as authoritative. Face
+  attendance is enabled globally; its physical-device acceptance remains open
+  until the checks in the enablement guide pass.
 - Use the existing protected environment on the VPS for authorized operations.
   Keep passwords, private keys, student photos, and embeddings out of Git,
   issue bodies, PR comments, agent prompts, and terminal output.

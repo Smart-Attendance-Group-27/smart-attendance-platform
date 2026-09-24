@@ -7,13 +7,12 @@ the pilot data is already live.
 
 ## 1. Use the merged-main release path for future changes
 
-PRs [#96](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/96)
-and [#97](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/97)
-merged. Release `d0152d947f18e9204252cd597fd9e49e618c00a4` is live. Its
-CI, service health, public HTTPS, private-route, Keycloak token, pilot course,
-and authenticated admin academic-options checks passed. The previous
-`cf72fa47f529674e4510586e12e5f4d0a6540ebf` release is retained for
-rollback. Face attendance remains disabled.
+[PR #100](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/100)
+merged. Release `5cb1ca71369184cd85776750b14084f779887a50` is live. Its
+CI, service health, public HTTPS, private-route, Face model, runtime settings,
+and stored-profile readiness checks passed. The previous
+`d0152d947f18e9204252cd597fd9e49e618c00a4` release is retained for rollback.
+Face attendance is enabled; physical face attendance acceptance is still due.
 
 For the next change:
 
@@ -26,10 +25,10 @@ For the next change:
    a separate read-package credential. Main CI also publishes commit-tagged
    images. A merge alone does not deploy the VPS.
 3. Verify HTTPS health, Keycloak login, Core token, `PILOT101` visibility,
-   Face health, private-route restrictions, and the changed feature. Record
-   the active release SHA and image IDs, then retain the prior release for
-   rollback. Preserve `PILOT_DISABLE_FACE_ATTENDANCE=true` until the separate
-   face acceptance work is complete.
+    Face health, private-route restrictions, and the changed feature. Record
+    the active release SHA and image IDs, then retain the prior release for
+    rollback. Use `PILOT_DISABLE_FACE_ATTENDANCE=true` as the emergency stop
+    if the supervised face pilot exposes a serious failure.
 
 Carry any later verified static QR result into the deployment evidence before
 treating static QR as accepted. The admin options endpoint passed its
@@ -56,11 +55,12 @@ repeat the student scan and verify the server record and final outcome.
 Retain these facts without copying raw location samples, QR values, or
 credentials into a PR.
 
-## 3. Release and validate face attendance
+## 3. Complete physical face-attendance acceptance
 
-The next reviewed release makes the global face-attendance switch configurable
-and enables it with `PILOT_DISABLE_FACE_ATTENDANCE=false`. The live audit found
-three decryptable generated profiles, one active verification configuration,
+Release `5cb1ca71369184cd85776750b14084f779887a50` made the global
+face-attendance switch configurable and deployed it as
+`PILOT_DISABLE_FACE_ATTENDANCE=false`. The live audit found three encrypted,
+generated, readiness-passed profiles, one active verification configuration,
 and a ready `PILOT101` student. Follow the
 [face attendance enablement guide](face-attendance-enablement.md) for the exact
 flow, rollback switch, pilot limitation, and physical-device acceptance.
