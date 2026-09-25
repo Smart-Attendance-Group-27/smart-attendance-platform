@@ -30,6 +30,8 @@ import type { CourseService } from '../../courses/services/courseService';
 import type { Course } from '../../courses/mockCoursesData';
 import type { QrProgress } from '../../qr/types/qrProgress';
 import type { QrProgressService } from '../../qr/services/qrProgressService';
+import { getAppTimeZone } from '../../../config/appTimeZone';
+import { formatAttendanceTime } from '../../attendance/utils/formatAttendanceSession';
 import { formatGreeting } from '../utils/greeting';
 import { getCommonSemester } from '../../courses/utils/semesterLabel';
 
@@ -246,15 +248,16 @@ export function DashboardScreen({
 
   const mapLectureToUpcoming = (lecture: Lecture) => {
     const date = new Date(lecture.startTime);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+    const timeZone = getAppTimeZone();
+    const day = new Intl.DateTimeFormat('en-GB', { day: '2-digit', timeZone }).format(date);
+    const month = new Intl.DateTimeFormat('en-US', { month: 'short', timeZone }).format(date).toUpperCase();
 
     return {
       id: lecture.id,
       day,
       month,
       course: `${lecture.courseCode} — ${lecture.courseName}`,
-      time: new Date(lecture.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: formatAttendanceTime(lecture.startTime),
       location: lecture.venue,
     };
   };

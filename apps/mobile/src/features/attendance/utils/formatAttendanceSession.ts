@@ -1,3 +1,4 @@
+import { getAppTimeZone } from '../../../config/appTimeZone';
 import type {
   AttendanceSession,
   AttendanceSessionType,
@@ -17,7 +18,6 @@ export type FormattedAttendanceSession = {
 };
 
 const DEFAULT_LOCALE = 'en-GB';
-const DEFAULT_TIME_ZONE = 'Asia/Colombo';
 
 function toValidDate(value: string): Date | null {
   const date = new Date(value);
@@ -30,7 +30,7 @@ function resolveOptions(
 ) {
   return {
     locale: options.locale ?? DEFAULT_LOCALE,
-    timeZone: options.timeZone ?? DEFAULT_TIME_ZONE,
+    timeZone: options.timeZone ?? getAppTimeZone(),
   };
 }
 
@@ -80,6 +80,33 @@ export function formatAttendanceTime(
     }).format(date);
   } catch {
     return 'Time unavailable';
+  }
+}
+
+export function formatAttendanceDateTime(
+  value: string,
+  options: AttendanceDateTimeFormatOptions = {},
+): string {
+  const date = toValidDate(value);
+
+  if (!date) {
+    return 'Date unavailable';
+  }
+
+  const { locale, timeZone } = resolveOptions(options);
+
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      timeZone,
+    }).format(date);
+  } catch {
+    return 'Date unavailable';
   }
 }
 

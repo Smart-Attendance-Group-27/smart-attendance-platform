@@ -4,6 +4,7 @@ import { ActivityIndicator, RefreshControl, StyleSheet, Text, View } from 'react
 
 import { AppButton, ScreenContainer } from '../../../components/ui';
 import { lightColors, spacing, typography } from '../../../theme';
+import { formatAttendanceDateTime } from '../utils/formatAttendanceSession';
 import type { AttendanceService } from '../services/attendanceService';
 import type { MyAttendance } from '../types/myAttendance';
 import type { QrProgress } from '../../qr/types/qrProgress';
@@ -27,7 +28,7 @@ function canRecover(state: MyAttendance): boolean {
 }
 
 function formatTime(value: string): string {
-  return new Date(value).toLocaleString();
+  return formatAttendanceDateTime(value);
 }
 
 export function AttendanceProgressScreen({
