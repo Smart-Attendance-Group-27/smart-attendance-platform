@@ -53,6 +53,7 @@ class ManualReviewQueueItemResponse(BaseModel):
     geofence_failure_reason: str | None = Field(alias="geofenceFailureReason")
     face_status: str | None = Field(alias="faceStatus")
     face_similarity_score: float | None = Field(alias="faceSimilarityScore")
+    face_similarity_threshold: float | None = Field(alias="faceSimilarityThreshold")
     face_liveness_passed: bool | None = Field(alias="faceLivenessPassed")
     qr_status: str | None = Field(alias="qrStatus")
     review_status: str = Field(alias="reviewStatus")
@@ -80,6 +81,11 @@ class ManualReviewQueueItemResponse(BaseModel):
             face_similarity_score=(
                 float(record.face_similarity_score)
                 if record.face_similarity_score is not None
+                else None
+            ),
+            face_similarity_threshold=(
+                float(record.face_similarity_threshold)
+                if record.face_similarity_threshold is not None
                 else None
             ),
             face_liveness_passed=record.face_liveness_passed,

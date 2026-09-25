@@ -17,6 +17,7 @@ const reviewCase: ReviewCase = {
   issueType: "low_confidence_face_match",
   issueLabel: "Low-confidence face match",
   faceScorePercent: 48,
+  faceThresholdPercent: 70,
   geofenceResult: "within_radius",
   time: "09:10",
   status: "pending",

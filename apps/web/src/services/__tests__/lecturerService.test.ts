@@ -120,6 +120,7 @@ const baseReviewItem: ApiManualReviewQueueItem = {
   geofenceFailureReason: null,
   faceStatus: null,
   faceSimilarityScore: null,
+  faceSimilarityThreshold: null,
   faceLivenessPassed: null,
   qrStatus: null,
   reviewStatus: "pending",
@@ -139,6 +140,18 @@ describe("getReviewCases", () => {
     expect(review.faceScorePercent).toBeNull();
     expect(review.livenessPassed).toBeNull();
     expect(review.geofenceDistanceMeters).toBeNull();
+    expect(review.faceThresholdPercent).toBeNull();
+  });
+
+  it("carries the configured face threshold through as a percentage", async () => {
+    getManualReviewQueue.mockResolvedValue([
+      { ...baseReviewItem, faceStatus: "failed", faceSimilarityScore: 0.72, faceSimilarityThreshold: 0.725 },
+    ]);
+
+    const [review] = await getReviewCases();
+
+    expect(review.faceScorePercent).toBe(72);
+    expect(review.faceThresholdPercent).toBe(72.5);
   });
 
   it("reports a passed geofence and a recorded face score when the backend has them", async () => {

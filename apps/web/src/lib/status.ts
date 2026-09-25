@@ -102,6 +102,16 @@ export function finalStatusDisplay(status: "present" | "late" | "absent" | "pend
   }
 }
 
+// A face score is judged against the threshold that was configured for that
+// comparison; with no known threshold it is shown without a verdict.
+export function faceScoreTone(
+  scorePercent: number | null,
+  thresholdPercent: number | null,
+): "neutral" | "success" | "danger" {
+  if (scorePercent === null || thresholdPercent === null) return "neutral";
+  return scorePercent < thresholdPercent ? "danger" : "success";
+}
+
 export function weeklyDeltaNote(deltaPercent: number | null): { note: string; tone: "neutral" | "good" | "warn" } {
   if (deltaPercent === null) return { note: "No previous week to compare", tone: "neutral" };
   if (deltaPercent > 0) return { note: `Up ${deltaPercent}% from last week`, tone: "good" };

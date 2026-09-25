@@ -339,6 +339,8 @@ export async function getReviewCases(): Promise<ReviewCase[]> {
       issueType,
       issueLabel,
       faceScorePercent,
+      faceThresholdPercent:
+        item.faceSimilarityThreshold === null ? null : Math.round(item.faceSimilarityThreshold * 1000) / 10,
       geofenceResult: deriveGeofenceResult(item),
       time: formatClockTime(item.startedAt),
       status: "pending",

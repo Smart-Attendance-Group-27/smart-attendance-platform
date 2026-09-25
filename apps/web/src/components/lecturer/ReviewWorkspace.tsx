@@ -9,13 +9,15 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Dialog } from "@/components/ui/Dialog";
 import { Notice } from "@/components/ui/Notice";
-import { geofenceResultDisplay, reviewCaseStatusDisplay } from "@/lib/status";
+import { faceScoreTone, geofenceResultDisplay, reviewCaseStatusDisplay } from "@/lib/status";
 import type { ReviewCase } from "@/types/lecturer";
 import { submitReviewDecision } from "@/app/actions/review";
 import type { ReviewDecisionKind, ReviewDecisionInput } from "@/app/actions/review";
 
 type DecisionKind = ReviewDecisionKind;
 type ApprovedStatus = "present" | "late";
+
+const FACE_TONE_TEXT = { neutral: "", success: "text-[var(--success)]", danger: "text-[var(--danger)]" } as const;
 
 function initialsFor(name: string): string {
   return name
@@ -123,7 +125,7 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
                   key: "face",
                   header: "Face score",
                   render: (row) => (
-                    <StatusBadge tone={row.faceScorePercent === null ? "neutral" : row.faceScorePercent < 70 ? "danger" : "success"}>
+                    <StatusBadge tone={faceScoreTone(row.faceScorePercent, row.faceThresholdPercent)}>
                       {row.faceScorePercent === null ? "—" : `${row.faceScorePercent}%`}
                     </StatusBadge>
                   ),
@@ -181,10 +183,12 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <div className="border border-[var(--line)] bg-white p-2.5">
                   <small className="block text-[9px] uppercase text-[var(--muted)]">Face match</small>
-                  <strong className={`mt-1 block text-[11px] ${selected.faceScorePercent === null ? "" : selected.faceScorePercent < 70 ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>
+                  <strong className={`mt-1 block text-[11px] ${FACE_TONE_TEXT[faceScoreTone(selected.faceScorePercent, selected.faceThresholdPercent)]}`}>
                     {selected.faceScorePercent === null
                       ? "Not recorded"
-                      : `${selected.faceScorePercent}% ${selected.faceScorePercent < 70 ? "· Below threshold" : ""}`}
+                      : faceScoreTone(selected.faceScorePercent, selected.faceThresholdPercent) === "danger"
+                        ? `${selected.faceScorePercent}% · Below ${selected.faceThresholdPercent}% threshold`
+                        : `${selected.faceScorePercent}%`}
                   </strong>
                 </div>
                 <div className="border border-[var(--line)] bg-white p-2.5">

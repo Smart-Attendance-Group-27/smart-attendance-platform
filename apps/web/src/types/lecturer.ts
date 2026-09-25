@@ -220,6 +220,8 @@ export type ReviewCase = {
   issueLabel: string;
   // null when no face comparison was recorded for the attempt.
   faceScorePercent: number | null;
+  // The configured pass mark for the face comparison; null when unknown.
+  faceThresholdPercent: number | null;
   geofenceResult: "within_radius" | "boundary" | "outside_radius" | "not_recorded";
   time: string;
   status: ReviewCaseStatus;

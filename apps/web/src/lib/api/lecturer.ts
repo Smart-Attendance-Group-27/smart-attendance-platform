@@ -132,6 +132,8 @@ export type ApiManualReviewQueueItem = {
   geofenceFailureReason: string | null;
   faceStatus: string | null;
   faceSimilarityScore: number | null;
+  // The threshold configured for the face comparison, 0-1.
+  faceSimilarityThreshold: number | null;
   faceLivenessPassed: boolean | null;
   qrStatus: string | null;
   reviewStatus: string;

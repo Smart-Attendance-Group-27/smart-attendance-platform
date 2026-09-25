@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classroomStatusDisplay,
   courseStatusDisplay,
+  faceScoreTone,
   weeklyDeltaNote,
   finalStatusDisplay,
   geofenceResultDisplay,
@@ -116,5 +117,18 @@ describe("weeklyDeltaNote", () => {
     expect(weeklyDeltaNote(-3.2)).toEqual({ note: "Down 3.2% from last week", tone: "warn" });
     expect(weeklyDeltaNote(0)).toEqual({ note: "No change from last week", tone: "neutral" });
     expect(weeklyDeltaNote(null)).toEqual({ note: "No previous week to compare", tone: "neutral" });
+  });
+});
+
+describe("faceScoreTone", () => {
+  it("judges a score against the configured threshold, not a fixed mark", () => {
+    expect(faceScoreTone(72, 75)).toBe("danger");
+    expect(faceScoreTone(72, 60)).toBe("success");
+    expect(faceScoreTone(75, 75)).toBe("success");
+  });
+
+  it("gives no verdict when the score or the threshold is unknown", () => {
+    expect(faceScoreTone(null, 75)).toBe("neutral");
+    expect(faceScoreTone(72, null)).toBe("neutral");
   });
 });
