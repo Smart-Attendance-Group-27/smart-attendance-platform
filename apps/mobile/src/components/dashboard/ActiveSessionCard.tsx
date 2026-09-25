@@ -5,6 +5,7 @@ import { AppButton } from '../ui';
 import { lightColors, radii, spacing, typography } from '../../theme';
 import type { AttendanceSession } from '../../features/dashboard/types';
 import type { QrProgress } from '../../features/qr/types/qrProgress';
+import { formatAttendanceTimeRange } from '../../features/attendance/utils/formatAttendanceSession';
 
 type ActiveSessionCardProps = {
   session?: AttendanceSession | null | (Partial<Record<string, any>> & AttendanceSession);
@@ -14,14 +15,8 @@ type ActiveSessionCardProps = {
 
 function formatTimeRange(start?: string, end?: string) {
   if (!start || !end) return undefined;
-  try {
-    const s = new Date(start);
-    const e = new Date(end);
-    const opts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit' };
-    return `${s.toLocaleTimeString([], opts)}–${e.toLocaleTimeString([], opts)}`;
-  } catch {
-    return undefined;
-  }
+  const range = formatAttendanceTimeRange(start, end);
+  return range === 'Time unavailable' ? undefined : range;
 }
 
 function computeClosingText(end?: string) {

@@ -13,7 +13,6 @@ import {
   CourseSummaryCard,
   DashboardTopBar,
   UpcomingAttendanceList,
-  courseSummaries,
   type CourseSummary,
 } from '../../../components/dashboard';
 import { ActiveSessionCard } from '../../../components/dashboard/ActiveSessionCard';
@@ -22,7 +21,6 @@ import { lightColors, spacing, typography } from '../../../theme';
 import type { FaceVerificationApiService } from '../../face-verification/services/faceVerificationApiService';
 import type { ActiveAttendanceSessionService } from '../services/activeAttendanceSessionService';
 import type { DashboardService } from '../services/dashboardService';
-import { MockDashboardService } from '../services/mockDashboardService';
 import type { Lecture, AttendanceSession } from '../types';
 import type { ActiveAttendanceSession } from '../types/activeAttendanceSession';
 import type { ProfileService } from '../../profile/services/profile.service';
@@ -30,6 +28,10 @@ import type { CourseService } from '../../courses/services/courseService';
 import type { Course } from '../../courses/mockCoursesData';
 import type { QrProgress } from '../../qr/types/qrProgress';
 import type { QrProgressService } from '../../qr/services/qrProgressService';
+import { getAppTimeZone } from '../../../config/appTimeZone';
+import { formatAttendanceTime } from '../../attendance/utils/formatAttendanceSession';
+import { formatGreeting } from '../utils/greeting';
+import { getCommonSemester } from '../../courses/utils/semesterLabel';
 
 type DashboardScreenProps = {
   activeSessionService?: ActiveAttendanceSessionService;
@@ -56,7 +58,7 @@ export function DashboardScreen({
   qrProgressService,
 }: DashboardScreenProps) {
   const router = useRouter();
-  const service = useMemo(() => dashboardService ?? new MockDashboardService(), [dashboardService]);
+  const service = useMemo(() => dashboardService ?? emptyDashboardService, [dashboardService]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,20 +68,14 @@ export function DashboardScreen({
   const [courseCards, setCourseCards] = useState<CourseSummary[]>([]);
   const [requiresReadinessCheck, setRequiresReadinessCheck] = useState(false);
   const [userName, setUserName] = useState<string>('');
+  const [now, setNow] = useState(() => new Date());
+  const [semester, setSemester] = useState<string | null>(null);
   const hasFocusedDashboard = useRef(false);
 
-  const today = useMemo(() => new Date(), []);
   const dateString = useMemo(
-    () => new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: '2-digit', month: 'long' }).format(today),
-    [today]
+    () => new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: '2-digit', month: 'long' }).format(now),
+    [now]
   );
-
-  const semesterText = useMemo(() => {
-    const month = today.getMonth() + 1;
-    const semester = month <= 6 ? 1 : 2;
-    const year = today.getFullYear();
-    return `Semester ${semester}, ${year}`;
-  }, [today]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -111,6 +107,7 @@ export function DashboardScreen({
       setActiveSessions(content.activeSessions);
       setCourseCards(content.courseCards);
       setRequiresReadinessCheck(content.requiresReadinessCheck);
+      setSemester(content.semester);
     } catch (err: any) {
       setError(err?.message ?? 'Unknown error');
     } finally {
@@ -150,6 +147,7 @@ export function DashboardScreen({
         setActiveSessions(content.activeSessions);
         setCourseCards(content.courseCards);
         setRequiresReadinessCheck(content.requiresReadinessCheck);
+        setSemester(content.semester);
       } catch (err: any) {
         if (!mounted) return;
         setError(err?.message ?? 'Unknown error');
@@ -163,6 +161,13 @@ export function DashboardScreen({
       mounted = false;
     };
   }, [activeSessionService, courseService, faceVerificationApiService, profileService, service]);
+
+  // The tab stays mounted, so refresh the greeting and date whenever it regains focus.
+  useFocusEffect(
+    useCallback(() => {
+      setNow(new Date());
+    }, []),
+  );
 
   // The dashboard remains mounted while attendance routes are open. Refresh
   // the student-specific session state when focus returns so a completed
@@ -241,15 +246,16 @@ export function DashboardScreen({
 
   const mapLectureToUpcoming = (lecture: Lecture) => {
     const date = new Date(lecture.startTime);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+    const timeZone = getAppTimeZone();
+    const day = new Intl.DateTimeFormat('en-GB', { day: '2-digit', timeZone }).format(date);
+    const month = new Intl.DateTimeFormat('en-US', { month: 'short', timeZone }).format(date).toUpperCase();
 
     return {
       id: lecture.id,
       day,
       month,
       course: `${lecture.courseCode} — ${lecture.courseName}`,
-      time: new Date(lecture.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: formatAttendanceTime(lecture.startTime),
       location: lecture.venue,
     };
   };
@@ -264,18 +270,23 @@ export function DashboardScreen({
 
         <View style={styles.greeting}>
           <Text accessibilityRole="header" style={styles.greetingTitle}>
-            {`Good morning, ${userName || 'student'}`}
+            {formatGreeting(userName, now)}
           </Text>
-          <Text style={styles.period}>{`${dateString} · ${semesterText}`}</Text>
+          <Text style={styles.period}>{semester ? `${dateString} · ${semester}` : dateString}</Text>
         </View>
 
         {loading ? (
           <ActivityIndicator />
         ) : error ? (
-          <View>
-            <Text>Dashboard could not be loaded</Text>
-            <Pressable onPress={fetchData} accessibilityRole="button" accessibilityLabel="Retry dashboard">
-              <Text>Retry</Text>
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>Dashboard could not be loaded</Text>
+            <Pressable
+              onPress={fetchData}
+              accessibilityRole="button"
+              accessibilityLabel="Retry dashboard"
+              style={styles.retryButton}
+            >
+              <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
         ) : (
@@ -310,23 +321,27 @@ export function DashboardScreen({
               </Pressable>
             </View>
 
-            <ScrollView
-              contentContainerStyle={styles.courseRail}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.courseScroll}
-            >
-              {courseCards.map((course) => (
-                <CourseSummaryCard course={course} key={course.code} />
-              ))}
-            </ScrollView>
+            {courseCards.length === 0 ? (
+              <Text style={styles.emptyText}>You are not enrolled in any courses yet.</Text>
+            ) : (
+              <ScrollView
+                contentContainerStyle={styles.courseRail}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.courseScroll}
+              >
+                {courseCards.map((course) => (
+                  <CourseSummaryCard course={course} key={course.code} />
+                ))}
+              </ScrollView>
+            )}
 
             <View style={styles.upcomingHeading}>
               <Text style={styles.sectionTitle}>Upcoming attendance</Text>
             </View>
 
             {lectures.length === 0 ? (
-              <Text>No upcoming attendance</Text>
+              <Text style={styles.emptyText}>No upcoming attendance</Text>
             ) : (
               <UpcomingAttendanceList sessions={lectures.map(mapLectureToUpcoming)} />
             )}
@@ -337,6 +352,17 @@ export function DashboardScreen({
 }
 
 export default DashboardScreen;
+
+// Used only when a caller supplies no dashboard service: shows nothing rather
+// than invented lectures.
+const emptyDashboardService: DashboardService = {
+  async getUpcomingLectures() {
+    return [];
+  },
+  async getActiveAttendanceSession() {
+    return null;
+  },
+};
 
 async function loadDashboardContent(
   dashboardService: DashboardService,
@@ -358,6 +384,7 @@ async function loadDashboardContent(
     lectures: courseData.lectures,
     activeSessions,
     courseCards: courseData.courseCards,
+    semester: courseData.semester,
     requiresReadinessCheck,
   };
 }
@@ -365,11 +392,12 @@ async function loadDashboardContent(
 async function loadCourseDashboardData(
   dashboardService: DashboardService,
   courseService?: CourseService,
-): Promise<{ lectures: Lecture[]; courseCards: CourseSummary[] }> {
+): Promise<{ lectures: Lecture[]; courseCards: CourseSummary[]; semester: string | null }> {
   if (!courseService) {
     return {
       lectures: await dashboardService.getUpcomingLectures(),
-      courseCards: courseSummaries,
+      courseCards: [],
+      semester: null,
     };
   }
 
@@ -379,8 +407,12 @@ async function loadCourseDashboardData(
   }
 
   return {
-    lectures: result.courses.flatMap(courseToUpcomingLectures),
+    lectures: result.courses
+      .flatMap(courseToUpcomingLectures)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime))
+      .slice(0, UPCOMING_ON_DASHBOARD),
     courseCards: result.courses.map(courseToSummaryCard),
+    semester: getCommonSemester(result.courses),
   };
 }
 
@@ -400,38 +432,25 @@ function courseToSummaryCard(course: Course, index: number): CourseSummary {
   };
 }
 
+const UPCOMING_PER_COURSE = 3;
+const UPCOMING_ON_DASHBOARD = 5;
+
 function courseToUpcomingLectures(course: Course): Lecture[] {
+  // The API lists newest first, so order by start before taking the nearest ones.
   return course.sessions
-    .filter((session) => session.status === 'upcoming')
-    .slice(0, 3)
+    // Older servers send no timestamps, and such sessions cannot be dated.
+    .filter((session) => session.status === 'upcoming' && Boolean(session.startsAt))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
+    .slice(0, UPCOMING_PER_COURSE)
     .map((session) => ({
       id: session.id,
       courseId: course.id,
       courseCode: course.code,
       courseName: course.title,
-      startTime: deriveStartTimeFromSession(session.timeText),
-      endTime: deriveStartTimeFromSession(session.timeText),
-      venue: deriveVenueFromSession(session.timeText),
+      startTime: session.startsAt,
+      endTime: session.endsAt,
+      venue: session.venue ?? 'Venue TBA',
     }));
-}
-
-function deriveStartTimeFromSession(timeText: string): string {
-  // The course API already formats session display text for the course detail
-  // UI. The dashboard list only needs a stable sort/render value, so use now
-  // when the text does not carry a machine date.
-  const parts = timeText.split('·').map((part) => part.trim());
-  const maybeTime = parts[1]?.split('-')[0]?.trim();
-  const today = new Date();
-  if (maybeTime && /^\d{2}:\d{2}$/.test(maybeTime)) {
-    const [hours, minutes] = maybeTime.split(':').map(Number);
-    today.setHours(hours, minutes, 0, 0);
-  }
-  return today.toISOString();
-}
-
-function deriveVenueFromSession(timeText: string): string {
-  const parts = timeText.split('·').map((part) => part.trim());
-  return parts[2] || 'Venue TBA';
 }
 
 async function loadReadinessRequirement(
@@ -535,7 +554,40 @@ const styles = StyleSheet.create({
     paddingRight: spacing.lg,
   },
   courseScroll: {
-    minHeight: 164,
+    // A horizontal ScrollView grows to fill spare height by default, which
+    // stretched the cards on a quiet home screen (no active session).
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  emptyText: {
+    ...typography.supporting,
+    color: lightColors.textSecondary,
+    paddingVertical: spacing.sm,
+  },
+  errorBox: {
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: lightColors.border,
+    backgroundColor: lightColors.surface,
+  },
+  errorText: {
+    ...typography.body,
+    color: lightColors.error,
+  },
+  retryButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: lightColors.primaryInteraction,
+  },
+  retryText: {
+    ...typography.supporting,
+    fontWeight: '700',
+    color: lightColors.primaryInteraction,
   },
   upcomingHeading: {
     marginTop: spacing.xl,

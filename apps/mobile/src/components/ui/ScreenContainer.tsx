@@ -1,5 +1,6 @@
 import type { PropsWithChildren } from 'react';
 import {
+  RefreshControlProps,
   ScrollView,
   StyleProp,
   StyleSheet,
@@ -13,12 +14,14 @@ import { lightColors, spacing } from '../../theme';
 type ScreenContainerProps = PropsWithChildren<{
   scrollable?: boolean;
   contentContainerStyle?: StyleProp<ViewStyle>;
+  refreshControl?: React.ReactElement<RefreshControlProps>;
 }>;
 
 export function ScreenContainer({
   children,
   scrollable = false,
   contentContainerStyle,
+  refreshControl,
 }: ScreenContainerProps) {
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -30,6 +33,7 @@ export function ScreenContainer({
             contentContainerStyle,
           ]}
           keyboardShouldPersistTaps="handled"
+          refreshControl={refreshControl}
           showsVerticalScrollIndicator={false}
         >
           {children}

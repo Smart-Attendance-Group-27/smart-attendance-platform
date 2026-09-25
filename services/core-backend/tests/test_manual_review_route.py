@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID
 
 import pytest
@@ -54,6 +55,7 @@ def build_queue_item(review_status: str = "pending") -> ManualReviewQueueItemRec
         geofence_failure_reason=None,
         face_status="failed",
         face_similarity_score=0.42,
+        face_similarity_threshold=Decimal("0.75"),
         face_liveness_passed=False,
         qr_status=None,
         review_status=review_status,
@@ -126,6 +128,8 @@ def test_lists_pending_queue_items(client: TestClient, make_access_token) -> Non
     assert len(body) == 1
     assert body[0]["verificationAttemptId"] == str(ATTEMPT_ID)
     assert body[0]["reviewStatus"] == "pending"
+    assert body[0]["faceSimilarityScore"] == 0.42
+    assert body[0]["faceSimilarityThreshold"] == 0.75
 
 
 def test_queue_requires_lecturer_role(client: TestClient, make_access_token) -> None:

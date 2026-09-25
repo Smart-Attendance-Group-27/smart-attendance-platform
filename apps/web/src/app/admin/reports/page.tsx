@@ -3,7 +3,7 @@ import { SummaryStrip } from "@/components/ui/SummaryStrip";
 import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Button } from "@/components/ui/Button";
+import { ExportCsvButton } from "@/components/ui/ExportCsvButton";
 import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
 import { getInstitutionReports } from "@/services/adminService";
@@ -18,15 +18,18 @@ export default async function AdminReportsPage() {
         title="Institution reports"
         description="University-wide attendance analytics across every faculty and course."
         actions={
-          <Button title="Available once the report export API is integrated" disabled>
-            Export CSV
-          </Button>
+          <ExportCsvButton
+            filenamePrefix="courses-below-threshold"
+            label="Export at-risk courses"
+            headers={["Code", "Course", "Attendance (%)"]}
+            rows={atRiskCourses.map((course) => [course.courseCode, course.courseName, course.attendanceRatePercent])}
+          />
         }
       />
 
       <SummaryStrip
         items={[
-          { label: "Overall attendance", value: `${summary.overallAttendancePercent}%`, note: "This semester" },
+          { label: "Overall attendance", value: `${summary.overallAttendancePercent}%`, note: "All closed sessions" },
           { label: "Closed sessions", value: summary.totalSessionsCompleted.toLocaleString() },
           { label: "Students", value: summary.totalStudents.toLocaleString() },
           { label: "Students at risk", value: summary.studentsAtRiskCount, note: "Below course threshold", noteTone: "warn" },

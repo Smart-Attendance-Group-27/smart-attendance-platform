@@ -20,6 +20,28 @@ afterAll(() => {
 });
 beforeEach(() => vi.clearAllMocks());
 
+describe("CreateSessionButton face verification option", () => {
+  it("hides the option and never requires face when the deployment has it disabled", async () => {
+    const user = userEvent.setup();
+    vi.mocked(createSession).mockResolvedValue({ ok: true, sessionId: "session-1" });
+    render(
+      <CreateSessionButton
+        timetableOptions={[{ id: "entry-1", label: "CS101 Monday" }]}
+        faceAttendanceEnabled={false}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create session" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByRole("checkbox", { name: "Require face verification" })).not.toBeInTheDocument();
+    expect(within(dialog).getByText("Face verification is not enabled for this deployment.")).toBeInTheDocument();
+
+    await user.type(within(dialog).getByLabelText("Session title"), "Week 6 lecture");
+    await user.click(within(dialog).getByRole("button", { name: "Create session" }));
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({ requiresFaceVerification: false }));
+  });
+});
+
 describe("CreateSessionButton", () => {
   it("shows mandatory geofence and the optional lecture QR setting", async () => {
     const user = userEvent.setup();

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   classroomStatusDisplay,
   courseStatusDisplay,
+  faceScoreTone,
+  weeklyDeltaNote,
   finalStatusDisplay,
   geofenceResultDisplay,
   reviewCaseStatusDisplay,
@@ -63,9 +65,11 @@ describe("finalStatusDisplay", () => {
 });
 
 describe("courseStatusDisplay", () => {
-  it("flags correction_needed as a warning, active as success", () => {
+  it("shows active as success and never invents a correction state", () => {
     expect(courseStatusDisplay("active")).toEqual({ label: "Active", tone: "success" });
-    expect(courseStatusDisplay("correction_needed")).toEqual({ label: "Correction needed", tone: "warning" });
+    expect(courseStatusDisplay("inactive")).toEqual({ label: "Inactive", tone: "neutral" });
+    expect(courseStatusDisplay("completed")).toEqual({ label: "Completed", tone: "neutral" });
+    expect(courseStatusDisplay("on_hold")).toEqual({ label: "On hold", tone: "neutral" });
   });
 });
 
@@ -81,6 +85,7 @@ describe("geofenceResultDisplay", () => {
     expect(geofenceResultDisplay("within_radius").tone).toBe("success");
     expect(geofenceResultDisplay("boundary").tone).toBe("warning");
     expect(geofenceResultDisplay("outside_radius").tone).toBe("danger");
+    expect(geofenceResultDisplay("not_recorded")).toEqual({ label: "Not recorded", tone: "neutral" });
   });
 });
 
@@ -103,5 +108,37 @@ describe("syncStatusDisplay", () => {
   it("maps current/review", () => {
     expect(syncStatusDisplay("current").tone).toBe("success");
     expect(syncStatusDisplay("review").tone).toBe("warning");
+  });
+});
+
+describe("weeklyDeltaNote", () => {
+  it("words the change by its direction and never invents a comparison", () => {
+    expect(weeklyDeltaNote(4.6)).toEqual({ note: "Up 4.6% from last week", tone: "good" });
+    expect(weeklyDeltaNote(-3.2)).toEqual({ note: "Down 3.2% from last week", tone: "warn" });
+    expect(weeklyDeltaNote(0)).toEqual({ note: "No change from last week", tone: "neutral" });
+    expect(weeklyDeltaNote(null)).toEqual({ note: "No previous week to compare", tone: "neutral" });
+  });
+});
+
+describe("faceScoreTone", () => {
+  it("judges a score against the configured threshold, not a fixed mark", () => {
+    expect(faceScoreTone(72, 75)).toBe("danger");
+    expect(faceScoreTone(72, 60)).toBe("success");
+    expect(faceScoreTone(75, 75)).toBe("success");
+  });
+
+  it("gives no verdict when the score or the threshold is unknown", () => {
+    expect(faceScoreTone(null, 75)).toBe("neutral");
+    expect(faceScoreTone(72, null)).toBe("neutral");
+  });
+});
+
+describe("correctionStatusDisplay", () => {
+  it("labels each review status", async () => {
+    const { correctionStatusDisplay } = await import("@/lib/status");
+    expect(correctionStatusDisplay("pending")).toEqual({ label: "Pending", tone: "warning" });
+    expect(correctionStatusDisplay("approved").tone).toBe("info");
+    expect(correctionStatusDisplay("rejected").tone).toBe("danger");
+    expect(correctionStatusDisplay("resolved").tone).toBe("success");
   });
 });

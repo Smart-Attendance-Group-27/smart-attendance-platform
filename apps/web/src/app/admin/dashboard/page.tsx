@@ -4,7 +4,6 @@ import { SummaryStrip } from "@/components/ui/SummaryStrip";
 import { Card } from "@/components/ui/Card";
 import { ActivityList } from "@/components/ui/ActivityList";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Button } from "@/components/ui/Button";
 import Link from "next/link";
 import { ClassroomGeofencePanel } from "@/components/admin/ClassroomGeofencePanel";
 import { AttendancePolicyForm } from "@/components/admin/AttendancePolicyForm";
@@ -23,8 +22,8 @@ export default async function AdminDashboardPage() {
       />
 
       <Notice variant="warning" title="Administrator-only controls.">
-        Institutional geofences, attendance policies, user access, and academic-source
-        synchronisation can only be changed by authorised administrators.
+        Institutional geofences, attendance policies, user access, and academic data
+        can only be changed by authorised administrators.
       </Notice>
 
       <SummaryStrip
@@ -40,9 +39,13 @@ export default async function AdminDashboardPage() {
             label: "Academic source status",
             value: <span className="text-lg">{summary.academicSourceStatusLabel}</span>,
             note: summary.lastSyncLabel,
-            noteTone: "good",
           },
-          { label: "Policy alerts", value: summary.policyAlertsCount, note: "Review recommended", noteTone: "warn" },
+          {
+            label: "Policy alerts",
+            value: summary.policyAlertsCount,
+            note: summary.policyAlertsCount > 0 ? "Review recommended" : "No alerts",
+            noteTone: summary.policyAlertsCount > 0 ? "warn" : "neutral",
+          },
         ]}
       />
 
@@ -57,11 +60,6 @@ export default async function AdminDashboardPage() {
           <Card
             title="Academic-data synchronisation"
             className="border-l-4 border-l-[var(--uom-gold)]"
-            actions={
-              <Button title="Available once academic-source sync API is integrated" disabled>
-                Run sync
-              </Button>
-            }
           >
             <ActivityList
               emptyTitle="No synchronisation activity yet"

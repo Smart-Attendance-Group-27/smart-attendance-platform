@@ -278,6 +278,40 @@ export function updateClassroom(
   });
 }
 
+export type ApiAdminCorrectionRequest = {
+  id: string;
+  requestType: "course_data" | "timetable";
+  category: string;
+  requesterName: string;
+  requesterEmployeeNumber: string | null;
+  courseCode: string | null;
+  courseName: string | null;
+  timetableDayOfWeek: number | null;
+  timetableStartTime: string | null;
+  timetableEndTime: string | null;
+  timetableClassroomCode: string | null;
+  description: string;
+  status: string;
+  reviewNote: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+};
+
+export function getAdminCorrectionRequests(): Promise<ApiAdminCorrectionRequest[]> {
+  if (isWebMockMode()) return Promise.resolve([]);
+  return coreBackendFetch("/api/v1/administrators/me/correction-requests");
+}
+
+export function decideAdminCorrectionRequest(
+  requestId: string,
+  body: { decision: "approved" | "rejected" | "resolved"; note: string },
+): Promise<ApiAdminCorrectionRequest> {
+  return coreBackendFetch(
+    `/api/v1/administrators/me/correction-requests/${encodeURIComponent(requestId)}/decision`,
+    { method: "POST", body },
+  );
+}
+
 export function getUserDirectory(): Promise<ApiUserDirectory> {
   return coreBackendFetch("/api/v1/administrators/me/users");
 }

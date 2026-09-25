@@ -7,11 +7,14 @@ import {
   getAttendancePolicy as fetchAttendancePolicy,
   getAuditLogs as fetchAuditLogs,
   getBuildings as fetchBuildings,
+  getAdminCorrectionRequests,
   getClassrooms,
   getInstitutionReports as fetchInstitutionReports,
   getReferenceFaces as fetchReferenceFaces,
   getUserDirectory as fetchUserDirectory,
 } from "@/lib/api/admin";
+import { toCorrectionRequestRow } from "@/lib/api/correctionRequestRows";
+import type { CorrectionRequestRow } from "@/lib/correctionRequests";
 import { formatDateLabel, formatDateTimeLabel, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
 import {
   AcademicData,
@@ -254,4 +257,8 @@ export async function getAuditLog(): Promise<AuditLogEntry[]> {
     entityLabel: entry.entityId ? `${entry.entityType} · ${entry.entityId.slice(0, 8)}` : entry.entityType,
     outcome: entry.outcome === "failure" ? "failure" : "success",
   }));
+}
+
+export async function getCorrectionRequests(): Promise<CorrectionRequestRow[]> {
+  return (await getAdminCorrectionRequests()).map(toCorrectionRequestRow);
 }

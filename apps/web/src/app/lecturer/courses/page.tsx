@@ -1,68 +1,51 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Notice } from "@/components/ui/Notice";
 import { Card } from "@/components/ui/Card";
-import { DataTable, CellPrimary } from "@/components/ui/DataTable";
+import { DataTable } from "@/components/ui/DataTable";
 import { ActivityList } from "@/components/ui/ActivityList";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Button } from "@/components/ui/Button";
-import { getLecturerCourses } from "@/services/lecturerService";
-import { courseStatusDisplay } from "@/lib/status";
-import { LecturerCourse, TimetableEntry } from "@/types/lecturer";
+import { CorrectionRequestButton } from "@/components/lecturer/CorrectionRequestButton";
+import { AssignedCoursesCard } from "@/components/lecturer/AssignedCoursesCard";
+import { MyCorrectionRequestsCard } from "@/components/lecturer/MyCorrectionRequestsCard";
+import { getLecturerCourses, getMyCorrectionRequests } from "@/services/lecturerService";
+import { TimetableEntry } from "@/types/lecturer";
 
 export default async function LecturerCoursesPage() {
-  const { semesterLabel, courses, timetable, sourceStatus } = await getLecturerCourses();
+  const [{ semesterLabel, courses, timetable, sourceStatus }, correctionRequests] = await Promise.all([
+    getLecturerCourses(),
+    getMyCorrectionRequests(),
+  ]);
 
   return (
     <div>
       <PageHeader
         title="My courses and timetable"
         description="View authorised academic data for assigned courses."
-        actions={<Button variant="primary">Request data correction</Button>}
+        actions={
+          <CorrectionRequestButton
+            requestType="course_data"
+            variant="primary"
+            buttonLabel="Request data correction"
+            dialogTitle="Request data correction"
+            targetLabel="Course"
+            targets={courses.map((course) => ({
+              id: course.courseId,
+              label: `${course.courseCode} · ${course.courseName}`,
+            }))}
+          />
+        }
       />
 
       <Notice title="Read-only academic information.">
         Course definitions, enrolments, lecturer assignments, and timetable records are
-        maintained through authorised University systems. Corrections are submitted for
-        administrative review.
+        maintained by administrators. Corrections are submitted for administrative review.
       </Notice>
 
-      <Card
-        title="Assigned courses"
-        subtitle={semesterLabel}
-        flush
-        actions={
-          <>
-            <Button>Filter</Button>
-            <Button>Export list</Button>
-          </>
-        }
-      >
-        <DataTable<LecturerCourse>
-          emptyTitle="No assigned courses yet"
-          emptyDescription="Courses synchronised from University systems will appear here."
-          columns={[
-            { key: "code", header: "Code", render: (row) => <span className="font-semibold text-[var(--link)]">{row.courseCode}</span> },
-            {
-              key: "course",
-              header: "Course",
-              render: (row) => <CellPrimary primary={row.courseName} secondary={row.scheduleSummary} />,
-            },
-            { key: "lecturer", header: "Lecturer", render: (row) => row.lecturerName },
-            { key: "enrolled", header: "Enrolled", render: (row) => row.enrolledCount },
-            { key: "attendance", header: "Attendance", render: (row) => `${row.attendanceRatePercent}%` },
-            {
-              key: "status",
-              header: "Status",
-              render: (row) => {
-                const display = courseStatusDisplay(row.status);
-                return <StatusBadge tone={display.tone}>{display.label}</StatusBadge>;
-              },
-            },
-          ]}
-          rows={courses}
-          getRowKey={(row) => row.courseId}
-        />
-      </Card>
+      <AssignedCoursesCard courses={courses} semesterLabel={semesterLabel} />
+
+      <div className="mt-4">
+        <MyCorrectionRequestsCard requests={correctionRequests} />
+      </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="lg:col-span-8">
@@ -70,7 +53,18 @@ export default async function LecturerCoursesPage() {
             title="Weekly timetable"
             subtitle="Read-only"
             flush
-            actions={<Button>Request timetable correction</Button>}
+            actions={
+              <CorrectionRequestButton
+                requestType="timetable"
+                buttonLabel="Request timetable correction"
+                dialogTitle="Request timetable correction"
+                targetLabel="Timetable entry"
+                targets={timetable.map((entry) => ({
+                  id: entry.id,
+                  label: `${entry.courseCode} · ${entry.day} ${entry.timeRange} · ${entry.room}`,
+                }))}
+              />
+            }
           >
             <DataTable<TimetableEntry>
               emptyTitle="No timetable entries yet"

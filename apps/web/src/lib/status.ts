@@ -102,17 +102,51 @@ export function finalStatusDisplay(status: "present" | "late" | "absent" | "pend
   }
 }
 
-export function courseStatusDisplay(status: "active" | "correction_needed"): StatusDisplay {
-  return status === "active"
-    ? { label: "Active", tone: "success" }
-    : { label: "Correction needed", tone: "warning" };
+// A face score is judged against the threshold that was configured for that
+// comparison; with no known threshold it is shown without a verdict.
+export function faceScoreTone(
+  scorePercent: number | null,
+  thresholdPercent: number | null,
+): "neutral" | "success" | "danger" {
+  if (scorePercent === null || thresholdPercent === null) return "neutral";
+  return scorePercent < thresholdPercent ? "danger" : "success";
+}
+
+export function correctionStatusDisplay(status: string): StatusDisplay {
+  switch (status) {
+    case "pending":
+      return { label: "Pending", tone: "warning" };
+    case "approved":
+      return { label: "Approved", tone: "info" };
+    case "rejected":
+      return { label: "Rejected", tone: "danger" };
+    case "resolved":
+      return { label: "Resolved", tone: "success" };
+    default:
+      return { label: status, tone: "neutral" };
+  }
+}
+
+export function weeklyDeltaNote(deltaPercent: number | null): { note: string; tone: "neutral" | "good" | "warn" } {
+  if (deltaPercent === null) return { note: "No previous week to compare", tone: "neutral" };
+  if (deltaPercent > 0) return { note: `Up ${deltaPercent}% from last week`, tone: "good" };
+  if (deltaPercent < 0) return { note: `Down ${Math.abs(deltaPercent)}% from last week`, tone: "warn" };
+  return { note: "No change from last week", tone: "neutral" };
+}
+
+export function courseStatusDisplay(status: string): StatusDisplay {
+  if (status === "active") return { label: "Active", tone: "success" };
+  const label = status.replace(/[_-]+/g, " ").trim();
+  return { label: label ? label.charAt(0).toUpperCase() + label.slice(1) : "Unknown", tone: "neutral" };
 }
 
 export function reviewCaseStatusDisplay(status: "pending" | "information"): StatusDisplay {
   return status === "pending" ? { label: "Pending", tone: "warning" } : { label: "Information", tone: "info" };
 }
 
-export function geofenceResultDisplay(result: "within_radius" | "boundary" | "outside_radius"): StatusDisplay {
+export function geofenceResultDisplay(
+  result: "within_radius" | "boundary" | "outside_radius" | "not_recorded",
+): StatusDisplay {
   switch (result) {
     case "within_radius":
       return { label: "Within radius", tone: "success" };
@@ -120,6 +154,8 @@ export function geofenceResultDisplay(result: "within_radius" | "boundary" | "ou
       return { label: "Boundary", tone: "warning" };
     case "outside_radius":
       return { label: "Outside radius", tone: "danger" };
+    case "not_recorded":
+      return { label: "Not recorded", tone: "neutral" };
   }
 }
 

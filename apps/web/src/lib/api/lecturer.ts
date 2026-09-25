@@ -1,5 +1,5 @@
 import "server-only";
-import { coreBackendFetch } from "@/lib/api/coreBackend";
+import { CoreBackendError, coreBackendFetch } from "@/lib/api/coreBackend";
 import { isWebMockMode } from "@/lib/api/mode";
 import {
   mockLecturerDashboardOverview,
@@ -10,6 +10,7 @@ import {
   mockLecturerTimetable,
 } from "@/mocks/fixtures/lecturerLive";
 import type { LecturerQrBatch } from "@/types/lecturer";
+import type { CorrectionCategory, CorrectionRequestType } from "@/lib/correctionRequests";
 
 export type ApiLecturerCourse = {
   courseOfferingId: string;
@@ -131,6 +132,8 @@ export type ApiManualReviewQueueItem = {
   geofenceFailureReason: string | null;
   faceStatus: string | null;
   faceSimilarityScore: number | null;
+  // The threshold configured for the face comparison, 0-1.
+  faceSimilarityThreshold: number | null;
   faceLivenessPassed: boolean | null;
   qrStatus: string | null;
   reviewStatus: string;
@@ -200,6 +203,11 @@ export function getLecturerSessions(): Promise<ApiLecturerSession[]> {
   return coreBackendFetch("/api/v1/lecturers/me/attendance-sessions");
 }
 
+export function getLecturerSessionCreationOptions(): Promise<{ faceAttendanceEnabled: boolean }> {
+  if (isWebMockMode()) return Promise.resolve({ faceAttendanceEnabled: true });
+  return coreBackendFetch("/api/v1/lecturers/me/attendance-sessions/creation-options");
+}
+
 export function createLecturerSession(body: ApiCreateSessionRequest): Promise<ApiLecturerSession> {
   return coreBackendFetch("/api/v1/lecturers/me/attendance-sessions", {
     method: "POST",
@@ -210,7 +218,7 @@ export function createLecturerSession(body: ApiCreateSessionRequest): Promise<Ap
 export function getLecturerSessionDetail(sessionId: string): Promise<ApiLecturerSession> {
   if (isWebMockMode()) {
     const session = mockLecturerSessions.find((item) => item.id === sessionId);
-    return session ? Promise.resolve(session) : Promise.reject(new Error("Session not found"));
+    return session ? Promise.resolve(session) : Promise.reject(new CoreBackendError("Session not found", 404, `/api/v1/lecturers/me/attendance-sessions/${sessionId}`));
   }
   return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${sessionId}`);
 }
@@ -243,6 +251,47 @@ export function voidLecturerQrBatch(
     `/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/qr-batches/${encodeURIComponent(qrSessionId)}/void`,
     { method: "POST", body: { reason } },
   );
+}
+
+export type ApiCorrectionRequest = {
+  id: string;
+  requestType: CorrectionRequestType;
+  category: CorrectionCategory;
+  courseOfferingId: string;
+  timetableEntryId: string | null;
+  status: string;
+};
+
+export function submitLecturerCorrectionRequest(body: {
+  requestType: CorrectionRequestType;
+  category: CorrectionCategory;
+  courseOfferingId?: string;
+  timetableEntryId?: string;
+  description: string;
+}): Promise<ApiCorrectionRequest> {
+  return coreBackendFetch("/api/v1/lecturers/me/correction-requests", { method: "POST", body });
+}
+
+export type ApiOwnCorrectionRequest = {
+  id: string;
+  requestType: CorrectionRequestType;
+  category: string;
+  courseCode: string | null;
+  courseName: string | null;
+  timetableDayOfWeek: number | null;
+  timetableStartTime: string | null;
+  timetableEndTime: string | null;
+  timetableClassroomCode: string | null;
+  description: string;
+  status: string;
+  reviewNote: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+};
+
+export function getLecturerCorrectionRequests(): Promise<ApiOwnCorrectionRequest[]> {
+  if (isWebMockMode()) return Promise.resolve([]);
+  return coreBackendFetch("/api/v1/lecturers/me/correction-requests");
 }
 
 export function activateLecturerSession(sessionId: string): Promise<ApiLecturerSession> {

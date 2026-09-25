@@ -1,7 +1,9 @@
+import logging
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone, tzinfo
 from decimal import Decimal
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import asyncpg
 
@@ -12,6 +14,8 @@ from modules.academic.student_courses.repository import (
 )
 from modules.academic.student_profile.exception import StudentProfileNotFoundError
 from modules.academic.student_profile.repository import StudentProfileRepository
+
+logger = logging.getLogger(__name__)
 
 ACTIVE_PROFILE_STATUS = "active"
 
@@ -25,6 +29,9 @@ class StudentCourseSession:
     status: str
     recorded_time: str | None
     week_header: str
+    starts_at: datetime
+    ends_at: datetime
+    venue: str | None
 
 
 @dataclass(frozen=True)
@@ -46,9 +53,21 @@ class StudentCourse:
     semester: str
     attended_sessions: int
     total_sessions: int
+    # 0 until a session of the course has been closed (see total_sessions).
     attendance_percentage: int
+    # The offering's own attendance requirement; None when none is configured.
+    attendance_threshold_percent: float | None
     sessions: list[StudentCourseSession]
     attendance_records: list[StudentCourseAttendanceRecord]
+
+
+def resolve_time_zone(name: str) -> tzinfo:
+    """The institution timezone, or UTC (with a warning) if the name is unknown."""
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        logger.warning("Unknown APP_TIMEZONE %r; falling back to UTC", name)
+        return timezone.utc
 
 
 class StudentCourseService:
@@ -66,6 +85,7 @@ class StudentCourseService:
         self,
         pool: asyncpg.Pool,
         user_id: UUID,
+        time_zone_name: str = "UTC",
     ) -> list[StudentCourse]:
         async with pool.acquire() as connection:
             profile = await self._student_profile_repository.find_by_user_id(
@@ -85,8 +105,9 @@ class StudentCourseService:
                 connection,
                 profile.id,
             )
-        sessions_by_course = _group_sessions_by_course(session_rows)
-        records_by_course = _group_attendance_records_by_course(session_rows)
+        zone = resolve_time_zone(time_zone_name)
+        sessions_by_course = _group_sessions_by_course(session_rows, zone)
+        records_by_course = _group_attendance_records_by_course(session_rows, zone)
 
         return [
             StudentCourse(
@@ -100,6 +121,11 @@ class StudentCourseService:
                 attendance_percentage=_format_attendance_percentage(
                     course.attendance_percentage,
                 ),
+                attendance_threshold_percent=(
+                    float(course.attendance_threshold)
+                    if course.attendance_threshold is not None
+                    else None
+                ),
                 sessions=sessions_by_course.get(course.course_offering_id, []),
                 attendance_records=records_by_course.get(course.course_offering_id, []),
             )
@@ -109,20 +135,25 @@ class StudentCourseService:
 
 def _group_sessions_by_course(
     session_rows: list[StudentCourseSessionRecord],
+    zone: tzinfo = timezone.utc,
+    now: datetime | None = None,
 ) -> dict[UUID, list[StudentCourseSession]]:
     grouped: dict[UUID, list[StudentCourseSession]] = {}
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
 
     for row in session_rows:
         grouped.setdefault(row.course_offering_id, []).append(
             StudentCourseSession(
                 id=row.id,
                 title=row.session_title or "Attendance session",
-                time_text=_format_session_time(row),
+                time_text=_format_session_time(row, zone, now),
                 type=_format_session_type(row.session_type),
                 status=_derive_session_status(row, now),
-                recorded_time=_format_recorded_time(row.attendance_recorded_at),
-                week_header=_format_week_header(row.scheduled_start_at, now),
+                recorded_time=_format_recorded_time(row.attendance_recorded_at, zone),
+                week_header=_format_week_header(row.scheduled_start_at, zone, now),
+                starts_at=_as_utc(row.scheduled_start_at),
+                ends_at=_as_utc(row.scheduled_end_at),
+                venue=row.venue,
             )
         )
 
@@ -131,25 +162,28 @@ def _group_sessions_by_course(
 
 def _group_attendance_records_by_course(
     session_rows: list[StudentCourseSessionRecord],
+    zone: tzinfo = timezone.utc,
+    now: datetime | None = None,
 ) -> dict[UUID, list[StudentCourseAttendanceRecord]]:
     grouped: dict[UUID, list[StudentCourseAttendanceRecord]] = {}
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
 
     for row in session_rows:
         status = _derive_session_status(row, now)
         if status == "cancelled":
             recorded_text = "Session cancelled"
         else:
-            recorded_text = _format_recorded_time(row.attendance_recorded_at) or {
+            recorded_text = _format_recorded_time(row.attendance_recorded_at, zone) or {
                 "absent": "No attendance recorded",
                 "active": "Check-in open",
                 "upcoming": "Session upcoming",
             }.get(status, "Awaiting final attendance")
+        local_start = _as_utc(row.scheduled_start_at).astimezone(zone)
         grouped.setdefault(row.course_offering_id, []).append(
             StudentCourseAttendanceRecord(
                 id=row.id,
-                day=row.scheduled_start_at.strftime("%d"),
-                month=row.scheduled_start_at.strftime("%b").upper(),
+                day=local_start.strftime("%d"),
+                month=local_start.strftime("%b").upper(),
                 title=row.session_title or "Attendance session",
                 recorded_text=recorded_text,
                 status={
@@ -184,24 +218,27 @@ def _format_attendance_percentage(value: Decimal | None) -> int:
     return int(round(float(value)))
 
 
-def _format_session_time(row: StudentCourseSessionRecord) -> str:
-    start = _as_utc(row.scheduled_start_at)
-    end = _as_utc(row.scheduled_end_at)
-    day_label = _format_day_label(start)
+def _format_session_time(
+    row: StudentCourseSessionRecord,
+    zone: tzinfo,
+    now: datetime,
+) -> str:
+    start = _as_utc(row.scheduled_start_at).astimezone(zone)
+    end = _as_utc(row.scheduled_end_at).astimezone(zone)
+    day_label = _format_day_label(start, now.astimezone(zone).date())
     time_range = f"{start.strftime('%H:%M')}-{end.strftime('%H:%M')}"
     venue = row.venue or "Venue TBA"
     session_type = _format_session_type(row.session_type)
     return f"{day_label} · {time_range} · {venue} · {session_type}"
 
 
-def _format_day_label(value: datetime) -> str:
-    today = datetime.now(timezone.utc).date()
-    session_date = value.date()
+def _format_day_label(local_start: datetime, today: date) -> str:
+    session_date = local_start.date()
     if session_date == today:
         return "Today"
     if session_date == today + timedelta(days=1):
         return "Tomorrow"
-    return value.strftime("%d %b")
+    return local_start.strftime("%d %b")
 
 
 def _format_session_type(value: str | None) -> str:
@@ -232,22 +269,30 @@ def _derive_session_status(
     return "awaiting"
 
 
-def _format_recorded_time(value: datetime | None) -> str | None:
+def _format_recorded_time(value: datetime | None, zone: tzinfo) -> str | None:
     if value is None:
         return None
-    return f"Recorded at {_as_utc(value).strftime('%H:%M')}"
+    return f"Recorded at {_as_utc(value).astimezone(zone).strftime('%H:%M')}"
 
 
-def _format_week_header(value: datetime, now: datetime) -> str:
-    value_date = _as_utc(value).date()
-    today = now.date()
+def _format_week_header(value: datetime, zone: tzinfo, now: datetime) -> str:
+    """Groups sessions by the Monday-Sunday week they fall in, in local time."""
+    session_date = _as_utc(value).astimezone(zone).date()
+    today = now.astimezone(zone).date()
 
-    if value_date >= today:
+    session_monday = session_date - timedelta(days=session_date.weekday())
+    this_monday = today - timedelta(days=today.weekday())
+    weeks_apart = (session_monday - this_monday).days // 7
+
+    if weeks_apart == 0:
         return "This week"
+    if weeks_apart == 1:
+        return "Next week"
+    if weeks_apart == -1:
+        return "Last week"
 
-    start = value_date
-    end = value_date
-    return f"{start.strftime('%d %b')}-{end.strftime('%d %b')}"
+    session_sunday = session_monday + timedelta(days=6)
+    return f"{session_monday.strftime('%d %b')}–{session_sunday.strftime('%d %b')}"
 
 
 def _as_utc(value: datetime) -> datetime:

@@ -15,6 +15,9 @@ const course: Course = {
     title: `Session ${index + 1}`,
     type: 'Lecture' as const,
     timeText: '10:00-11:00',
+    startsAt: '2026-09-20T04:30:00.000Z',
+    endsAt: '2026-09-20T05:30:00.000Z',
+    venue: null,
     status: status as Course['sessions'][number]['status'],
   })),
   attendanceRecords: ['Present', 'Late', 'Absent', 'Cancelled', 'Awaiting'].map((status, index) => ({
@@ -47,5 +50,31 @@ describe('CourseDetailsScreen', () => {
     expect(screen.getAllByText('Late')).toHaveLength(1);
     expect(screen.getAllByText('Cancelled')).toHaveLength(1);
     expect(screen.getAllByText('Awaiting')).toHaveLength(1);
+  });
+
+  test('shows the own attendance target of the course instead of a fixed one', async () => {
+    const screen = await render(<CourseDetailsScreen
+      courses={[{ ...course, attendanceThresholdPercent: 75 }]}
+      courseId={course.id}
+      onBack={jest.fn()}
+    />);
+
+    await fireEvent.press(screen.getByText('Attendance'));
+
+    expect(screen.getByText('Current attendance · Target 75%')).toBeTruthy();
+    expect(screen.queryByText(/Target 80%/)).toBeNull();
+  });
+
+  test('does not show 0% or a target for a course with no completed sessions', async () => {
+    const screen = await render(<CourseDetailsScreen
+      courses={[{ ...course, attendancePercentage: null, attendedSessions: 0, totalSessions: 0 }]}
+      courseId={course.id}
+      onBack={jest.fn()}
+    />);
+
+    await fireEvent.press(screen.getByText('Attendance'));
+
+    expect(screen.getByText('No completed sessions yet')).toBeTruthy();
+    expect(screen.queryByText('0%')).toBeNull();
   });
 });

@@ -108,7 +108,8 @@ export type LecturerOverview = {
     pendingReview: number;
     pendingReviewNeedingAction: number;
     attendanceRatePercent: number;
-    attendanceRateDeltaPercent: number;
+    // null when there is no previous week to compare against.
+    attendanceRateDeltaPercent: number | null;
   };
   todayLectures: TodayLecture[];
   attentionItems: AttentionItem[];
@@ -116,7 +117,8 @@ export type LecturerOverview = {
   recentActivity: RecentActivityItem[];
 };
 
-export type CourseStatus = "active" | "correction_needed";
+// The course offering status exactly as the backend stores it (e.g. "active", "inactive").
+export type CourseStatus = string;
 
 export type LecturerCourse = {
   courseId: string;
@@ -202,7 +204,8 @@ export type ReviewIssueType =
   | "low_confidence_face_match"
   | "borderline_geofence"
   | "expired_qr_submission"
-  | "duplicate_submission";
+  | "duplicate_submission"
+  | "other_verification_issue";
 
 export type ReviewCaseStatus = "pending" | "information";
 
@@ -215,12 +218,16 @@ export type ReviewCase = {
   courseCode: string;
   issueType: ReviewIssueType;
   issueLabel: string;
-  faceScorePercent: number;
-  geofenceResult: "within_radius" | "boundary" | "outside_radius";
+  // null when no face comparison was recorded for the attempt.
+  faceScorePercent: number | null;
+  // The configured pass mark for the face comparison; null when unknown.
+  faceThresholdPercent: number | null;
+  geofenceResult: "within_radius" | "boundary" | "outside_radius" | "not_recorded";
   time: string;
   status: ReviewCaseStatus;
-  livenessPassed: boolean;
-  geofenceDistanceMeters: number;
+  // null when the backend recorded no liveness result / exposes no distance.
+  livenessPassed: boolean | null;
+  geofenceDistanceMeters: number | null;
   qrEventLabel: string;
   reviewReason: string;
 };

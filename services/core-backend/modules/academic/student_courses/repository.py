@@ -17,6 +17,8 @@ class StudentCourseRecord:
     attended_sessions: int
     total_sessions: int
     attendance_percentage: Decimal | None
+    # The offering's own attendance requirement (a percentage), if configured.
+    attendance_threshold: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -90,7 +92,8 @@ class StudentCourseRepository:
                         ),
                         1
                     )
-                END AS attendance_percentage
+                END AS attendance_percentage,
+                offering.attendance_threshold
             FROM academic.course_enrolments AS enrolment
             JOIN academic.course_offerings AS offering
                 ON offering.id = enrolment.course_offering_id
@@ -118,6 +121,7 @@ class StudentCourseRepository:
               AND offering.status = 'active'
             GROUP BY
                 offering.id,
+                offering.attendance_threshold,
                 course.course_code,
                 course.course_name,
                 semester.semester_number,
@@ -138,6 +142,7 @@ class StudentCourseRepository:
                 attended_sessions=row["attended_sessions"],
                 total_sessions=row["total_sessions"],
                 attendance_percentage=row["attendance_percentage"],
+                attendance_threshold=row["attendance_threshold"],
             )
             for row in rows
         ]

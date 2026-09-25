@@ -371,6 +371,31 @@ def test_pilot_allows_session_without_face(
     assert service.calls == ["create"]
 
 
+@pytest.mark.parametrize("pilot_disabled", [True, False])
+def test_creation_options_report_face_attendance_availability(
+    client: TestClient,
+    make_access_token,
+    pilot_disabled: bool,
+) -> None:
+    client.app.state.settings.pilot_disable_face_attendance = pilot_disabled
+    response = client.get(
+        f"{SESSIONS_URL}/creation-options",
+        headers=authorize(lecturer_token(make_access_token)),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"faceAttendanceEnabled": not pilot_disabled}
+
+
+def test_creation_options_reject_non_lecturer_role(client: TestClient, make_access_token) -> None:
+    response = client.get(
+        f"{SESSIONS_URL}/creation-options",
+        headers=authorize(make_access_token(subject=LINKED_STUDENT_SUBJECT, roles=("student",))),
+    )
+
+    assert response.status_code == 403
+
+
 def test_create_session_rejects_non_lecturer_role(client: TestClient, make_access_token) -> None:
     response = client.post(
         SESSIONS_URL,

@@ -35,6 +35,7 @@ async def list_my_courses(
         courses = await course_service.list_courses_for_user(
             http_request.app.state.db_pool,
             current_student.user_id,
+            http_request.app.state.settings.app_timezone,
         )
     except StudentProfileNotFoundError as error:
         raise HTTPException(
@@ -55,6 +56,7 @@ async def list_my_courses(
             attended_sessions=course.attended_sessions,
             total_sessions=course.total_sessions,
             attendance_percentage=course.attendance_percentage,
+            attendance_threshold_percent=course.attendance_threshold_percent,
             sessions=[
                 StudentCourseSessionResponse(
                     id=session.id,
@@ -64,6 +66,9 @@ async def list_my_courses(
                     status=session.status,
                     recorded_time=session.recorded_time,
                     week_header=session.week_header,
+                    starts_at=session.starts_at,
+                    ends_at=session.ends_at,
+                    venue=session.venue,
                 )
                 for session in course.sessions
             ],

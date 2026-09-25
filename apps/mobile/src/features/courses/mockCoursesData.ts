@@ -6,6 +6,9 @@ export interface Session {
   status: 'active' | 'upcoming' | 'marked' | 'late' | 'absent' | 'cancelled' | 'awaiting';
   recordedTime?: string; // e.g. "Recorded at 08:06"
   weekHeader?: string; // e.g., "This week", "13–19 July", "6–12 July"
+  startsAt: string; // ISO instant
+  endsAt: string; // ISO instant
+  venue: string | null;
 }
 
 export interface AttendanceRecord {
@@ -25,7 +28,10 @@ export interface Course {
   semester: string;
   attendedSessions: number;
   totalSessions: number;
-  attendancePercentage: number;
+  // null until the course has at least one closed session.
+  attendancePercentage: number | null;
+  // The course's own attendance requirement, when one is configured.
+  attendanceThresholdPercent: number | null;
   sessions: Session[];
   attendanceRecords: AttendanceRecord[];
 }
@@ -40,11 +46,15 @@ export const mockCourses: Course[] = [
     attendedSessions: 9,
     totalSessions: 11,
     attendancePercentage: 82,
+    attendanceThresholdPercent: 80,
     sessions: [
       {
         id: 's1',
         title: 'Architecture Review Lecture',
         timeText: 'Today · 10:00–12:00 · Lecture Hall 02 · Lecture',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Lecture Hall 02',
         type: 'Lecture',
         status: 'active',
         weekHeader: 'This week',
@@ -53,6 +63,9 @@ export const mockCourses: Course[] = [
         id: 's2',
         title: 'Sprint Planning Lab',
         timeText: 'Fri · 14:00–16:00 · Lab 3 · Lab',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Lab 3',
         type: 'Lab',
         status: 'upcoming',
         weekHeader: 'This week',
@@ -61,6 +74,9 @@ export const mockCourses: Course[] = [
         id: 's3',
         title: 'Requirements Workshop',
         timeText: '16 Jul · 08:00–10:00 · Room B4 · Lecture',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Room B4',
         type: 'Lecture',
         status: 'marked',
         recordedTime: 'Recorded at 08:06',
@@ -70,6 +86,9 @@ export const mockCourses: Course[] = [
         id: 's4',
         title: 'Team Standup Review',
         timeText: '14 Jul · 09:00–10:00 · Lab 3 · Lab',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Lab 3',
         type: 'Lab',
         status: 'absent',
         weekHeader: '13–19 July',
@@ -78,6 +97,9 @@ export const mockCourses: Course[] = [
         id: 's5',
         title: 'Project Kickoff',
         timeText: '9 Jul · 10:00–12:00 · Lecture Hall 02 · Lecture',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Lecture Hall 02',
         type: 'Lecture',
         status: 'late',
         weekHeader: '6–12 July',
@@ -86,6 +108,9 @@ export const mockCourses: Course[] = [
         id: 's6',
         title: 'Cancelled Tutorial',
         timeText: '7 Jul · 10:00–11:00 · Room B4 · Tutorial',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Room B4',
         type: 'Lecture',
         status: 'cancelled',
         weekHeader: '6–12 July',
@@ -94,6 +119,9 @@ export const mockCourses: Course[] = [
         id: 's7',
         title: 'Awaiting Result',
         timeText: 'Today · 08:00–09:00 · Room B4 · Lecture',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Room B4',
         type: 'Lecture',
         status: 'awaiting',
         weekHeader: 'This week',
@@ -151,11 +179,15 @@ export const mockCourses: Course[] = [
     attendedSessions: 8,
     totalSessions: 10,
     attendancePercentage: 80,
+    attendanceThresholdPercent: 80,
     sessions: [
       {
         id: 'ma-s1',
         title: 'Linear Programming Formulation',
         timeText: 'Today · 13:00–15:00 · Room B4 · Lecture',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Room B4',
         type: 'Lecture',
         status: 'active',
         weekHeader: 'This week',
@@ -164,6 +196,9 @@ export const mockCourses: Course[] = [
         id: 'ma-s2',
         title: 'Simplex Method Lab',
         timeText: 'Fri · 08:00–10:00 · Lab 2 · Lab',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Lab 2',
         type: 'Lab',
         status: 'upcoming',
         weekHeader: 'This week',
@@ -172,6 +207,9 @@ export const mockCourses: Course[] = [
         id: 'ma-s3',
         title: 'Duality and Sensitivity Analysis',
         timeText: '15 Jul · 13:00–15:00 · Room B4 · Lecture',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Room B4',
         type: 'Lecture',
         status: 'marked',
         recordedTime: 'Recorded at 13:05',
@@ -206,11 +244,15 @@ export const mockCourses: Course[] = [
     attendedSessions: 10,
     totalSessions: 10,
     attendancePercentage: 100,
+    attendanceThresholdPercent: 80,
     sessions: [
       {
         id: 'sec-s1',
         title: 'Cryptography Fundamentals',
         timeText: 'Tomorrow · 08:00–10:00 · Lab 3 · Lecture',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Lab 3',
         type: 'Lecture',
         status: 'upcoming',
         weekHeader: 'This week',
@@ -219,6 +261,9 @@ export const mockCourses: Course[] = [
         id: 'sec-s2',
         title: 'Symmetric Encryption Practice',
         timeText: '17 Jul · 08:00–10:00 · Lab 3 · Lab',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Lab 3',
         type: 'Lab',
         status: 'marked',
         recordedTime: 'Recorded at 08:01',
@@ -253,11 +298,15 @@ export const mockCourses: Course[] = [
     attendedSessions: 6,
     totalSessions: 9,
     attendancePercentage: 67,
+    attendanceThresholdPercent: 80,
     sessions: [
       {
         id: 'math-s1',
         title: 'Fourier Analysis Introduction',
         timeText: 'Today · 15:30–17:30 · Room C1 · Lecture',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Room C1',
         type: 'Lecture',
         status: 'upcoming',
         weekHeader: 'This week',
@@ -266,6 +315,9 @@ export const mockCourses: Course[] = [
         id: 'math-s2',
         title: 'Complex Analysis Workshop',
         timeText: '18 Jul · 10:00–12:00 · Room C1 · Workshop',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Room C1',
         type: 'Workshop',
         status: 'marked',
         recordedTime: 'Recorded at 10:10',
@@ -275,6 +327,9 @@ export const mockCourses: Course[] = [
         id: 'math-s3',
         title: 'Partial Differential Equations',
         timeText: '11 Jul · 10:00–12:00 · Room C1 · Lecture',
+        startsAt: '2026-07-20T04:30:00.000Z',
+        endsAt: '2026-07-20T06:30:00.000Z',
+        venue: 'Room C1',
         type: 'Lecture',
         status: 'absent',
         weekHeader: '6–12 July',

@@ -13,12 +13,13 @@ describe("navItemsForRole", () => {
     ]);
   });
 
-  it("gives administrators the seven admin management pages", () => {
+  it("gives administrators the eight admin management pages", () => {
     const items = navItemsForRole("administrator");
     expect(items.map((item) => item.href)).toEqual([
       "/admin/dashboard",
       "/admin/users",
       "/admin/academic",
+      "/admin/corrections",
       "/admin/classrooms",
       "/admin/policies",
       "/admin/reports",

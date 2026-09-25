@@ -47,6 +47,7 @@ async def get_my_dashboard_overview(
         overview = await report_service.get_overview_for_user(
             http_request.app.state.db_pool,
             current_lecturer.user_id,
+            http_request.app.state.settings.app_timezone,
         )
     except LecturerProfileNotFoundError as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, _PROFILE_NOT_FOUND_DETAIL) from error

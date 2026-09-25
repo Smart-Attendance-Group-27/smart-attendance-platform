@@ -1,22 +1,28 @@
 import "server-only";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { CoreBackendError } from "@/lib/api/coreBackend";
 import {
   ApiLecturerSession,
   ApiManualReviewQueueItem,
   ApiSessionStatus,
   getLecturerAtRiskStudents,
   getLecturerAttendanceTrend,
+  getLecturerCorrectionRequests,
   getLecturerCourses as fetchLecturerCourses,
   getLecturerDashboardOverview,
   getLecturerSessionDetail,
   getLecturerSessionStudents,
   getLecturerQrBatches,
+  getLecturerSessionCreationOptions,
   getLecturerSessions,
   getLecturerTimetable,
   getManualReviewQueue,
 } from "@/lib/api/lecturer";
 import { formatClockTime, formatDateLabel, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
 import { isWebMockMode } from "@/lib/api/mode";
+import { isSameCalendarDay } from "@/lib/appTimezone";
+import { toCorrectionRequestRow } from "@/lib/api/correctionRequestRows";
+import type { CorrectionRequestRow } from "@/lib/correctionRequests";
 import {
   AtRiskStudent,
   LecturerCoursesData,
@@ -44,13 +50,7 @@ function mapSessionStatus(status: ApiSessionStatus): SessionStatus {
 }
 
 function isToday(iso: string): boolean {
-  const date = new Date(iso);
-  const now = new Date();
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  );
+  return isSameCalendarDay(new Date(iso), new Date());
 }
 
 function isCheckInOpen(session: ApiLecturerSession, now: Date): boolean {
@@ -65,8 +65,8 @@ function isCheckInOpen(session: ApiLecturerSession, now: Date): boolean {
 // Delta between the two most recent points in a weekly trend series. Needs at
 // least two real weeks of data to mean anything; returns a neutral 0 rather
 // than a fabricated number when there's only one point (or none).
-function computeLatestWeekDelta(trend: { attendanceRate: number }[]): number {
-  if (trend.length < 2) return 0;
+function computeLatestWeekDelta(trend: { attendanceRate: number }[]): number | null {
+  if (trend.length < 2) return null;
   const latest = trend[trend.length - 1].attendanceRate;
   const previous = trend[trend.length - 2].attendanceRate;
   return roundToOneDecimal(latest - previous);
@@ -150,7 +150,7 @@ export async function getLecturerCourses(): Promise<LecturerCoursesData> {
         lecturerName,
         enrolledCount: course.enrolledCount,
         attendanceRatePercent: roundToOneDecimal(course.attendanceRatePercent),
-        status: course.status === "active" ? "active" : "correction_needed",
+        status: course.status,
       };
     }),
     timetable: timetable.map((entry) => ({
@@ -160,18 +160,22 @@ export async function getLecturerCourses(): Promise<LecturerCoursesData> {
       courseCode: entry.courseCode,
       courseName: entry.courseName,
       room: entry.classroomCode ?? "—",
-      source: "Not synchronised from an external source",
+      source: "Maintained by administrators",
     })),
     sourceStatus: [
       {
         id: "academic-source",
         time: "—",
         title: "Academic data source",
-        detail: "No external LMS/SIS source is connected; course and timetable data is managed directly.",
+        detail: "No external LMS/SIS is connected. Administrators maintain course and timetable data directly.",
         status: "review",
       },
     ],
   };
+}
+
+export async function getMyCorrectionRequests(): Promise<CorrectionRequestRow[]> {
+  return (await getLecturerCorrectionRequests()).map(toCorrectionRequestRow);
 }
 
 export async function getSessionList(): Promise<TodayLecture[]> {
@@ -193,6 +197,17 @@ export async function getSessionCreationOptions(): Promise<TimetableOption[]> {
   }));
 }
 
+// Whether the backend will accept sessions that require face verification. If
+// the lookup itself fails the option stays visible; the create endpoint still
+// enforces the real rule.
+export async function getFaceAttendanceEnabled(): Promise<boolean> {
+  try {
+    return (await getLecturerSessionCreationOptions()).faceAttendanceEnabled;
+  } catch {
+    return true;
+  }
+}
+
 function mapAttemptStatus(value: string | null): LiveSessionDetail["students"][number]["attemptStatus"] {
   return value === "in_progress" || value === "checked_in" || value === "failed" ? value : null;
 }
@@ -209,8 +224,11 @@ export async function getSessionDetail(sessionId: string): Promise<LiveSessionDe
   let session: ApiLecturerSession;
   try {
     session = await getLecturerSessionDetail(sessionId);
-  } catch {
-    return null;
+  } catch (error) {
+    // Only a genuinely missing (or not-owned) session is "not found"; any other
+    // failure must reach the route's error boundary so the lecturer can retry.
+    if (error instanceof CoreBackendError && error.status === 404) return null;
+    throw error;
   }
   const students = await getLecturerSessionStudents(sessionId);
 
@@ -274,7 +292,7 @@ function deriveReviewIssue(item: ApiManualReviewQueueItem): { issueType: ReviewI
     return { issueType: "expired_qr_submission", issueLabel: "QR verification issue" };
   }
   return {
-    issueType: "duplicate_submission",
+    issueType: "other_verification_issue",
     issueLabel: item.failureReason ? humanizeReason(item.failureReason) : "Verification issue",
   };
 }
@@ -282,9 +300,8 @@ function deriveReviewIssue(item: ApiManualReviewQueueItem): { issueType: ReviewI
 function deriveGeofenceResult(item: ApiManualReviewQueueItem): ReviewCase["geofenceResult"] {
   if (item.geofenceFailureReason === "NEAR_GEOFENCE_BOUNDARY") return "boundary";
   if (item.geofenceStatus === "failed") return "outside_radius";
-  // Geofence gates face verification — if a face attempt exists at all, the
-  // geofence step necessarily passed first.
-  return "within_radius";
+  if (item.geofenceStatus === "passed") return "within_radius";
+  return "not_recorded";
 }
 
 function humanizeReason(reason: string): string {
@@ -295,11 +312,11 @@ function humanizeReason(reason: string): string {
     .join(" ");
 }
 
-function buildReviewReason(item: ApiManualReviewQueueItem, faceScorePercent: number): string {
+function buildReviewReason(item: ApiManualReviewQueueItem, faceScorePercent: number | null): string {
   if (item.geofenceFailureReason === "NEAR_GEOFENCE_BOUNDARY") {
     return "The student's location reading was near the edge of the configured geofence radius.";
   }
-  if (item.faceStatus === "failed") {
+  if (item.faceStatus === "failed" && faceScorePercent !== null) {
     return `The submitted face similarity score (${faceScorePercent}%) did not pass the configured threshold.`;
   }
   if (item.qrStatus === "failed") {
@@ -315,7 +332,7 @@ export async function getReviewCases(): Promise<ReviewCase[]> {
   const items = await getManualReviewQueue();
 
   return items.map((item) => {
-    const faceScorePercent = Math.round((item.faceSimilarityScore ?? 0) * 100);
+    const faceScorePercent = item.faceSimilarityScore === null ? null : Math.round(item.faceSimilarityScore * 100);
     const { issueType, issueLabel } = deriveReviewIssue(item);
 
     return {
@@ -329,13 +346,15 @@ export async function getReviewCases(): Promise<ReviewCase[]> {
       issueType,
       issueLabel,
       faceScorePercent,
+      faceThresholdPercent:
+        item.faceSimilarityThreshold === null ? null : Math.round(item.faceSimilarityThreshold * 1000) / 10,
       geofenceResult: deriveGeofenceResult(item),
       time: formatClockTime(item.startedAt),
       status: "pending",
-      livenessPassed: item.faceLivenessPassed ?? false,
+      livenessPassed: item.faceLivenessPassed,
       // No distance-from-centre value is exposed on the review queue yet —
       // only the pass/fail/boundary outcome is.
-      geofenceDistanceMeters: 0,
+      geofenceDistanceMeters: null,
       qrEventLabel: item.qrStatus === null ? "Not required" : item.qrStatus === "passed" ? "Submitted and verified" : "Submitted but not verified",
       reviewReason: buildReviewReason(item, faceScorePercent),
     };

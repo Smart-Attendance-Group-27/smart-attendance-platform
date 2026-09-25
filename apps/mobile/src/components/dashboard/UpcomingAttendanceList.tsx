@@ -2,7 +2,7 @@ import { SymbolView } from 'expo-symbols';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { lightColors, radii, spacing, typography } from '../../theme';
-import type { UpcomingAttendance } from './dashboardMockData';
+import type { UpcomingAttendance } from './dashboardTypes';
 
 type UpcomingAttendanceListProps = {
   sessions: UpcomingAttendance[];

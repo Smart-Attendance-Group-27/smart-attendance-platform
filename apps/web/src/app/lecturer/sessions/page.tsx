@@ -4,15 +4,16 @@ import { DataTable, CellPrimary } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { CreateSessionButton } from "@/components/lecturer/CreateSessionButton";
-import { getSessionCreationOptions, getSessionList } from "@/services/lecturerService";
+import { getFaceAttendanceEnabled, getSessionCreationOptions, getSessionList } from "@/services/lecturerService";
 import { sessionStatusDisplay } from "@/lib/status";
 import { TodayLecture } from "@/types/lecturer";
 import { isWebMockMode } from "@/lib/api/mode";
 
 export default async function LecturerSessionsPage() {
-  const [sessions, timetableOptions] = await Promise.all([
+  const [sessions, timetableOptions, faceAttendanceEnabled] = await Promise.all([
     getSessionList(),
     getSessionCreationOptions(),
+    getFaceAttendanceEnabled(),
   ]);
 
   return (
@@ -22,7 +23,7 @@ export default async function LecturerSessionsPage() {
         description="View and monitor your attendance sessions."
         actions={isWebMockMode()
           ? <span className="text-xs text-[var(--muted)]">Mock preview · creation unavailable</span>
-          : <CreateSessionButton timetableOptions={timetableOptions} />}
+          : <CreateSessionButton timetableOptions={timetableOptions} faceAttendanceEnabled={faceAttendanceEnabled} />}
       />
 
       <Card flush>

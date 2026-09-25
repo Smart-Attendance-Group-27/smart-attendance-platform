@@ -7,20 +7,20 @@ the pilot data is already live.
 
 ## 1. Finish the current review and release chain
 
-1. Recheck [PR #96](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/96)
-   and [PR #97](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/97)
-   against current `main`. Review their latest commits and CI. PR #96 now
-   records the confirmed physical-device dynamic QR pilot. Carry any later
-   verified static QR result into that report before treating it as static
-   acceptance.
+1. Recheck every open deployment PR against current `main`, including the EAS
+   ownership change and the face-attendance enablement change. Review their
+   latest commits and CI. PR #96 and PR #97 are already merged and their
+   evidence is part of the current deployment history.
 2. Merge approved PRs in a clear order. A new head commit may require a fresh
    review under the repository's stale-approval protection. Do not dismiss
    reviews just to clear the merge gate.
 3. Release the exact resulting merged `main` SHA. The present VPS uses local
    images built from a merged SHA because private GHCR pulls require a
    separate read-package credential. Main CI still publishes commit-tagged
-   images. Follow `deployment/first-vps-runbook.md`, retain the current
-   release for rollback, and leave `PILOT_DISABLE_FACE_ATTENDANCE=true`.
+   images. Follow `deployment/first-vps-runbook.md` and retain the current
+   release for rollback. For the face-attendance release, set
+   `PILOT_DISABLE_FACE_ATTENDANCE=false` only with the enablement guide's
+   prerequisites and acceptance checks.
 4. Run post-release HTTPS health, Keycloak login, Core token, `PILOT101`
    course visibility, Face health, and private-route checks. Specifically
    verify `GET /api/v1/administrators/me/academic-options` is HTTP 200 with
@@ -52,14 +52,18 @@ repeat the student scan and verify the server record and final outcome.
 Retain these facts without copying raw location samples, QR values, or
 credentials into a PR.
 
-## 3. Finish face enrollment and attendance as separate reviewed work
+## 3. Release and validate face attendance
 
-Face Verification runs and loads `buffalo_l`, but attendance face enforcement
-is disabled. The liveness work and physical-device face capture need their
-own review and test. Verify reference enrollment, encrypted embedding
-retrieval, readiness, real camera capture, failure handling, and Core-to-Face
-attendance decisions on devices before changing the guard. Do not use a
-blank-image inference result as evidence of a successful identity match.
+The next reviewed release makes the global face-attendance switch configurable
+and enables it with `PILOT_DISABLE_FACE_ATTENDANCE=false`. The live audit found
+three decryptable generated profiles, one active verification configuration,
+and a ready `PILOT101` student. Follow the
+[face attendance enablement guide](face-attendance-enablement.md) for the exact
+flow, rollback switch, pilot limitation, and physical-device acceptance.
+
+Do not treat session creation, a readiness record, or blank-image inference as
+proof of a successful attendance match. Record a real liveness pass, biometric
+match, initial check-in, and final attendance result on the physical device.
 
 ## 4. Add private reference-photo storage when an account exists
 

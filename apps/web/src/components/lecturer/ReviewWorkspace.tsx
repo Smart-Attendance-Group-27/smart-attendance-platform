@@ -9,13 +9,15 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Dialog } from "@/components/ui/Dialog";
 import { Notice } from "@/components/ui/Notice";
-import { geofenceResultDisplay, reviewCaseStatusDisplay } from "@/lib/status";
+import { faceScoreTone, geofenceResultDisplay, reviewCaseStatusDisplay } from "@/lib/status";
 import type { ReviewCase } from "@/types/lecturer";
 import { submitReviewDecision } from "@/app/actions/review";
 import type { ReviewDecisionKind, ReviewDecisionInput } from "@/app/actions/review";
 
 type DecisionKind = ReviewDecisionKind;
 type ApprovedStatus = "present" | "late";
+
+const FACE_TONE_TEXT = { neutral: "", success: "text-[var(--success)]", danger: "text-[var(--danger)]" } as const;
 
 function initialsFor(name: string): string {
   return name
@@ -123,8 +125,8 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
                   key: "face",
                   header: "Face score",
                   render: (row) => (
-                    <StatusBadge tone={row.faceScorePercent < 70 ? "danger" : "success"}>
-                      {row.faceScorePercent}%
+                    <StatusBadge tone={faceScoreTone(row.faceScorePercent, row.faceThresholdPercent)}>
+                      {row.faceScorePercent === null ? "—" : `${row.faceScorePercent}%`}
                     </StatusBadge>
                   ),
                 },
@@ -181,20 +183,26 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <div className="border border-[var(--line)] bg-white p-2.5">
                   <small className="block text-[9px] uppercase text-[var(--muted)]">Face match</small>
-                  <strong className={`mt-1 block text-[11px] ${selected.faceScorePercent < 70 ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>
-                    {selected.faceScorePercent}% {selected.faceScorePercent < 70 ? "· Below threshold" : ""}
+                  <strong className={`mt-1 block text-[11px] ${FACE_TONE_TEXT[faceScoreTone(selected.faceScorePercent, selected.faceThresholdPercent)]}`}>
+                    {selected.faceScorePercent === null
+                      ? "Not recorded"
+                      : faceScoreTone(selected.faceScorePercent, selected.faceThresholdPercent) === "danger"
+                        ? `${selected.faceScorePercent}% · Below ${selected.faceThresholdPercent}% threshold`
+                        : `${selected.faceScorePercent}%`}
                   </strong>
                 </div>
                 <div className="border border-[var(--line)] bg-white p-2.5">
                   <small className="block text-[9px] uppercase text-[var(--muted)]">Liveness</small>
-                  <strong className="mt-1 block text-[11px] text-[var(--success)]">
-                    {selected.livenessPassed ? "Passed" : "Failed"}
+                  <strong className={`mt-1 block text-[11px] ${selected.livenessPassed === null ? "" : selected.livenessPassed ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>
+                    {selected.livenessPassed === null ? "Not recorded" : selected.livenessPassed ? "Passed" : "Failed"}
                   </strong>
                 </div>
                 <div className="border border-[var(--line)] bg-white p-2.5">
                   <small className="block text-[9px] uppercase text-[var(--muted)]">Geofence</small>
-                  <strong className="mt-1 block text-[11px] text-[var(--success)]">
-                    Within {selected.geofenceDistanceMeters} m
+                  <strong className="mt-1 block text-[11px]">
+                    {selected.geofenceDistanceMeters === null
+                      ? geofenceResultDisplay(selected.geofenceResult).label
+                      : `Within ${selected.geofenceDistanceMeters} m`}
                   </strong>
                 </div>
                 <div className="border border-[var(--line)] bg-white p-2.5">

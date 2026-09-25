@@ -87,7 +87,8 @@ class FakeLecturerReportRepository:
         ]
         self.requested_course_offering_id: UUID | None = None
 
-    async def get_overview_for_lecturer(self, connection, lecturer_id: UUID):
+    async def get_overview_for_lecturer(self, connection, lecturer_id: UUID, timezone: str):
+        self.overview_timezone = timezone
         return self.overview
 
     async def lecturer_owns_course_offering(self, connection, lecturer_id: UUID, course_offering_id: UUID) -> bool:
@@ -124,9 +125,10 @@ async def test_get_overview_returns_repository_data() -> None:
         lecturer_profile_repository=FakeLecturerProfileRepository(build_profile()),
     )
 
-    overview = await service.get_overview_for_user(FakePool(), USER_ID)
+    overview = await service.get_overview_for_user(FakePool(), USER_ID, "Asia/Colombo")
 
     assert overview == repository.overview
+    assert repository.overview_timezone == "Asia/Colombo"
 
 
 async def test_get_course_session_report_checks_ownership_first() -> None:
@@ -185,7 +187,7 @@ async def test_rejects_missing_lecturer_profile_for_every_method() -> None:
     )
 
     with pytest.raises(LecturerProfileNotFoundError):
-        await service.get_overview_for_user(FakePool(), USER_ID)
+        await service.get_overview_for_user(FakePool(), USER_ID, "Asia/Colombo")
     with pytest.raises(LecturerProfileNotFoundError):
         await service.get_attendance_trend_for_user(FakePool(), USER_ID)
     with pytest.raises(LecturerProfileNotFoundError):
