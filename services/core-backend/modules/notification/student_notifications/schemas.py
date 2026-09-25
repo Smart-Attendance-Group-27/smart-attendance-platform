@@ -16,3 +16,11 @@ class StudentNotificationResponse(BaseModel):
     is_read: bool = Field(alias="isRead")
     related_id: UUID | None = Field(default=None, alias="relatedId")
     related_entity_type: str | None = Field(default=None, alias="relatedEntityType")
+
+
+class StudentNotificationPageResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    items: list[StudentNotificationResponse]
+    next_offset: int | None = Field(alias="nextOffset")
+    unread_count: int = Field(alias="unreadCount")

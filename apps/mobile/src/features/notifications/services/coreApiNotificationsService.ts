@@ -1,6 +1,6 @@
 import type { CoreApiClient } from '../../../services/api/coreApiClient';
 import type { NotificationItem } from '../types/notification';
-import type { NotificationsService } from './notificationsService';
+import type { NotificationPage, NotificationsService } from './notificationsService';
 
 const notificationsPath = '/api/v1/students/me/notifications';
 
@@ -28,6 +28,38 @@ export class CoreApiNotificationsService implements NotificationsService {
     return notifications as NotificationItem[];
   }
 
+  async getPage(offset: number, limit: number): Promise<NotificationPage> {
+    const result = await this.coreApiClient.get<unknown>(
+      `${notificationsPath}/page?offset=${offset}&limit=${limit}`,
+    );
+    if (result.status !== 'ok' || !result.data || typeof result.data !== 'object') {
+      throw new Error('Notifications page request failed.');
+    }
+    const page = result.data as Record<string, unknown>;
+    if (!Array.isArray(page.items) || typeof page.unreadCount !== 'number' ||
+      !(page.nextOffset === null || typeof page.nextOffset === 'number')) {
+      throw new Error('Notifications page response was invalid.');
+    }
+    const items = page.items.map(toNotificationItem);
+    if (items.some((item) => item === null)) {
+      throw new Error('Notifications page response was invalid.');
+    }
+    return {
+      items: items as NotificationItem[],
+      nextOffset: page.nextOffset as number | null,
+      unreadCount: page.unreadCount,
+    };
+  }
+
+  async getUnreadCount(): Promise<number> {
+    const result = await this.coreApiClient.get<unknown>(`${notificationsPath}/unread-count`);
+    if (result.status !== 'ok' || !result.data || typeof result.data !== 'object' ||
+      typeof (result.data as { unreadCount?: unknown }).unreadCount !== 'number') {
+      throw new Error('Unread notification count request failed.');
+    }
+    return (result.data as { unreadCount: number }).unreadCount;
+  }
+
   async markAsRead(notificationId: string): Promise<void> {
     const result = await this.coreApiClient.post<unknown>(
       `${notificationsPath}/${notificationId}/read`,
@@ -36,6 +68,15 @@ export class CoreApiNotificationsService implements NotificationsService {
 
     if (result.status !== 'ok') {
       throw new Error(`Mark notification read failed: ${result.status}`);
+    }
+  }
+
+  async markAllAsRead(): Promise<void> {
+    const result = await this.coreApiClient.post<unknown>(
+      `${notificationsPath}/read-all`, {},
+    );
+    if (result.status !== 'ok') {
+      throw new Error(`Mark all notifications read failed: ${result.status}`);
     }
   }
 }

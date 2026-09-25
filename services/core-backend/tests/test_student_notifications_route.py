@@ -20,6 +20,7 @@ from modules.notification.student_notifications.route import (
 )
 from modules.notification.student_notifications.service import (
     StudentNotification,
+    StudentNotificationPage,
     StudentNotificationService,
     _map_notification_type,
 )
@@ -41,6 +42,19 @@ class StubStudentNotificationService:
 
     async def mark_as_read(self, pool, *, user_id, notification_id):
         return self.mark_result
+
+    async def page_for_user(self, pool, user_id, *, limit, offset):
+        return StudentNotificationPage(
+            items=self.notifications[:limit],
+            next_offset=offset + limit if len(self.notifications) > limit else None,
+            unread_count=sum(not item.is_read for item in self.notifications),
+        )
+
+    async def unread_count(self, pool, user_id):
+        return sum(not item.is_read for item in self.notifications)
+
+    async def mark_all_as_read(self, pool, user_id):
+        return sum(not item.is_read for item in self.notifications)
 
 
 def make_client(jwks_document, stub_service):
@@ -105,7 +119,7 @@ def test_map_notification_type():
     assert _map_notification_type("ATTENDANCE_SESSION_STARTED") == "attendance"
     assert _map_notification_type("UPCOMING_CLASS") == "attendance"
     assert _map_notification_type("ATTENDANCE_RESULT") == "attendance_update"
-    assert _map_notification_type("ATTENDANCE_SESSION_CANCELLED") == "attendance"
+    assert _map_notification_type("ATTENDANCE_SESSION_CANCELLED") == "general"
     assert _map_notification_type("ATTENDANCE_RISK") == "general"
     assert _map_notification_type("GENERAL") == "general"
     assert _map_notification_type(None) == "general"
@@ -134,3 +148,27 @@ def test_mark_as_read_not_found(jwks_document, make_access_token):
         f"{NOTIFICATIONS_URL}/{notif_id}/read", headers=authorize(token)
     )
     assert response.status_code == 404
+
+
+def test_page_count_and_read_all_are_student_scoped(jwks_document, make_access_token):
+    item = StudentNotification(
+        id=uuid4(), title="Attendance open", message="Check in", type="attendance",
+        code="ATTENDANCE_SESSION_OPENED", created_at=datetime.now(UTC),
+        is_read=False, related_id=uuid4(), related_entity_type="ATTENDANCE_SESSION",
+    )
+    client = TestClient(
+        make_client(jwks_document, StubStudentNotificationService([item])).app,
+    )
+    token = make_access_token(subject=LINKED_STUDENT_SUBJECT, roles=("student",))
+    headers = authorize(token)
+
+    unauthenticated = client.get(f"{NOTIFICATIONS_URL}/page")
+    assert unauthenticated.status_code == 401
+    page = client.get(f"{NOTIFICATIONS_URL}/page?limit=30&offset=0", headers=headers)
+    assert page.status_code == 200
+    assert page.json()["items"][0]["id"] == str(item.id)
+    assert page.json()["nextOffset"] is None
+    assert page.json()["unreadCount"] == 1
+    assert client.get(f"{NOTIFICATIONS_URL}/unread-count", headers=headers).json() == {"unreadCount": 1}
+    assert client.post(f"{NOTIFICATIONS_URL}/read-all", headers=headers).json() == {"updated": 1}
+    assert client.get(f"{NOTIFICATIONS_URL}/page?limit=101", headers=headers).status_code == 422

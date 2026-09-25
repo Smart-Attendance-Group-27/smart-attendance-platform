@@ -2,6 +2,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import {
   destinationForNotificationData,
+  destinationForNotificationItem,
   installNotificationNavigation,
 } from '../services/notificationNavigation';
 
@@ -20,6 +21,19 @@ describe('notification navigation', () => {
   test('falls back to notifications when related session data is absent', () => {
     expect(destinationForNotificationData({ notificationId: 'notification-1' }))
       .toBe('/(student)/(tabs)/notifications');
+  });
+
+  test('keeps a cancelled session notification in the inbox', () => {
+    expect(destinationForNotificationData({
+      notificationCode: 'ATTENDANCE_SESSION_CANCELLED',
+      relatedEntityType: 'ATTENDANCE_SESSION',
+      relatedEntityId: 'cancelled-session',
+    })).toBe('/(student)/(tabs)/notifications');
+    expect(destinationForNotificationItem({
+      code: 'ATTENDANCE_SESSION_CANCELLED',
+      relatedEntityType: 'ATTENDANCE_SESSION',
+      relatedId: 'cancelled-session',
+    })).toBe('/(student)/(tabs)/notifications');
   });
 
   test('handles the cold-start notification response', async () => {

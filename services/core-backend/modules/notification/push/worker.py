@@ -230,7 +230,10 @@ class PushDeliveryWorker:
 
     @staticmethod
     def _message_for(attempt: ClaimedDelivery) -> PushMessage:
-        data = {"notificationId": str(attempt.notification_id)}
+        data = {
+            "notificationId": str(attempt.notification_id),
+            "notificationCode": attempt.notification_code,
+        }
         if attempt.related_entity_type:
             data["relatedEntityType"] = attempt.related_entity_type
         if attempt.related_entity_id:

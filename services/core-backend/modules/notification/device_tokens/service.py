@@ -82,8 +82,8 @@ class DeviceTokenService:
 def _validate_token(token: str) -> None:
     if not token or not _EXPO_TOKEN_PATTERN.match(token.strip()):
         raise InvalidExpoPushTokenError(
-            f"'{token}' is not a valid Expo push token. "
-            "Expected format: ExponentPushToken[...] or ExpoPushToken[...]"
+            "Invalid Expo push token. Expected format: "
+            "ExponentPushToken[...] or ExpoPushToken[...]"
         )
 
 

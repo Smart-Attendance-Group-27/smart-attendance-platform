@@ -22,6 +22,7 @@ def claimed(*, attempt_number: int = 1, active: bool = True) -> ClaimedDelivery:
     return ClaimedDelivery(
         id=uuid4(),
         notification_id=uuid4(),
+        notification_code="ATTENDANCE_SESSION_OPENED",
         device_token_id=uuid4(),
         expo_push_token=TOKEN,
         attempt_number=attempt_number,
@@ -87,6 +88,7 @@ async def test_worker_sends_claimed_messages_and_persists_tickets() -> None:
     message = provider.send_many.call_args.args[0][0]
     assert message.to == TOKEN
     assert message.data["notificationId"] == str(attempt.notification_id)
+    assert message.data["notificationCode"] == "ATTENDANCE_SESSION_OPENED"
     repository.mark_sent.assert_awaited_once_with(attempt.id, "ticket-1")
 
 

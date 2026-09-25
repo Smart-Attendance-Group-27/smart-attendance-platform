@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { ScreenContainer } from '../../../components/ui';
+import { AppButton, ScreenContainer } from '../../../components/ui';
 import { lightColors, spacing, typography } from '../../../theme';
 import { NotificationEmptyState } from '../components/NotificationEmptyState';
 import { NotificationErrorState } from '../components/NotificationErrorState';
@@ -12,17 +12,30 @@ import {
 import { NotificationItem } from '../components/NotificationItem';
 import { NotificationListSkeleton } from '../components/NotificationListSkeleton';
 import type { NotificationsService } from '../services/notificationsService';
+import { notifyNotificationChanges } from '../services/notificationEvents';
+import { getPushRegistrationStatus, subscribePushRegistrationStatus } from '../services/pushRegistrationStatus';
 import type { NotificationItem as Notification } from '../types/notification';
 
 type NotificationScreenState = 'loading' | 'loaded' | 'empty' | 'error';
 
 export type NotificationsScreenProps = {
   notificationsService: NotificationsService;
+  refreshKey?: number;
+  onOpenNotification?: (notification: Notification) => void;
+  onRetryPush?: () => void;
 };
+
+const pageSize = 30;
 
 export function NotificationsScreen({
   notificationsService,
+  refreshKey = 0,
+  onOpenNotification,
+  onRetryPush,
 }: NotificationsScreenProps) {
+  const pushStatus = useSyncExternalStore(
+    subscribePushRegistrationStatus, getPushRegistrationStatus, getPushRegistrationStatus,
+  );
   const requestId = useRef(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [screenState, setScreenState] =
@@ -30,24 +43,30 @@ export function NotificationsScreen({
   const [selectedFilter, setSelectedFilter] =
     useState<NotificationFilter>('all');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [hasUpdateError, setHasUpdateError] = useState(false);
 
   const resolveNotificationsRequest = useCallback(async (
     currentRequestId: number,
   ) => {
     try {
-      const loadedNotifications =
-        await notificationsService.getNotifications();
+      const page = await notificationsService.getPage(0, pageSize);
 
       if (requestId.current !== currentRequestId) {
         return;
       }
 
-      setNotifications(loadedNotifications);
-      setScreenState(loadedNotifications.length > 0 ? 'loaded' : 'empty');
+      setNotifications(page.items);
+      setNextOffset(page.nextOffset);
+      setUnreadCount(page.unreadCount);
+      setScreenState(page.items.length > 0 ? 'loaded' : 'empty');
     } catch {
       if (requestId.current === currentRequestId) {
         setNotifications([]);
+        setNextOffset(null);
+        setUnreadCount(0);
         setScreenState('error');
       }
     }
@@ -69,7 +88,28 @@ export function NotificationsScreen({
     return () => {
       requestId.current += 1;
     };
-  }, [resolveNotificationsRequest]);
+  }, [resolveNotificationsRequest, refreshKey]);
+
+  const loadMore = useCallback(async () => {
+    if (nextOffset === null || isLoadingMore) return;
+    const currentRequestId = requestId.current;
+    setIsLoadingMore(true);
+    setHasUpdateError(false);
+    try {
+      const page = await notificationsService.getPage(nextOffset, pageSize);
+      if (requestId.current !== currentRequestId) return;
+      setNotifications((current) => {
+        const seen = new Set(current.map((item) => item.id));
+        return [...current, ...page.items.filter((item) => !seen.has(item.id))];
+      });
+      setNextOffset(page.nextOffset);
+      setUnreadCount(page.unreadCount);
+    } catch {
+      setHasUpdateError(true);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [isLoadingMore, nextOffset, notificationsService]);
 
   const filteredNotifications = useMemo(
     () =>
@@ -87,37 +127,32 @@ export function NotificationsScreen({
     [notifications, selectedFilter],
   );
 
-  const hasUnreadNotifications = notifications.some(
-    (notification) => !notification.isRead,
-  );
+  const hasUnreadNotifications = unreadCount > 0;
 
   const markAsRead = useCallback(
-    async (notificationId: string) => {
-      const notification = notifications.find(
-        (item) => item.id === notificationId,
-      );
-
-      if (!notification || notification.isRead || isUpdating) {
+    async (notification: Notification) => {
+      if (isUpdating) {
         return;
       }
-
-      setIsUpdating(true);
-      setHasUpdateError(false);
-
-      try {
-        await notificationsService.markAsRead(notificationId);
-        setNotifications((currentNotifications) =>
-          currentNotifications.map((item) =>
-            item.id === notificationId ? { ...item, isRead: true } : item,
-          ),
-        );
-      } catch {
-        setHasUpdateError(true);
-      } finally {
-        setIsUpdating(false);
+      if (!notification.isRead) {
+        setIsUpdating(true);
+        setHasUpdateError(false);
+        try {
+          await notificationsService.markAsRead(notification.id);
+          setNotifications((current) => current.map((item) =>
+            item.id === notification.id ? { ...item, isRead: true } : item,
+          ));
+          setUnreadCount((count) => Math.max(count - 1, 0));
+          notifyNotificationChanges();
+        } catch {
+          setHasUpdateError(true);
+        } finally {
+          setIsUpdating(false);
+        }
       }
+      onOpenNotification?.(notification);
     },
-    [isUpdating, notifications, notificationsService],
+    [isUpdating, notificationsService, onOpenNotification],
   );
 
   const markAllAsRead = useCallback(async () => {
@@ -129,21 +164,15 @@ export function NotificationsScreen({
     setHasUpdateError(false);
 
     try {
-      const unreadNotificationIds = notifications
-        .filter((notification) => !notification.isRead)
-        .map((notification) => notification.id);
-
-      await Promise.all(
-        unreadNotificationIds.map((notificationId) =>
-          notificationsService.markAsRead(notificationId),
-        ),
-      );
+      await notificationsService.markAllAsRead();
       setNotifications((currentNotifications) =>
         currentNotifications.map((notification) => ({
           ...notification,
           isRead: true,
         })),
       );
+      setUnreadCount(0);
+      notifyNotificationChanges();
     } catch {
       setHasUpdateError(true);
     } finally {
@@ -152,7 +181,6 @@ export function NotificationsScreen({
   }, [
     hasUnreadNotifications,
     isUpdating,
-    notifications,
     notificationsService,
   ]);
 
@@ -191,6 +219,23 @@ export function NotificationsScreen({
         ) : null}
       </View>
 
+      <View style={styles.pushStatus}>
+        <Text style={styles.pushStatusText}>
+          {pushStatus === 'registered' ? 'This device is registered for push alerts.' :
+            pushStatus === 'permission-denied' ? 'Push alerts are off. Enable notifications in Android settings, then retry.' :
+            pushStatus === 'error' ? 'Push alerts could not be set up. In-app notifications still work.' :
+            pushStatus === 'checking' ? 'Checking push alerts...' :
+            pushStatus === 'not-a-physical-device' ? 'Push alerts require a physical Android phone.' :
+            'Push alerts are currently available on Android.'}
+        </Text>
+        {(pushStatus === 'error' || pushStatus === 'permission-denied') && onRetryPush ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="Retry push setup"
+            onPress={onRetryPush}>
+            <Text style={styles.retryPush}>Retry</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
       {hasUpdateError ? (
         <Text accessibilityRole="alert" style={styles.updateError}>
           The notification could not be updated. Please try again.
@@ -219,15 +264,23 @@ export function NotificationsScreen({
                   disabled={isUpdating}
                   key={notification.id}
                   notification={notification}
-                  onPress={(notificationId) =>
-                    void markAsRead(notificationId)
-                  }
+                  onPress={() => void markAsRead(notification)}
                 />
               ))}
             </View>
           ) : (
             <NotificationEmptyState filtered />
           )}
+          {nextOffset !== null ? (
+            <View style={styles.loadMore}>
+              <AppButton
+                accessibilityLabel="Load more notifications"
+                disabled={isLoadingMore}
+                onPress={() => void loadMore()}
+                title={isLoadingMore ? 'Loading...' : 'Load more'}
+              />
+            </View>
+          ) : null}
         </>
       ) : null}
     </ScreenContainer>
@@ -273,4 +326,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     color: lightColors.error,
   },
+  loadMore: { marginTop: spacing.md },
+  pushStatus: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: spacing.sm, marginBottom: spacing.sm,
+  },
+  pushStatusText: { ...typography.supporting, color: lightColors.textSecondary, flex: 1 },
+  retryPush: { ...typography.supporting, color: lightColors.primaryInteraction, fontWeight: '700' },
 });

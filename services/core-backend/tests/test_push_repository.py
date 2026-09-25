@@ -85,6 +85,7 @@ def claimed_row() -> dict:
     return {
         "id": uuid4(),
         "notification_id": uuid4(),
+        "notification_code": "ATTENDANCE_SESSION_OPENED",
         "device_token_id": uuid4(),
         "attempt_number": 0,
         "expo_push_token": "ExponentPushToken[secret-value]",
