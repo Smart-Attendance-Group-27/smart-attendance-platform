@@ -1,6 +1,6 @@
 # Current MVP deployment
 
-**Observed:** 2026-09-25 after the face-attendance release. Recheck before a
+**Observed:** 2026-09-25 after the PR #101 release. Recheck before a
 release or data change.
 
 ## Runtime and release identity
@@ -9,9 +9,9 @@ release or data change.
 | --- | --- |
 | Owner and lifetime | Manushan; netcup VPS 1000 G12.5 for a roughly two-month university pilot |
 | Host | Debian 13 x86_64 at `152.53.33.198`; 4 vCPU, 7.8 GiB RAM, 125 GB root disk, 2 GiB swap |
-| Running source | `/opt/uniattend/current` points to `/opt/uniattend/releases/5cb1ca71369184cd85776750b14084f779887a50` |
-| Repository `main` | `5cb1ca71369184cd85776750b14084f779887a50` at this snapshot |
-| Merged changes | [PR #100](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/100) enables the configurable face-attendance path. Earlier PRs #96 and #97 carry the physical non-face pilot evidence and admin academic-options fix. |
+| Running source | `/opt/uniattend/current` points to `/opt/uniattend/releases/0191fd3fe534569ffc828bf38d9684f630b63e37` |
+| Repository `main` | `0191fd3fe534569ffc828bf38d9684f630b63e37` at this snapshot |
+| Merged changes | [PR #101](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/101) adds post-deployment fixes and correction requests. PR #100 enabled face attendance. |
 | Images | Web, Core, Face, and Keycloak were built on the VPS from the exact running SHA. Main-branch CI passed and published private GHCR images with the same SHA. The VPS runs its locally built images. |
 
 At the snapshot, Web, Core, Keycloak, Keycloak PostgreSQL, Redis, Face
@@ -19,17 +19,17 @@ Verification, and Caddy were running; all six application containers with
 health checks were healthy. Host memory used was about 2.5 GiB and root disk
 usage 14%. Face used about 703 MiB of its 2 GiB limit. These are point-in-time
 readings, not load-test results. The prior
-`d0152d947f18e9204252cd597fd9e49e618c00a4` release remains available for
+`5cb1ca71369184cd85776750b14084f779887a50` release remains available for
 application rollback.
 
 Locally built release image IDs:
 
 | Service | Image ID |
 | --- | --- |
-| Web | `sha256:c9845d65454774000b4406ad8e1b3caacf2272fe027bc1bf5b84bc54dc65c587` |
-| Core | `sha256:b5bd57d28be51a69ef757b9525c8238d15ae7d9ecebb4013b2fbb25427afa15d` |
-| Face | `sha256:595c8733dd0c5f8ba066339c06f7c45c06d55a6c3eb3ea59031eb26848fcdd5d` |
-| Keycloak | `sha256:aa23c300d64bdfe4599ba169c788375e1eb8c1d1bd29260278a829af418be5f9` |
+| Web | `sha256:cd091cfff08b92c75967fde7d4248de12eee7d2672686708e2758dbd8a076ed9` |
+| Core | `sha256:046fb083465a8265d0f5ff2926ac3e6fffd606fa51e1a9ac1307bf8bbaa0aeeb` |
+| Face | `sha256:522731dc1f78e7a1e4c596a6aa7b9ea4efc22074d6e1c94d2bb182f36cd43386` |
+| Keycloak | `sha256:22ea94fe18416771527bc748381b323b222b1620bbddfd0ddf3eb6f40362afb6` |
 
 ## Architecture and URLs
 
@@ -62,7 +62,7 @@ realm file is `/etc/uniattend/realm.json`. Never commit or print them.
 ## What has been observed
 
 - The four public URLs above returned HTTPS 200 with certificate validation
-  from the owner workstation after the `5cb1ca7` release on 2026-09-25.
+  from the owner workstation after the `0191fd3` release on 2026-09-25.
   Public Core and Face `/internal/*` and Keycloak `/admin/*` returned 404.
   The hourly GitHub uptime workflow checks the public origins.
 - A pilot administrator completed Keycloak authorization code login with
@@ -81,6 +81,11 @@ realm file is `/etc/uniattend/realm.json`. Never commit or print them.
   readiness-passed 512-dimensional profiles. The enrolled `PILOT101` student
   has a ready `buffalo_l` version `1` profile. No embedding value, key, image,
   or token was printed during the audit.
+- PR #101's correction-request migration was applied by itself after a fresh,
+  verified encrypted Supabase backup. The new empty table has all 13 columns,
+  9 constraints, and 3 indexes. Both lecturer and administrator endpoints are
+  live and require authentication. Production API docs and OpenAPI routes
+  return 404 as intended. No seed or unrelated migration was run.
 - An interrupted release attempt stopped after Keycloak recreation. The first
   managed retry hit a Git ownership check and restored the previous image
   tag and Keycloak container. The corrected managed job completed with all

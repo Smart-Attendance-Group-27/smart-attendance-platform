@@ -7,12 +7,13 @@ the pilot data is already live.
 
 ## 1. Use the merged-main release path for future changes
 
-[PR #100](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/100)
-merged. Release `5cb1ca71369184cd85776750b14084f779887a50` is live. Its
-CI, service health, public HTTPS, private-route, Face model, runtime settings,
-and stored-profile readiness checks passed. The previous
-`d0152d947f18e9204252cd597fd9e49e618c00a4` release is retained for rollback.
-Face attendance is enabled; physical face attendance acceptance is still due.
+[PR #101](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/101)
+merged. Release `0191fd3fe534569ffc828bf38d9684f630b63e37` is live. Its CI,
+schema migration, service health, public HTTPS, private-route, API-docs, and
+correction-route checks passed. The previous
+`5cb1ca71369184cd85776750b14084f779887a50` release is retained for application
+rollback. Face attendance is enabled; physical face attendance acceptance is
+still due.
 
 For the next change:
 

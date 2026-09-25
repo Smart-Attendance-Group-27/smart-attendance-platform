@@ -15,7 +15,7 @@ merged as `575509055556a1b19a088c126b96746dea6e0e57`
 **Follow-up PR:** [#94](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/94),
 merged as `cf72fa47f529674e4510586e12e5f4d0a6540ebf`
 
-**Active release:** `5cb1ca71369184cd85776750b14084f779887a50`
+**Active release:** `0191fd3fe534569ffc828bf38d9684f630b63e37`
 
 ## Current status
 
@@ -75,6 +75,27 @@ for all eligible courses. A supervised physical-device match, initial
 check-in, safe failure, and final attendance outcome are still required before
 the face attendance path is marked accepted end to end.
 
+### Post-deployment fixes release — 2026-09-25
+
+[PR #101](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/101)
+merged as `0191fd3fe534569ffc828bf38d9684f630b63e37`. The exact commit
+was built on the VPS and deployed after all four merged-main CI workflows
+passed. The previous `5cb1ca71369184cd85776750b14084f779887a50` release is
+retained for application rollback.
+
+A verified encrypted full Supabase backup was created before applying only
+`20260925_01_academic_correction_requests.sql`. The new table was absent during
+the precheck and empty after migration, with 13 columns, 9 constraints, and 3
+indexes. No seed or unrelated migration was run. The lecturer and
+administrator correction endpoints respond with authentication enforcement;
+their first real submit-and-review workflow remains a user acceptance check.
+
+All application containers are healthy. Web, Core, Face, and Keycloak public
+checks returned HTTPS 200; Core and Face private routes returned 404. Core
+runs with `APP_TIMEZONE=Asia/Colombo`, face attendance remains enabled, and
+production API docs and OpenAPI routes return 404. The external GitHub uptime
+workflow also passed after cutover.
+
 ## Phase evidence
 
 | Phase | Outcome |
@@ -106,10 +127,10 @@ be observed during concurrent attendance testing.
 
 | Image | VPS image ID |
 | --- | --- |
-| Web | `sha256:c9845d65454774000b4406ad8e1b3caacf2272fe027bc1bf5b84bc54dc65c587` |
-| Core API | `sha256:b5bd57d28be51a69ef757b9525c8238d15ae7d9ecebb4013b2fbb25427afa15d` |
-| Face Verification | `sha256:595c8733dd0c5f8ba066339c06f7c45c06d55a6c3eb3ea59031eb26848fcdd5d` |
-| Keycloak | `sha256:aa23c300d64bdfe4599ba169c788375e1eb8c1d1bd29260278a829af418be5f9` |
+| Web | `sha256:cd091cfff08b92c75967fde7d4248de12eee7d2672686708e2758dbd8a076ed9` |
+| Core API | `sha256:046fb083465a8265d0f5ff2926ac3e6fffd606fa51e1a9ac1307bf8bbaa0aeeb` |
+| Face Verification | `sha256:522731dc1f78e7a1e4c596a6aa7b9ea4efc22074d6e1c94d2bb182f36cd43386` |
+| Keycloak | `sha256:22ea94fe18416771527bc748381b323b222b1620bbddfd0ddf3eb6f40362afb6` |
 
 ## Recovery artifacts
 

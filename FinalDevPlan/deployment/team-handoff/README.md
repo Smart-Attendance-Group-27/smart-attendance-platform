@@ -2,7 +2,7 @@
 
 **Owner:** Manushan
 
-**Snapshot:** 2026-09-25 after the face-attendance release
+**Snapshot:** 2026-09-25 after the PR #101 release
 
 **Audience:** teammates and their coding agents working on the two-month MVP pilot
 
@@ -20,7 +20,7 @@ Read these files in order:
    configuration, verified prerequisites, runtime flow, limits, and acceptance.
 
 The live server was released from merged `main` commit
-`5cb1ca71369184cd85776750b14084f779887a50`. Always compare the live
+`0191fd3fe534569ffc828bf38d9684f630b63e37`. Always compare the live
 release symlink, current `main`, and open PRs before acting. A new merge does
 not deploy itself. This handoff is a dated snapshot; recheck live state before
 acting.
