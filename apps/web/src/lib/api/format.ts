@@ -2,11 +2,9 @@ import "server-only";
 
 const TIME_FORMAT: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hour12: false };
 
-// academic.timetable_entries.day_of_week (0-6) is undocumented in the schema.
-// The one seed row we can independently verify — CS3203 at day_of_week=1 — is a
-// Tuesday lecture (confirmed against the course's known schedule), which only
-// fits a Python date.weekday()-style 0=Monday..6=Sunday convention. Treat this
-// as an inference from real data, not a confirmed contract.
+// academic.timetable_entries.day_of_week is ISO-style: 1 = Monday ... 7 = Sunday.
+// This is what the seed data documents and what the admin form and API validation
+// (1-7) write, so every reader must use the same convention.
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 export function formatClockTime(isoOrTime: string | null): string {
@@ -23,7 +21,7 @@ export function formatTimeRange(startIso: string | null, endIso: string | null):
 }
 
 export function formatDayOfWeek(dayOfWeek: number): string {
-  return DAY_NAMES[dayOfWeek] ?? `Day ${dayOfWeek}`;
+  return DAY_NAMES[dayOfWeek - 1] ?? `Day ${dayOfWeek}`;
 }
 
 export function formatDateLabel(iso: string | null): string {
