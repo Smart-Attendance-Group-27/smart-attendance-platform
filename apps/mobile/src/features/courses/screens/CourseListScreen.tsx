@@ -167,7 +167,7 @@ export function CourseListScreen({
                     {course.attendedSessions} of {course.totalSessions} sessions attended
                   </Text>
                   <Text style={styles.attendancePercentage}>
-                    {course.attendancePercentage}%
+                    {course.attendancePercentage === null ? '—' : `${course.attendancePercentage}%`}
                   </Text>
                 </View>
               </Pressable>

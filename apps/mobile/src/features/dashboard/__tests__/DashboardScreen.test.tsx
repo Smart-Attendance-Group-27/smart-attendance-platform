@@ -89,6 +89,56 @@ describe('DashboardScreen', () => {
     expect(await findByText(/· Semester 2, 2031$/)).toBeTruthy();
   });
 
+  test('lists the nearest upcoming sessions with their real date and institution time', async () => {
+    const upcoming = (id: string, startsAt: string) => ({
+      ...mockCourses[0].sessions[0],
+      id,
+      status: 'upcoming' as const,
+      startsAt,
+      endsAt: startsAt,
+      venue: 'Hall 02',
+    });
+    const courseService = {
+      async listMyCourses() {
+        return {
+          status: 'loaded' as const,
+          courses: [{
+            ...mockCourses[0],
+            // The API returns newest first.
+            sessions: [
+              upcoming('far', '2031-10-20T03:30:00.000Z'),
+              upcoming('c', '2031-10-04T03:30:00.000Z'),
+              upcoming('b', '2031-10-03T03:30:00.000Z'),
+              upcoming('a', '2031-10-02T03:30:00.000Z'),
+            ],
+          }],
+        };
+      },
+    };
+
+    const { findAllByText, queryByText, getByText } = await render(
+      <DashboardScreen
+        profileService={fakeProfileService}
+        dashboardService={createEmptyDashboardService()}
+        courseService={courseService}
+      />,
+    );
+
+    expect(await findAllByText(/09:00 · Hall 02/)).toHaveLength(3);
+    expect(getByText('02')).toBeTruthy();
+    expect(getByText('04')).toBeTruthy();
+    expect(queryByText('20')).toBeNull();
+  });
+
+  test('shows no invented lectures or courses when no data source is given', async () => {
+    const { findByText, queryByText } = await render(
+      <DashboardScreen profileService={fakeProfileService} />,
+    );
+
+    await findByText('No upcoming attendance');
+    expect(queryByText(/Perera|Fernando|Silva/)).toBeNull();
+  });
+
   test('omits the semester when there is no course data to take it from', async () => {
     const { findByText, queryByText } = await render(
       <DashboardScreen profileService={fakeProfileService} dashboardService={createEmptyDashboardService()} />,

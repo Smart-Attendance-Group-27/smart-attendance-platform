@@ -51,10 +51,13 @@ export type LivenessCameraResult = {
   readonly livenessEvidence: LivenessEvidence;
 };
 
+const CHALLENGE_PREPARATION_MS = 5_000;
+const CHALLENGE_PREPARATION_SECONDS = CHALLENGE_PREPARATION_MS / 1000;
+
 const defaultControllerFactory: LivenessControllerFactory = (captureSource) =>
   createLivenessSessionController({
     captureSource,
-    challengePreparationMs: 5_000,
+    challengePreparationMs: CHALLENGE_PREPARATION_MS,
   });
 
 const EMPTY_SNAPSHOT: LivenessSessionSnapshot = {
@@ -343,8 +346,8 @@ function getStatusContent(
         title: CHALLENGE_INSTRUCTIONS[snapshot.activeChallenge],
         message: snapshot.preparingChallenge
           ? snapshot.completedChallengeCount > 0
-            ? 'Previous challenge complete. Get ready—the next check starts in 5 seconds.'
-            : 'Get into position. Capturing starts in 5 seconds.'
+            ? `Previous challenge complete. Get ready—the next check starts in ${CHALLENGE_PREPARATION_SECONDS} seconds.`
+            : `Get into position. Capturing starts in ${CHALLENGE_PREPARATION_SECONDS} seconds.`
           : snapshot.activeChallenge === 'eyes_closed_hold'
             ? 'Keep both eyes fully closed until this challenge is confirmed.'
             : 'Keep your face visible while we check your movement.',
@@ -357,7 +360,7 @@ function getStatusContent(
         ? 'Challenges complete'
         : 'Look straight at the camera',
       message: snapshot.preparingChallenge
-        ? 'Face forward now. Your final photo will be captured in 5 seconds.'
+        ? `Face forward now. Your final photo will be captured in ${CHALLENGE_PREPARATION_SECONDS} seconds.`
         : 'Hold still briefly while we confirm your frontal position.',
     };
   }
