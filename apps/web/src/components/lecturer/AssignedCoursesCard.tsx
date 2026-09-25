@@ -10,6 +10,7 @@ import { downloadCsv } from "@/lib/csv";
 import {
   CourseFilters,
   EMPTY_COURSE_FILTERS,
+  courseStatusOptions,
   coursesToCsv,
   filterCourses,
 } from "@/lib/courseFilters";
@@ -26,6 +27,7 @@ export function AssignedCoursesCard({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<CourseFilters>(EMPTY_COURSE_FILTERS);
 
+  const statusOptions = useMemo(() => courseStatusOptions(courses), [courses]);
   const visible = useMemo(() => filterCourses(courses, filters), [courses, filters]);
   const isFiltered = filters.query.trim() !== "" || filters.status !== "all";
 
@@ -71,8 +73,11 @@ export function AssignedCoursesCard({
               }
             >
               <option value="all">All statuses</option>
-              <option value="active">Active</option>
-              <option value="correction_needed">Correction needed</option>
+              {statusOptions.map((status) => (
+                <option key={status} value={status}>
+                  {courseStatusDisplay(status).label}
+                </option>
+              ))}
             </FilterSelect>
             <Button onClick={() => setFilters(EMPTY_COURSE_FILTERS)} disabled={!isFiltered}>
               Clear filters

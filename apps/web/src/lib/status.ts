@@ -102,10 +102,10 @@ export function finalStatusDisplay(status: "present" | "late" | "absent" | "pend
   }
 }
 
-export function courseStatusDisplay(status: "active" | "correction_needed"): StatusDisplay {
-  return status === "active"
-    ? { label: "Active", tone: "success" }
-    : { label: "Correction needed", tone: "warning" };
+export function courseStatusDisplay(status: string): StatusDisplay {
+  if (status === "active") return { label: "Active", tone: "success" };
+  const label = status.replace(/[_-]+/g, " ").trim();
+  return { label: label ? label.charAt(0).toUpperCase() + label.slice(1) : "Unknown", tone: "neutral" };
 }
 
 export function reviewCaseStatusDisplay(status: "pending" | "information"): StatusDisplay {

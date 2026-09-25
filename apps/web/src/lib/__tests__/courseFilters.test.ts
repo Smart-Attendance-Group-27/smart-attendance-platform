@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toCsv } from "@/lib/csv";
-import { coursesToCsv, filterCourses } from "@/lib/courseFilters";
+import { courseStatusOptions, coursesToCsv, filterCourses } from "@/lib/courseFilters";
 import { LecturerCourse } from "@/types/lecturer";
 
 const courses: LecturerCourse[] = [
@@ -22,7 +22,7 @@ const courses: LecturerCourse[] = [
     lecturerName: "N. Perera",
     enrolledCount: 12,
     attendanceRatePercent: 70,
-    status: "correction_needed",
+    status: "inactive",
   },
 ];
 
@@ -42,6 +42,12 @@ describe("filterCourses", () => {
   });
 });
 
+describe("courseStatusOptions", () => {
+  it("lists each status present, once", () => {
+    expect(courseStatusOptions([...courses, { ...courses[0], courseId: "3" }])).toEqual(["active", "inactive"]);
+  });
+});
+
 describe("toCsv", () => {
   it("escapes commas, quotes and newlines", () => {
     expect(toCsv(["a", "b"], [["x,y", 'say "hi"'], ["line\nbreak", 3]])).toBe(
@@ -58,7 +64,7 @@ describe("coursesToCsv", () => {
   it("exports the given rows with headings and status labels", () => {
     const lines = coursesToCsv([courses[1]]).split("\r\n");
     expect(lines[0]).toBe("Course code,Course name,Lecturer,Enrolled,Attendance (%),Status");
-    expect(lines[1]).toBe('CS6101,"Advanced ""Databases""",N. Perera,12,70,Correction needed');
+    expect(lines[1]).toBe('CS6101,"Advanced ""Databases""",N. Perera,12,70,Inactive');
     expect(lines).toHaveLength(2);
   });
 });

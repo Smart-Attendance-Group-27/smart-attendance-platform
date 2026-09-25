@@ -145,7 +145,7 @@ export async function getLecturerCourses(): Promise<LecturerCoursesData> {
         lecturerName,
         enrolledCount: course.enrolledCount,
         attendanceRatePercent: roundToOneDecimal(course.attendanceRatePercent),
-        status: course.status === "active" ? "active" : "correction_needed",
+        status: course.status,
       };
     }),
     timetable: timetable.map((entry) => ({

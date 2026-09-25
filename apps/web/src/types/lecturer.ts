@@ -116,7 +116,8 @@ export type LecturerOverview = {
   recentActivity: RecentActivityItem[];
 };
 
-export type CourseStatus = "active" | "correction_needed";
+// The course offering status exactly as the backend stores it (e.g. "active", "inactive").
+export type CourseStatus = string;
 
 export type LecturerCourse = {
   courseId: string;

@@ -164,7 +164,7 @@ export const MOCK_LECTURER_COURSES: LecturerCoursesData = {
       lecturerName: "Prof. Dulani Meedeniya",
       enrolledCount: 40,
       attendanceRatePercent: 92.5,
-      status: "correction_needed",
+      status: "inactive",
     },
   ],
   timetable: [

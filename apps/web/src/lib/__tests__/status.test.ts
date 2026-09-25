@@ -63,9 +63,11 @@ describe("finalStatusDisplay", () => {
 });
 
 describe("courseStatusDisplay", () => {
-  it("flags correction_needed as a warning, active as success", () => {
+  it("shows active as success and never invents a correction state", () => {
     expect(courseStatusDisplay("active")).toEqual({ label: "Active", tone: "success" });
-    expect(courseStatusDisplay("correction_needed")).toEqual({ label: "Correction needed", tone: "warning" });
+    expect(courseStatusDisplay("inactive")).toEqual({ label: "Inactive", tone: "neutral" });
+    expect(courseStatusDisplay("completed")).toEqual({ label: "Completed", tone: "neutral" });
+    expect(courseStatusDisplay("on_hold")).toEqual({ label: "On hold", tone: "neutral" });
   });
 });
 

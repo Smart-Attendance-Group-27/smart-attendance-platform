@@ -7,6 +7,10 @@ export type CourseFilters = {
   status: CourseStatus | "all";
 };
 
+export function courseStatusOptions(courses: LecturerCourse[]): string[] {
+  return [...new Set(courses.map((course) => course.status))].sort();
+}
+
 export const EMPTY_COURSE_FILTERS: CourseFilters = { query: "", status: "all" };
 
 export function filterCourses(courses: LecturerCourse[], filters: CourseFilters): LecturerCourse[] {
