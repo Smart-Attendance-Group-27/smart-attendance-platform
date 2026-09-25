@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { getSessionDetail } from "@/services/lecturerService";
+import { CoreBackendError } from "@/lib/api/coreBackend";
 import type { ApiLecturerSession, ApiSessionStudent } from "@/lib/api/lecturer";
 
 // lecturerService.ts is `import "server-only"` — outside Next's own build,
@@ -82,9 +83,21 @@ describe("getSessionDetail", () => {
     expect(detail?.cancellationReason).toBe("The lecturer is unwell.");
   });
 
-  it("returns null when the session cannot be found", async () => {
-    getLecturerSessionDetail.mockRejectedValue(new Error("not found"));
+  it("returns null when the backend says the session does not exist", async () => {
+    getLecturerSessionDetail.mockRejectedValue(new CoreBackendError("not found", 404, "/x"));
 
     expect(await getSessionDetail("missing-session")).toBeNull();
+  });
+
+  it.each([500, 401, 403])("does not report a %i failure as not found", async (status) => {
+    getLecturerSessionDetail.mockRejectedValue(new CoreBackendError("failed", status, "/x"));
+
+    await expect(getSessionDetail("session-1")).rejects.toBeInstanceOf(CoreBackendError);
+  });
+
+  it("does not report a network failure as not found", async () => {
+    getLecturerSessionDetail.mockRejectedValue(new TypeError("fetch failed"));
+
+    await expect(getSessionDetail("session-1")).rejects.toThrow("fetch failed");
   });
 });

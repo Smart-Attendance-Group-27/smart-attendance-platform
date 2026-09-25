@@ -1,5 +1,6 @@
 import "server-only";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { CoreBackendError } from "@/lib/api/coreBackend";
 import {
   ApiLecturerSession,
   ApiManualReviewQueueItem,
@@ -204,8 +205,11 @@ export async function getSessionDetail(sessionId: string): Promise<LiveSessionDe
   let session: ApiLecturerSession;
   try {
     session = await getLecturerSessionDetail(sessionId);
-  } catch {
-    return null;
+  } catch (error) {
+    // Only a genuinely missing (or not-owned) session is "not found"; any other
+    // failure must reach the route's error boundary so the lecturer can retry.
+    if (error instanceof CoreBackendError && error.status === 404) return null;
+    throw error;
   }
   const students = await getLecturerSessionStudents(sessionId);
 

@@ -1,5 +1,5 @@
 import "server-only";
-import { coreBackendFetch } from "@/lib/api/coreBackend";
+import { CoreBackendError, coreBackendFetch } from "@/lib/api/coreBackend";
 import { isWebMockMode } from "@/lib/api/mode";
 import {
   mockLecturerDashboardOverview,
@@ -211,7 +211,7 @@ export function createLecturerSession(body: ApiCreateSessionRequest): Promise<Ap
 export function getLecturerSessionDetail(sessionId: string): Promise<ApiLecturerSession> {
   if (isWebMockMode()) {
     const session = mockLecturerSessions.find((item) => item.id === sessionId);
-    return session ? Promise.resolve(session) : Promise.reject(new Error("Session not found"));
+    return session ? Promise.resolve(session) : Promise.reject(new CoreBackendError("Session not found", 404, `/api/v1/lecturers/me/attendance-sessions/${sessionId}`));
   }
   return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${sessionId}`);
 }
