@@ -40,9 +40,13 @@ export default async function AdminDashboardPage() {
             label: "Academic source status",
             value: <span className="text-lg">{summary.academicSourceStatusLabel}</span>,
             note: summary.lastSyncLabel,
-            noteTone: "good",
           },
-          { label: "Policy alerts", value: summary.policyAlertsCount, note: "Review recommended", noteTone: "warn" },
+          {
+            label: "Policy alerts",
+            value: summary.policyAlertsCount,
+            note: summary.policyAlertsCount > 0 ? "Review recommended" : "No alerts",
+            noteTone: summary.policyAlertsCount > 0 ? "warn" : "neutral",
+          },
         ]}
       />
 

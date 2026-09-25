@@ -9,13 +9,15 @@ import { Button } from "@/components/ui/Button";
 import { LinkButton } from "@/components/ui/LinkButton";
 import { LineChart } from "@/components/charts/LineChart";
 import { getLecturerOverview } from "@/services/lecturerService";
-import { sessionStatusDisplay } from "@/lib/status";
+import { sessionStatusDisplay, weeklyDeltaNote } from "@/lib/status";
 import { TodayLecture } from "@/types/lecturer";
 import { isWebMockMode } from "@/lib/api/mode";
 
 export default async function LecturerDashboardPage() {
   const { summary, todayLectures, attentionItems, weeklyTrend, recentActivity } = await getLecturerOverview();
   const nextOpenSession = todayLectures.find((lecture) => lecture.status === "in_progress");
+
+  const attendanceDelta = weeklyDeltaNote(summary.attendanceRateDeltaPercent);
 
   return (
     <div>
@@ -67,8 +69,8 @@ export default async function LecturerDashboardPage() {
           {
             label: "Attendance rate",
             value: `${summary.attendanceRatePercent}%`,
-            note: `Up ${summary.attendanceRateDeltaPercent}% from last week`,
-            noteTone: "good",
+            note: attendanceDelta.note,
+            noteTone: attendanceDelta.tone,
           },
         ]}
       />

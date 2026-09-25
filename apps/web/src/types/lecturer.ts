@@ -108,7 +108,8 @@ export type LecturerOverview = {
     pendingReview: number;
     pendingReviewNeedingAction: number;
     attendanceRatePercent: number;
-    attendanceRateDeltaPercent: number;
+    // null when there is no previous week to compare against.
+    attendanceRateDeltaPercent: number | null;
   };
   todayLectures: TodayLecture[];
   attentionItems: AttentionItem[];

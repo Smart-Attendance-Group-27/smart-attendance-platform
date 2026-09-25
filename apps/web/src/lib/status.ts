@@ -102,6 +102,13 @@ export function finalStatusDisplay(status: "present" | "late" | "absent" | "pend
   }
 }
 
+export function weeklyDeltaNote(deltaPercent: number | null): { note: string; tone: "neutral" | "good" | "warn" } {
+  if (deltaPercent === null) return { note: "No previous week to compare", tone: "neutral" };
+  if (deltaPercent > 0) return { note: `Up ${deltaPercent}% from last week`, tone: "good" };
+  if (deltaPercent < 0) return { note: `Down ${Math.abs(deltaPercent)}% from last week`, tone: "warn" };
+  return { note: "No change from last week", tone: "neutral" };
+}
+
 export function courseStatusDisplay(status: string): StatusDisplay {
   if (status === "active") return { label: "Active", tone: "success" };
   const label = status.replace(/[_-]+/g, " ").trim();

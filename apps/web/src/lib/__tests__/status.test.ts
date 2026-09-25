@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classroomStatusDisplay,
   courseStatusDisplay,
+  weeklyDeltaNote,
   finalStatusDisplay,
   geofenceResultDisplay,
   reviewCaseStatusDisplay,
@@ -105,5 +106,14 @@ describe("syncStatusDisplay", () => {
   it("maps current/review", () => {
     expect(syncStatusDisplay("current").tone).toBe("success");
     expect(syncStatusDisplay("review").tone).toBe("warning");
+  });
+});
+
+describe("weeklyDeltaNote", () => {
+  it("words the change by its direction and never invents a comparison", () => {
+    expect(weeklyDeltaNote(4.6)).toEqual({ note: "Up 4.6% from last week", tone: "good" });
+    expect(weeklyDeltaNote(-3.2)).toEqual({ note: "Down 3.2% from last week", tone: "warn" });
+    expect(weeklyDeltaNote(0)).toEqual({ note: "No change from last week", tone: "neutral" });
+    expect(weeklyDeltaNote(null)).toEqual({ note: "No previous week to compare", tone: "neutral" });
   });
 });

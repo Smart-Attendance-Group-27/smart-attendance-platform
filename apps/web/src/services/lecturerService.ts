@@ -61,8 +61,8 @@ function isCheckInOpen(session: ApiLecturerSession, now: Date): boolean {
 // Delta between the two most recent points in a weekly trend series. Needs at
 // least two real weeks of data to mean anything; returns a neutral 0 rather
 // than a fabricated number when there's only one point (or none).
-function computeLatestWeekDelta(trend: { attendanceRate: number }[]): number {
-  if (trend.length < 2) return 0;
+function computeLatestWeekDelta(trend: { attendanceRate: number }[]): number | null {
+  if (trend.length < 2) return null;
   const latest = trend[trend.length - 1].attendanceRate;
   const previous = trend[trend.length - 2].attendanceRate;
   return roundToOneDecimal(latest - previous);
