@@ -31,6 +31,7 @@ import type { Course } from '../../courses/mockCoursesData';
 import type { QrProgress } from '../../qr/types/qrProgress';
 import type { QrProgressService } from '../../qr/services/qrProgressService';
 import { formatGreeting } from '../utils/greeting';
+import { getCommonSemester } from '../../courses/utils/semesterLabel';
 
 type DashboardScreenProps = {
   activeSessionService?: ActiveAttendanceSessionService;
@@ -67,21 +68,14 @@ export function DashboardScreen({
   const [courseCards, setCourseCards] = useState<CourseSummary[]>([]);
   const [requiresReadinessCheck, setRequiresReadinessCheck] = useState(false);
   const [userName, setUserName] = useState<string>('');
-  const [greetingTime, setGreetingTime] = useState(() => new Date());
+  const [now, setNow] = useState(() => new Date());
+  const [semester, setSemester] = useState<string | null>(null);
   const hasFocusedDashboard = useRef(false);
 
-  const today = useMemo(() => new Date(), []);
   const dateString = useMemo(
-    () => new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: '2-digit', month: 'long' }).format(today),
-    [today]
+    () => new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: '2-digit', month: 'long' }).format(now),
+    [now]
   );
-
-  const semesterText = useMemo(() => {
-    const month = today.getMonth() + 1;
-    const semester = month <= 6 ? 1 : 2;
-    const year = today.getFullYear();
-    return `Semester ${semester}, ${year}`;
-  }, [today]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -113,6 +107,7 @@ export function DashboardScreen({
       setActiveSessions(content.activeSessions);
       setCourseCards(content.courseCards);
       setRequiresReadinessCheck(content.requiresReadinessCheck);
+      setSemester(content.semester);
     } catch (err: any) {
       setError(err?.message ?? 'Unknown error');
     } finally {
@@ -152,6 +147,7 @@ export function DashboardScreen({
         setActiveSessions(content.activeSessions);
         setCourseCards(content.courseCards);
         setRequiresReadinessCheck(content.requiresReadinessCheck);
+        setSemester(content.semester);
       } catch (err: any) {
         if (!mounted) return;
         setError(err?.message ?? 'Unknown error');
@@ -166,10 +162,10 @@ export function DashboardScreen({
     };
   }, [activeSessionService, courseService, faceVerificationApiService, profileService, service]);
 
-  // The tab stays mounted, so recompute the greeting whenever it regains focus.
+  // The tab stays mounted, so refresh the greeting and date whenever it regains focus.
   useFocusEffect(
     useCallback(() => {
-      setGreetingTime(new Date());
+      setNow(new Date());
     }, []),
   );
 
@@ -273,9 +269,9 @@ export function DashboardScreen({
 
         <View style={styles.greeting}>
           <Text accessibilityRole="header" style={styles.greetingTitle}>
-            {formatGreeting(userName, greetingTime)}
+            {formatGreeting(userName, now)}
           </Text>
-          <Text style={styles.period}>{`${dateString} · ${semesterText}`}</Text>
+          <Text style={styles.period}>{semester ? `${dateString} · ${semester}` : dateString}</Text>
         </View>
 
         {loading ? (
@@ -367,6 +363,7 @@ async function loadDashboardContent(
     lectures: courseData.lectures,
     activeSessions,
     courseCards: courseData.courseCards,
+    semester: courseData.semester,
     requiresReadinessCheck,
   };
 }
@@ -374,11 +371,12 @@ async function loadDashboardContent(
 async function loadCourseDashboardData(
   dashboardService: DashboardService,
   courseService?: CourseService,
-): Promise<{ lectures: Lecture[]; courseCards: CourseSummary[] }> {
+): Promise<{ lectures: Lecture[]; courseCards: CourseSummary[]; semester: string | null }> {
   if (!courseService) {
     return {
       lectures: await dashboardService.getUpcomingLectures(),
       courseCards: courseSummaries,
+      semester: null,
     };
   }
 
@@ -390,6 +388,7 @@ async function loadCourseDashboardData(
   return {
     lectures: result.courses.flatMap(courseToUpcomingLectures),
     courseCards: result.courses.map(courseToSummaryCard),
+    semester: getCommonSemester(result.courses),
   };
 }
 
