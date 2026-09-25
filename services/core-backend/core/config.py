@@ -320,3 +320,21 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+class _EnvironmentOnlySettings(BaseSettings):
+    """Reads just the environment name, so it works before the database and
+    identity settings exist (app construction happens at import time)."""
+
+    app_environment: str = "development"
+
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE_PATH,
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
+
+def get_app_environment() -> str:
+    return _EnvironmentOnlySettings().app_environment.strip().lower()

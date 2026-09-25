@@ -6,7 +6,7 @@ from typing import AsyncIterator
 from fastapi import FastAPI
 
 from cache.redis import close_redis_client, create_redis_client
-from core.config import get_settings
+from core.config import get_app_environment, get_settings
 from db.pool import close_database_pool, create_database_pool
 from modules.academic.admin_academic_data.route import (
     router as admin_academic_data_router,
@@ -182,7 +182,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app(*, enable_database: bool = True) -> FastAPI:
     # The interactive docs and schema describe every route to anyone who can
     # reach the API host, so they are only served outside production.
-    docs_enabled = get_settings().app_environment.strip().lower() != "production"
+    docs_enabled = get_app_environment() != "production"
     app = FastAPI(
         title="UniAttend Core API",
         lifespan=lifespan if enable_database else None,
