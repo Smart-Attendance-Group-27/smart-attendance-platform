@@ -20,6 +20,7 @@ import {
   AcademicData,
   AcademicOption,
   AcademicReferenceData,
+  AccountStatus,
   AdminDashboardData,
   AttendancePolicy,
   AuditLogEntry,
@@ -44,6 +45,13 @@ function mapReadinessStatus(status: string): ReadinessStatus {
   // The backend's "pending" (a face_validation_attempts row exists but hasn't
   // resolved yet) has no dedicated bucket in this UI's readiness states.
   return "not_checked";
+}
+
+function mapAccountStatus(status: string): AccountStatus {
+  if (status === "active" || status === "inactive" || status === "suspended" || status === "locked") {
+    return status;
+  }
+  return "unknown";
 }
 
 export async function getBuildingOptions(): Promise<BuildingOption[]> {
@@ -109,7 +117,7 @@ export async function getUserDirectory(): Promise<UserDirectoryData> {
       department: student.department ?? "",
       intakeYear: student.intakeYear ?? 0,
       currentSemester: student.currentSemester ?? 0,
-      accountStatus: student.accountStatus as UserDirectoryData["students"][number]["accountStatus"],
+      accountStatus: mapAccountStatus(student.accountStatus),
       profileStatus: student.profileStatus as UserDirectoryData["students"][number]["profileStatus"],
     })),
     lecturers: directory.lecturers.map((lecturer) => ({
@@ -119,7 +127,7 @@ export async function getUserDirectory(): Promise<UserDirectoryData> {
       email: lecturer.email,
       department: lecturer.department ?? "",
       designation: lecturer.designation ?? "",
-      accountStatus: lecturer.accountStatus as UserDirectoryData["lecturers"][number]["accountStatus"],
+      accountStatus: mapAccountStatus(lecturer.accountStatus),
       profileStatus: lecturer.profileStatus as UserDirectoryData["lecturers"][number]["profileStatus"],
     })),
     administrators: directory.administrators.map((administrator) => ({
@@ -128,7 +136,7 @@ export async function getUserDirectory(): Promise<UserDirectoryData> {
       email: administrator.email,
       department: administrator.department ?? "",
       administrativeScope: administrator.administrativeScope ?? "",
-      accountStatus: administrator.accountStatus as UserDirectoryData["administrators"][number]["accountStatus"],
+      accountStatus: mapAccountStatus(administrator.accountStatus),
       profileStatus: administrator.profileStatus as UserDirectoryData["administrators"][number]["profileStatus"],
     })),
   };
