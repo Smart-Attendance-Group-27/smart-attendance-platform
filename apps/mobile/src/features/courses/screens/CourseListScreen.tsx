@@ -12,6 +12,7 @@ import { AppInput } from '../../../components/ui/AppInput';
 import { ScreenContainer } from '../../../components/ui/ScreenContainer';
 import { lightColors, spacing, typography, radii } from '../../../theme';
 import type { Course } from '../mockCoursesData';
+import { getCommonSemester } from '../utils/semesterLabel';
 
 type CourseListScreenProps = {
   courses: Course[];
@@ -36,6 +37,8 @@ export function CourseListScreen({
         c.title.toLowerCase().includes(query)
     );
   }, [courses, searchQuery]);
+
+  const commonSemester = useMemo(() => getCommonSemester(courses), [courses]);
 
   const handleClearSearch = () => {
     setSearchQuery('');
@@ -99,9 +102,9 @@ export function CourseListScreen({
           }
         />
 
-        {/* Filter chips (only visible when not searching, or always Sem 1) */}
+        {/* Semester chip: only while not searching, and only when the listed courses share one semester */}
         {searchQuery.length === 0 ? (
-          <View style={styles.chipsRow}>
+          commonSemester ? <View style={styles.chipsRow}>
             <View style={styles.chip}>
               <SymbolView
                 name={{
@@ -113,9 +116,9 @@ export function CourseListScreen({
                 tintColor={lightColors.primary}
                 style={styles.chipIcon}
               />
-              <Text style={styles.chipText}>Semester 1, 2026</Text>
+              <Text style={styles.chipText}>{commonSemester}</Text>
             </View>
-          </View>
+          </View> : null
         ) : (
           <Text style={styles.searchResultCount}>
             {filteredCourses.length} {filteredCourses.length === 1 ? 'result' : 'results'} for “{searchQuery}”
