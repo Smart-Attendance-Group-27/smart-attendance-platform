@@ -2,7 +2,7 @@
 
 **Owner:** Manushan  
 **Prepared:** 2026-09-25  
-**Status:** Prepared for the next reviewed VPS release
+**Status:** Deployed; physical-device attendance acceptance pending
 
 ## Scope
 
@@ -76,10 +76,10 @@ evidence of production-grade presentation-attack resistance.
 
 After deploying the exact merged SHA:
 
-1. Confirm Core reports `PILOT_DISABLE_FACE_ATTENDANCE=false` without printing
+1. **Passed:** Core reports `PILOT_DISABLE_FACE_ATTENDANCE=false` without printing
    other environment values.
-2. Confirm Core, Face, Web, Keycloak, Redis, and both databases are healthy.
-3. Create and activate a short `PILOT101` face-required session.
+2. **Passed:** Core, Face, Web, Keycloak, Redis, and both databases are healthy.
+3. **Pending:** Create and activate a short `PILOT101` face-required session.
 4. On the physical Android APK, pass geofence and both liveness challenges.
 5. Verify the enrolled pilot student matches and receives initial check-in.
 6. Confirm the face attempt records liveness passed, biometric match, config,
@@ -88,3 +88,9 @@ After deploying the exact merged SHA:
 8. Test one safe failure, such as a student without a profile or an invalid
    liveness payload, and confirm no check-in is created.
 
+The deployed release is
+`5cb1ca71369184cd85776750b14084f779887a50`. Public HTTPS checks passed,
+private Core and Face routes remained unavailable through Caddy, and the Face
+container loaded `buffalo_l` successfully. Steps 3-8 require a supervised
+physical-device session and must not be marked complete from configuration or
+readiness evidence alone.

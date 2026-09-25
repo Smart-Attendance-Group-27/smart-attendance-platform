@@ -15,7 +15,7 @@ merged as `575509055556a1b19a088c126b96746dea6e0e57`
 **Follow-up PR:** [#94](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/94),
 merged as `cf72fa47f529674e4510586e12e5f4d0a6540ebf`
 
-**Active release:** `cf72fa47f529674e4510586e12e5f4d0a6540ebf`
+**Active release:** `0191fd3fe534569ffc828bf38d9684f630b63e37`
 
 ## Current status
 
@@ -23,9 +23,9 @@ The pilot stack is live over trusted HTTPS on temporary `sslip.io` names. Web,
 Core, Keycloak, Redis, Keycloak PostgreSQL, Face Verification, and Caddy are
 healthy. Face Verification is a separate Compose project and container, with
 one inference worker and a persistent model-cache volume. The four VPS images
-were built from the exact merged main commit above and are tagged with its
+were built from the exact active merged-main commit and are tagged with its
 full SHA. The same commit's four images were also published to private GHCR by
-[Deployment CI](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/actions/runs/35948132716).
+[Deployment CI](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/actions/runs/36049112895).
 Manushan selected a direct VPS build for this two-month pilot, so the running
 local image IDs below are the release record rather than GHCR pull digests.
 
@@ -37,8 +37,10 @@ local image IDs below are the release record rather than GHCR pull digests.
 | Face | <https://face.152-53-33-198.sslip.io/health/db> | HTTPS 200; blank-image live inference returned `no_face` |
 
 HTTPS, database, container-health, student PKCE, and Core identity checks were
-repeated after the main-SHA deployment. The live Core GET and POST face
-attendance routes both returned `FACE_ATTENDANCE_NOT_ENABLED` as configured.
+repeated after the original main-SHA deployment. At that time, the live Core
+GET and POST face attendance routes returned `FACE_ATTENDANCE_NOT_ENABLED` as
+configured. The later PR #100 release removed that global pilot block as
+recorded below.
 Role-based browser login and blank-image inference were performed on the
 staging build before the final source merge. Two mock students subsequently
 signed in through Keycloak on a physical Android phone. The first attendance
@@ -51,6 +53,48 @@ recorded final present.
 Core and Face `/internal/*`, Keycloak `/admin/*`, and public Face attendance
 routes return 404 at the proxy. Database, Redis, and service management ports
 are not publicly bound. SSH, 80, and 443 are the open inbound ports.
+
+### Face-attendance release — 2026-09-25
+
+[PR #100](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/100)
+merged as `5cb1ca71369184cd85776750b14084f779887a50`. Backend, Mobile,
+Web, and Deployment CI passed. The exact commit was built on the VPS and
+deployed with `PILOT_DISABLE_FACE_ATTENDANCE=false`; the former release
+`d0152d947f18e9204252cd597fd9e49e618c00a4` remains available for rollback.
+
+All containers became healthy before `/opt/uniattend/current` changed. Web,
+Core, Face database health, and Keycloak discovery returned HTTPS 200, while
+public internal routes returned 404. Face loaded `buffalo_l` on CPU and used
+about 703 MiB of its 2 GiB limit. A read-only database audit confirmed three
+encrypted, generated, readiness-passed 512-dimensional profiles, one active
+threshold at `0.50000`, and a ready `buffalo_l` version `1` profile for the
+`PILOT101` student. No database migration or seed was run.
+
+This completes the server release and makes face-required sessions available
+for all eligible courses. A supervised physical-device match, initial
+check-in, safe failure, and final attendance outcome are still required before
+the face attendance path is marked accepted end to end.
+
+### Post-deployment fixes release — 2026-09-25
+
+[PR #101](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/pull/101)
+merged as `0191fd3fe534569ffc828bf38d9684f630b63e37`. The exact commit
+was built on the VPS and deployed after all four merged-main CI workflows
+passed. The previous `5cb1ca71369184cd85776750b14084f779887a50` release is
+retained for application rollback.
+
+A verified encrypted full Supabase backup was created before applying only
+`20260925_01_academic_correction_requests.sql`. The new table was absent during
+the precheck and empty after migration, with 13 columns, 9 constraints, and 3
+indexes. No seed or unrelated migration was run. The lecturer and
+administrator correction endpoints respond with authentication enforcement;
+their first real submit-and-review workflow remains a user acceptance check.
+
+All application containers are healthy. Web, Core, Face, and Keycloak public
+checks returned HTTPS 200; Core and Face private routes returned 404. Core
+runs with `APP_TIMEZONE=Asia/Colombo`, face attendance remains enabled, and
+production API docs and OpenAPI routes return 404. The external GitHub uptime
+workflow also passed after cutover.
 
 ## Phase evidence
 
@@ -66,15 +110,16 @@ are not publicly bound. SSH, 80, and 443 are the open inbound ports.
 | 8. SSH tunnel | Windows workstation tunnel to Web, Core, Face, and Keycloak tested. |
 | 9. HTTPS | Temporary `sslip.io` DNS plus Caddy certificates work for all four hostnames; public route restrictions verified. The Android APK used these HTTPS origins for physical-device Keycloak login and live Core data. A purchased domain can be cut over later. |
 | 10. Recovery/monitoring | Daily encrypted Keycloak backup timer and 30-day local retention enabled. The 08:15 workstation task succeeded; a post-release encrypted dump was copied and checksum-verified off-host. Database restore and realm export verification passed earlier. Host checks and HTTPS uptime workflow are active. |
-| 11. Release | PRs #91 and #94 merged; main CI passed and published images; exact merged SHA deployed, public HTTPS and private routing checked. |
+| 11. Release | PRs #91, #94, and later #100 merged; main CI passed and published images; exact merged SHA deployed, public HTTPS and private routing checked. |
 
-Phases 1–11 are complete for the agreed first deployment scope, which keeps
-face attendance disabled while liveness is unfinished. A permanent domain is
-optional for this pilot because the four temporary names have trusted TLS,
-including on the physical phone.
+Phases 1–11 are complete for the agreed first deployment scope. Face
+attendance was enabled in the later release recorded above; its supervised
+physical-device acceptance remains open. A permanent domain is optional for
+this pilot because the four temporary names have trusted TLS, including on
+the physical phone.
 
-At the post-release check, the host used 2.3 GiB of 7.8 GiB RAM and 16 GiB
-of 125 GiB disk. Face used approximately 669 MiB of its 2 GiB limit,
+At the latest post-release check, the host used 2.3 GiB of 7.8 GiB RAM and
+17 GiB of 125 GiB disk. Face used approximately 703 MiB of its 2 GiB limit,
 Keycloak 509 MiB of 1.75 GiB, and Web 104 MiB of 768 MiB. The Face model cache occupies
 approximately 601 MiB. Europe-to-Seoul new pooled database queries measured
 about 1.7 seconds; this is acceptable for a small functional pilot but must
@@ -82,10 +127,10 @@ be observed during concurrent attendance testing.
 
 | Image | VPS image ID |
 | --- | --- |
-| Web | `sha256:583b84df098abe53b556055a4012aa4ae95d08df6220b25c35c67c95cf41dd0b` |
-| Core API | `sha256:20376e561474156d1d112c3cb581b6cc39ac48f6ef2b41b9624c1f5c5e49bdc3` |
-| Face Verification | `sha256:5753efa5728685434229175fc3a689b100fadc67fc81797c03cb35c4484af12f` |
-| Keycloak | `sha256:829568838b382bb2ef980a18602ea51f1ee1f40e89a2077a57527d8ac9c80a74` |
+| Web | `sha256:cd091cfff08b92c75967fde7d4248de12eee7d2672686708e2758dbd8a076ed9` |
+| Core API | `sha256:046fb083465a8265d0f5ff2926ac3e6fffd606fa51e1a9ac1307bf8bbaa0aeeb` |
+| Face Verification | `sha256:522731dc1f78e7a1e4c596a6aa7b9ea4efc22074d6e1c94d2bb182f36cd43386` |
+| Keycloak | `sha256:22ea94fe18416771527bc748381b323b222b1620bbddfd0ddf3eb6f40362afb6` |
 
 ## Recovery artifacts
 
@@ -189,11 +234,12 @@ Change them after handoff.
 
 ## Remaining acceptance work
 
-1. Attendance face enforcement remains disabled while liveness is unfinished;
-   existing face-required sessions cannot complete through the pilot API and
-   must be replaced with non-face pilot sessions. Expo EAS access for
-   `manushanhasanka` remains unavailable on the `techumeda55` project, so a
-   hosted preview build is unavailable; the local APK was used successfully.
+1. Face attendance is enabled. Complete the supervised `PILOT101` physical
+   acceptance: create and activate a face-required session, pass geofence and
+   the two client challenges, confirm biometric match and initial check-in,
+   close the session, and verify final Present. Also record one safe failure.
+   EAS preview build `75470b13-cbc9-43ef-94bb-758c823a370c` is available for
+   sharing; it has a different signer from the older debug APK.
 2. Create a Cloudflare account and private R2 bucket when approved reference
    photos are ready. The enrollment storage adapter is a separate product PR;
    R2 is not active in this release.
