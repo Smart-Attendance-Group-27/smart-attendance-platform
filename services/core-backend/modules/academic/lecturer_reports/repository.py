@@ -46,6 +46,7 @@ class AtRiskStudentRecord:
     last_attended_at: datetime | None
 
 
+# Used only when an offering has no attendance_threshold of its own.
 AT_RISK_THRESHOLD_PERCENT = 70
 
 
@@ -310,12 +311,14 @@ class LecturerReportRepository:
                 ON student.id = roster.student_id
             WHERE assignment.lecturer_id = $1
               AND session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
-            GROUP BY student.id, student.registration_number, full_name, course.course_code
+            GROUP BY
+                student.id, student.registration_number, full_name, course.course_code,
+                offering.id, offering.attendance_threshold
             HAVING
                 COUNT(*) > 0
                 AND (
                     100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late')) / COUNT(*)
-                ) < $2
+                ) < COALESCE(offering.attendance_threshold, $2)
             ORDER BY attendance_rate_percent ASC
             """,
             lecturer_id,

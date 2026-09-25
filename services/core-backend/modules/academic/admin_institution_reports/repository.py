@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import asyncpg
 
+# Used only when an offering has no attendance_threshold of its own.
 AT_RISK_THRESHOLD_PERCENT = 70
 DEFAULT_TREND_WEEKS = 8
 
@@ -64,9 +65,10 @@ class AdminInstitutionReportRepository:
                     SELECT COUNT(*) FROM academic.lecturer_profiles WHERE profile_status = 'active'
                 ) AS total_lecturers,
                 (
-                    SELECT COUNT(*) FROM (
+                    SELECT COUNT(DISTINCT student_id) FROM (
                         SELECT
                             roster.student_id,
+                            offering.attendance_threshold,
                             100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late'))
                                 / NULLIF(COUNT(*), 0) AS rate
                         FROM attendance_session.sessions AS session
@@ -74,10 +76,12 @@ class AdminInstitutionReportRepository:
                             ON roster.session_id = session.id
                         LEFT JOIN attendance_verification.attendance_records AS record
                             ON record.session_id = session.id AND record.student_id = roster.student_id
+                        JOIN academic.course_offerings AS offering
+                            ON offering.id = session.course_offering_id
                         WHERE session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
-                        GROUP BY roster.student_id
+                        GROUP BY roster.student_id, offering.id, offering.attendance_threshold
                     ) AS student_rates
-                    WHERE rate < $1
+                    WHERE rate < COALESCE(attendance_threshold, $1)
                 ) AS students_at_risk_count
             """,
             AT_RISK_THRESHOLD_PERCENT,
@@ -194,11 +198,11 @@ class AdminInstitutionReportRepository:
             JOIN academic.courses AS course
                 ON course.id = offering.course_id
             WHERE session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
-            GROUP BY course.id, course.course_code, course.course_name
+            GROUP BY offering.id, offering.attendance_threshold, course.id, course.course_code, course.course_name
             HAVING
                 COUNT(*) > 0
                 AND (100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late')) / COUNT(*))
-                    < $1
+                    < COALESCE(offering.attendance_threshold, $1)
             ORDER BY attendance_rate_percent ASC
             """,
             threshold_percent,

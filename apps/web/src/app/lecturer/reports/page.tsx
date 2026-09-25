@@ -39,7 +39,7 @@ export default async function LecturerReportsPage() {
             value: `${summary.averageLateRatePercent}%`,
             note: "Of present and late check-ins",
           },
-          { label: "Students at risk", value: summary.studentsAtRiskCount, note: "Below 70% attendance", noteTone: "warn" },
+          { label: "Students at risk", value: summary.studentsAtRiskCount, note: "Below the course threshold", noteTone: "warn" },
         ]}
       />
 
