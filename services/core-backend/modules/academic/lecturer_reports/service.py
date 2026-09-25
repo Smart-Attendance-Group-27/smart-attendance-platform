@@ -31,10 +31,13 @@ class LecturerReportService:
         self,
         pool: asyncpg.Pool,
         user_id: UUID,
+        timezone: str,
     ) -> LecturerOverviewRecord:
         async with pool.acquire() as connection:
             lecturer_id = await self._resolve_active_lecturer_id(connection, user_id)
-            return await self._repository.get_overview_for_lecturer(connection, lecturer_id)
+            return await self._repository.get_overview_for_lecturer(
+                connection, lecturer_id, timezone
+            )
 
     async def get_course_session_report_for_user(
         self,

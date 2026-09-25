@@ -33,6 +33,8 @@ class ManualReviewQueueItemRecord:
     review_status: str | None
     decision_reason: str | None
     reviewed_at: datetime | None
+    # The similarity threshold that was configured for the face comparison.
+    face_similarity_threshold: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -80,6 +82,7 @@ _QUEUE_COLUMNS = """
     face.validation_status AS face_status,
     face.similarity_score AS face_similarity_score,
     face.liveness_passed AS face_liveness_passed,
+    face.similarity_threshold AS face_similarity_threshold,
     qr.validation_status AS qr_status,
     review.review_status,
     review.decision_reason,
@@ -114,8 +117,11 @@ _QUEUE_JOINS = """
         LIMIT 1
     ) AS geofence ON TRUE
     LEFT JOIN LATERAL (
-        SELECT f.validation_status, f.similarity_score, f.liveness_passed
+        SELECT f.validation_status, f.similarity_score, f.liveness_passed,
+               config.similarity_threshold
         FROM face_verification.face_validation_attempts AS f
+        LEFT JOIN face_verification.verification_configs AS config
+            ON config.id = f.verification_config_id
         WHERE f.verification_attempt_id = va.id
         ORDER BY f.attempt_number DESC
         LIMIT 1
@@ -151,6 +157,7 @@ def _row_to_queue_item(row: asyncpg.Record) -> ManualReviewQueueItemRecord:
         face_status=row["face_status"],
         face_similarity_score=row["face_similarity_score"],
         face_liveness_passed=row["face_liveness_passed"],
+        face_similarity_threshold=row["face_similarity_threshold"],
         qr_status=row["qr_status"],
         review_status=row["review_status"],
         decision_reason=row["decision_reason"],

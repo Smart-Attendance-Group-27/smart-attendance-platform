@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { getSessionDetail } from "@/services/lecturerService";
-import type { ApiLecturerSession, ApiSessionStudent } from "@/lib/api/lecturer";
+import { getReviewCases, getSessionDetail } from "@/services/lecturerService";
+import { CoreBackendError } from "@/lib/api/coreBackend";
+import type { ApiLecturerSession, ApiManualReviewQueueItem, ApiSessionStudent } from "@/lib/api/lecturer";
 
 // lecturerService.ts is `import "server-only"` — outside Next's own build,
 // that import throws by design. Vitest runs this file directly, not through
@@ -14,13 +15,14 @@ vi.mock("@/lib/api/mode", () => ({
   isWebMockMode: vi.fn().mockReturnValue(false),
 }));
 
-const { getLecturerSessionDetail, getLecturerSessionStudents } = vi.hoisted(() => ({
+const { getLecturerSessionDetail, getLecturerSessionStudents, getManualReviewQueue } = vi.hoisted(() => ({
   getLecturerSessionDetail: vi.fn(),
   getLecturerSessionStudents: vi.fn(),
+  getManualReviewQueue: vi.fn(),
 }));
 vi.mock("@/lib/api/lecturer", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/lecturer")>();
-  return { ...actual, getLecturerSessionDetail, getLecturerSessionStudents };
+  return { ...actual, getLecturerSessionDetail, getLecturerSessionStudents, getManualReviewQueue };
 });
 
 const baseSession: ApiLecturerSession = {
@@ -82,9 +84,86 @@ describe("getSessionDetail", () => {
     expect(detail?.cancellationReason).toBe("The lecturer is unwell.");
   });
 
-  it("returns null when the session cannot be found", async () => {
-    getLecturerSessionDetail.mockRejectedValue(new Error("not found"));
+  it("returns null when the backend says the session does not exist", async () => {
+    getLecturerSessionDetail.mockRejectedValue(new CoreBackendError("not found", 404, "/x"));
 
     expect(await getSessionDetail("missing-session")).toBeNull();
+  });
+
+  it.each([500, 401, 403])("does not report a %i failure as not found", async (status) => {
+    getLecturerSessionDetail.mockRejectedValue(new CoreBackendError("failed", status, "/x"));
+
+    await expect(getSessionDetail("session-1")).rejects.toBeInstanceOf(CoreBackendError);
+  });
+
+  it("does not report a network failure as not found", async () => {
+    getLecturerSessionDetail.mockRejectedValue(new TypeError("fetch failed"));
+
+    await expect(getSessionDetail("session-1")).rejects.toThrow("fetch failed");
+  });
+});
+
+const baseReviewItem: ApiManualReviewQueueItem = {
+  verificationAttemptId: "attempt-1",
+  sessionId: "session-1",
+  courseCode: "CS3203",
+  courseName: "Software Engineering Project",
+  classroomCode: "LT-301",
+  scheduledStartAt: "2026-09-22T09:00:00.000Z",
+  studentId: "student-1",
+  registrationNumber: "230701A",
+  fullName: "Test Student",
+  failureReason: null,
+  startedAt: "2026-09-22T09:05:00.000Z",
+  completedAt: null,
+  geofenceStatus: null,
+  geofenceFailureReason: null,
+  faceStatus: null,
+  faceSimilarityScore: null,
+  faceSimilarityThreshold: null,
+  faceLivenessPassed: null,
+  qrStatus: null,
+  reviewStatus: "pending",
+  decisionReason: null,
+  reviewedAt: null,
+};
+
+describe("getReviewCases", () => {
+  it("does not invent a duplicate submission, geofence pass or face score for unknown data", async () => {
+    getManualReviewQueue.mockResolvedValue([{ ...baseReviewItem, failureReason: "SOMETHING_ELSE" }]);
+
+    const [review] = await getReviewCases();
+
+    expect(review.issueType).toBe("other_verification_issue");
+    expect(review.issueLabel).toBe("Something Else");
+    expect(review.geofenceResult).toBe("not_recorded");
+    expect(review.faceScorePercent).toBeNull();
+    expect(review.livenessPassed).toBeNull();
+    expect(review.geofenceDistanceMeters).toBeNull();
+    expect(review.faceThresholdPercent).toBeNull();
+  });
+
+  it("carries the configured face threshold through as a percentage", async () => {
+    getManualReviewQueue.mockResolvedValue([
+      { ...baseReviewItem, faceStatus: "failed", faceSimilarityScore: 0.72, faceSimilarityThreshold: 0.725 },
+    ]);
+
+    const [review] = await getReviewCases();
+
+    expect(review.faceScorePercent).toBe(72);
+    expect(review.faceThresholdPercent).toBe(72.5);
+  });
+
+  it("reports a passed geofence and a recorded face score when the backend has them", async () => {
+    getManualReviewQueue.mockResolvedValue([
+      { ...baseReviewItem, geofenceStatus: "passed", faceStatus: "failed", faceSimilarityScore: 0.48, faceLivenessPassed: true },
+    ]);
+
+    const [review] = await getReviewCases();
+
+    expect(review.issueType).toBe("low_confidence_face_match");
+    expect(review.geofenceResult).toBe("within_radius");
+    expect(review.faceScorePercent).toBe(48);
+    expect(review.livenessPassed).toBe(true);
   });
 });

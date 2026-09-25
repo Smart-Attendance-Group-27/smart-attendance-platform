@@ -132,7 +132,7 @@ export const mockLecturerQrBatches: Record<string, LecturerQrBatch[]> = {
 
 export const mockLecturerTimetable: ApiLecturerTimetableEntry[] = [{
   id: "mock-timetable", courseCode: "CS3203",
-  courseName: "Software Engineering Project", dayOfWeek: (new Date().getDay() + 6) % 7,
+  courseName: "Software Engineering Project", dayOfWeek: ((new Date().getDay() + 6) % 7) + 1,
   startTime: time(-10), endTime: time(80), classroomCode: "LT-301", buildingName: "Main",
 }];
 

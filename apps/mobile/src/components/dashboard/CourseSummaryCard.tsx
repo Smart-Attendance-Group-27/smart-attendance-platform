@@ -1,7 +1,9 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { lightColors, radii, spacing } from '../../theme';
-import type { CourseSummary } from './dashboardMockData';
+import type { CourseSummary } from './dashboardTypes';
+
+export const COURSE_CARD_HEIGHT = 168;
 
 type CourseSummaryCardProps = {
   course: CourseSummary;
@@ -9,16 +11,20 @@ type CourseSummaryCardProps = {
 
 export function CourseSummaryCard({ course }: CourseSummaryCardProps) {
   return (
-    <View style={[styles.card, { backgroundColor: course.color }]}>
+    <View testID="course-summary-card" style={[styles.card, { backgroundColor: course.color }]}>
       <View style={styles.decorationLarge} />
       <View style={styles.decorationSmall} />
       <Text style={styles.code}>{course.code}</Text>
-      <Text style={styles.title}>{course.title}</Text>
-      <Text style={styles.lecturer}>{course.lecturer}</Text>
+      <Text numberOfLines={2} style={styles.title}>{course.title}</Text>
+      <Text numberOfLines={1} style={styles.lecturer}>{course.lecturer}</Text>
       <View style={styles.meta}>
         <View>
-          <Text style={styles.percentage}>{course.attendancePercentage}%</Text>
-          <Text style={styles.percentageLabel}>Attendance</Text>
+          <Text style={styles.percentage}>
+            {course.attendancePercentage === null ? '—' : `${course.attendancePercentage}%`}
+          </Text>
+          <Text style={styles.percentageLabel}>
+            {course.attendancePercentage === null ? 'No sessions yet' : 'Attendance'}
+          </Text>
         </View>
         <View style={styles.sessionsChip}>
           <Text style={styles.sessionsText}>
@@ -33,7 +39,7 @@ export function CourseSummaryCard({ course }: CourseSummaryCardProps) {
 const styles = StyleSheet.create({
   card: {
     width: 250,
-    minHeight: 164,
+    height: COURSE_CARD_HEIGHT,
     overflow: 'hidden',
     padding: spacing.md,
     borderRadius: radii.card,

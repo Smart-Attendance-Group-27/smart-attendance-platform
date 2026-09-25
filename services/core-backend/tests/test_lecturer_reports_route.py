@@ -86,8 +86,10 @@ def build_at_risk_student() -> AtRiskStudentRecord:
 class StubLecturerReportService:
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
+        self.overview_timezone: str | None = None
 
-    async def get_overview_for_user(self, pool, user_id):
+    async def get_overview_for_user(self, pool, user_id, timezone):
+        self.overview_timezone = timezone
         if self.error is not None:
             raise self.error
         return build_overview()
@@ -123,6 +125,16 @@ def build_client(jwks_document, service: StubLecturerReportService) -> TestClien
 def client(jwks_document):
     with build_client(jwks_document, StubLecturerReportService()) as test_client:
         yield test_client
+
+
+def test_overview_uses_configured_timezone(jwks_document, make_access_token) -> None:
+    service = StubLecturerReportService()
+    with build_client(jwks_document, service) as test_client:
+        test_client.app.state.settings = build_settings(app_timezone="Asia/Colombo")
+        response = test_client.get(OVERVIEW_URL, headers=authorize(lecturer_token(make_access_token)))
+
+    assert response.status_code == 200
+    assert service.overview_timezone == "Asia/Colombo"
 
 
 def test_returns_dashboard_overview(client: TestClient, make_access_token) -> None:

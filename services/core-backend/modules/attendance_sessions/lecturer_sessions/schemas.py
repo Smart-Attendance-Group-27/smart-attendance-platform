@@ -24,6 +24,12 @@ class CreateSessionRequest(BaseModel):
     requires_qr: bool = Field(default=False, alias="requiresQr")
 
 
+class SessionCreationOptionsResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    face_attendance_enabled: bool = Field(alias="faceAttendanceEnabled")
+
+
 class CancelSessionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -31,6 +31,7 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
   { href: "/admin/dashboard", label: "Overview", icon: OverviewIcon },
   { href: "/admin/users", label: "Users", icon: UsersIcon },
   { href: "/admin/academic", label: "Academic data", icon: CoursesIcon },
+  { href: "/admin/corrections", label: "Corrections", icon: ReviewIcon },
   { href: "/admin/classrooms", label: "Classrooms", icon: BuildingIcon },
   { href: "/admin/policies", label: "Policies", icon: AdminIcon },
   { href: "/admin/reports", label: "Reports", icon: ReportsIcon },

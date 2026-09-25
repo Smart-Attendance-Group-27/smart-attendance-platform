@@ -1,12 +1,16 @@
 import { Tabs } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { getTabBarHeight } from '../../../components/navigation/tabBarLayout';
 import {
   lightColors,
   typography,
 } from '../../../theme';
 
 export default function StudentTabsLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       backBehavior="initialRoute"
@@ -23,7 +27,7 @@ export default function StudentTabsLayout() {
           ...typography.caption,
         },
         tabBarStyle: {
-          height: 64,
+          height: getTabBarHeight(insets.bottom),
           backgroundColor: lightColors.surface,
           borderTopColor: lightColors.border,
         },

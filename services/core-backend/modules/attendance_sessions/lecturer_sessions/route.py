@@ -21,6 +21,7 @@ from modules.attendance_sessions.lecturer_sessions.schemas import (
     CancelSessionRequest,
     CreateSessionRequest,
     LecturerSessionResponse,
+    SessionCreationOptionsResponse,
     SessionStudentResponse,
 )
 from modules.attendance_sessions.lecturer_sessions.service import LecturerSessionService
@@ -74,6 +75,22 @@ async def list_my_attendance_sessions(
         raise HTTPException(status.HTTP_404_NOT_FOUND, _PROFILE_NOT_FOUND_DETAIL) from error
 
     return [LecturerSessionResponse.from_record(session) for session in sessions]
+
+
+@router.get(
+    "/creation-options",
+    response_model=SessionCreationOptionsResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_session_creation_options(
+    http_request: Request,
+    current_lecturer: CurrentLecturer,
+) -> SessionCreationOptionsResponse:
+    # Lets the dashboard hide options the create endpoint would reject.
+    settings = http_request.app.state.settings
+    return SessionCreationOptionsResponse(
+        face_attendance_enabled=not settings.pilot_disable_face_attendance,
+    )
 
 
 @router.get(

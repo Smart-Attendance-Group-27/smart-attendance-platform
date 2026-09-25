@@ -58,7 +58,12 @@ function toCourse(value: unknown): Course | null {
     semester: response.semester,
     attendedSessions: response.attendedSessions,
     totalSessions: response.totalSessions,
-    attendancePercentage: response.attendancePercentage,
+    // The API reports 0 while a course has no closed session, so the count is
+    // what tells "no data yet" apart from a real 0%.
+    attendancePercentage: response.totalSessions === 0 ? null : response.attendancePercentage,
+    // Older servers do not send the threshold.
+    attendanceThresholdPercent:
+      typeof response.attendanceThresholdPercent === 'number' ? response.attendanceThresholdPercent : null,
     sessions: response.sessions as Course['sessions'],
     attendanceRecords: response.attendanceRecords as Course['attendanceRecords'],
   };

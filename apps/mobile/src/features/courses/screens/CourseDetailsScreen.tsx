@@ -170,7 +170,9 @@ export function CourseDetailsScreen({
             <View style={styles.dashedCard}>
               <View style={styles.dashedCardRow}>
                 <Text style={styles.dashedCardLabel}>Current attendance</Text>
-                <Text style={styles.dashedCardValue}>{course.attendancePercentage}%</Text>
+                <Text style={styles.dashedCardValue}>
+                  {course.attendancePercentage === null ? '—' : `${course.attendancePercentage}%`}
+                </Text>
               </View>
               <Text style={styles.dashedCardSubtext}>
                 {course.attendedSessions} of {course.totalSessions} completed sessions attended
@@ -215,15 +217,23 @@ export function CourseDetailsScreen({
           <View>
             {/* Elevated Attendance Summary Card */}
             <View style={styles.elevatedCard}>
-              <Text style={styles.attendancePercentageBig}>{course.attendancePercentage}%</Text>
-              <Text style={styles.attendanceTarget}>Current attendance · Target 80%</Text>
+              <Text style={styles.attendancePercentageBig}>
+                {course.attendancePercentage === null ? '—' : `${course.attendancePercentage}%`}
+              </Text>
+              <Text style={styles.attendanceTarget}>
+                {course.attendancePercentage === null
+                  ? 'No completed sessions yet'
+                  : course.attendanceThresholdPercent === null
+                    ? 'Current attendance'
+                    : `Current attendance · Target ${course.attendanceThresholdPercent}%`}
+              </Text>
 
               {/* Progress Bar */}
               <View style={styles.progressTrack}>
                 <View
                   style={[
                     styles.progressFill,
-                    { width: `${course.attendancePercentage}%` },
+                    { width: `${course.attendancePercentage ?? 0}%` },
                   ]}
                 />
               </View>

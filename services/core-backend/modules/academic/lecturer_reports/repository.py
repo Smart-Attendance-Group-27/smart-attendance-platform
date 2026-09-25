@@ -46,6 +46,7 @@ class AtRiskStudentRecord:
     last_attended_at: datetime | None
 
 
+# Used only when an offering has no attendance_threshold of its own.
 AT_RISK_THRESHOLD_PERCENT = 70
 
 
@@ -71,6 +72,7 @@ class LecturerReportRepository:
         self,
         connection: asyncpg.Connection,
         lecturer_id: UUID,
+        timezone: str,
     ) -> LecturerOverviewRecord:
         row = await connection.fetchrow(
             """
@@ -103,7 +105,8 @@ class LecturerReportRepository:
                         ON assignment.course_offering_id = offering.id
                     WHERE assignment.lecturer_id = $1
                       AND session.cancelled_at IS NULL
-                      AND session.scheduled_start_at::date = now()::date
+                      AND (session.scheduled_start_at AT TIME ZONE $2)::date
+                          = (now() AT TIME ZONE $2)::date
                 ) AS today_session_count,
                 (
                     SELECT
@@ -144,6 +147,7 @@ class LecturerReportRepository:
                 ) AS pending_review_count
             """,
             lecturer_id,
+            timezone,
         )
         return LecturerOverviewRecord(
             active_course_count=row["active_course_count"],
@@ -307,12 +311,14 @@ class LecturerReportRepository:
                 ON student.id = roster.student_id
             WHERE assignment.lecturer_id = $1
               AND session.closed_at IS NOT NULL AND session.cancelled_at IS NULL
-            GROUP BY student.id, student.registration_number, full_name, course.course_code
+            GROUP BY
+                student.id, student.registration_number, full_name, course.course_code,
+                offering.id, offering.attendance_threshold
             HAVING
                 COUNT(*) > 0
                 AND (
                     100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late')) / COUNT(*)
-                ) < $2
+                ) < COALESCE(offering.attendance_threshold, $2)
             ORDER BY attendance_rate_percent ASC
             """,
             lecturer_id,

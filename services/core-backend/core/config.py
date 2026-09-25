@@ -87,6 +87,10 @@ class Settings(BaseSettings):
     face_verification_timeout_seconds: float = Field(default=30, gt=0)
     pilot_disable_face_attendance: bool = False
 
+    # IANA timezone used where the backend must decide what "today" means for
+    # people (for example the lecturer dashboard). Stored timestamps stay UTC.
+    app_timezone: str = "Asia/Colombo"
+
     # Expo Push Notification Service.
     # expo_push_timeout_seconds: how long to wait for a response from Expo.
     # expo_access_token: required only when Expo Enhanced Push Security is
@@ -316,3 +320,21 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+class _EnvironmentOnlySettings(BaseSettings):
+    """Reads just the environment name, so it works before the database and
+    identity settings exist (app construction happens at import time)."""
+
+    app_environment: str = "development"
+
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE_PATH,
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
+
+def get_app_environment() -> str:
+    return _EnvironmentOnlySettings().app_environment.strip().lower()

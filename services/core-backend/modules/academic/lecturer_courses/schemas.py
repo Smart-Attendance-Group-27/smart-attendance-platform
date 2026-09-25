@@ -25,9 +25,8 @@ class LecturerTimetableEntryResponse(BaseModel):
     id: UUID
     course_code: str = Field(alias="courseCode")
     course_name: str = Field(alias="courseName")
-    # Raw academic.timetable_entries.day_of_week value (0-6) — the seed data's
-    # own convention isn't documented, so this is passed through rather than
-    # guessed at; map to a day name at the presentation layer once confirmed.
+    # Raw academic.timetable_entries.day_of_week value, ISO-style:
+    # 1 = Monday ... 7 = Sunday. Mapped to a day name by the client.
     day_of_week: int = Field(alias="dayOfWeek")
     start_time: time = Field(alias="startTime")
     end_time: time = Field(alias="endTime")
