@@ -41,7 +41,7 @@ export default async function LecturerDashboardPage() {
       <Notice title="Academic data source:">
         {isWebMockMode()
           ? "Mock preview: session and roster data shown here is illustrative."
-          : "Courses, enrolments, lecturer assignments, and timetable entries are synchronised from authorised University systems. Lecturers have read-only access to these records."}
+          : "Courses, enrolments, lecturer assignments, and timetable entries are maintained by administrators. Lecturers have read-only access to these records."}
       </Notice>
 
       <SummaryStrip

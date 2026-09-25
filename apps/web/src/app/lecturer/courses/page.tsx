@@ -34,8 +34,7 @@ export default async function LecturerCoursesPage() {
 
       <Notice title="Read-only academic information.">
         Course definitions, enrolments, lecturer assignments, and timetable records are
-        maintained through authorised University systems. Corrections are submitted for
-        administrative review.
+        maintained by administrators. Corrections are submitted for administrative review.
       </Notice>
 
       <AssignedCoursesCard courses={courses} semesterLabel={semesterLabel} />

@@ -23,8 +23,8 @@ export default async function AdminDashboardPage() {
       />
 
       <Notice variant="warning" title="Administrator-only controls.">
-        Institutional geofences, attendance policies, user access, and academic-source
-        synchronisation can only be changed by authorised administrators.
+        Institutional geofences, attendance policies, user access, and academic data
+        can only be changed by authorised administrators.
       </Notice>
 
       <SummaryStrip

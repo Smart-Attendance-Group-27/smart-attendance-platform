@@ -156,14 +156,14 @@ export async function getLecturerCourses(): Promise<LecturerCoursesData> {
       courseCode: entry.courseCode,
       courseName: entry.courseName,
       room: entry.classroomCode ?? "—",
-      source: "Not synchronised from an external source",
+      source: "Maintained by administrators",
     })),
     sourceStatus: [
       {
         id: "academic-source",
         time: "—",
         title: "Academic data source",
-        detail: "No external LMS/SIS source is connected; course and timetable data is managed directly.",
+        detail: "No external LMS/SIS is connected. Administrators maintain course and timetable data directly.",
         status: "review",
       },
     ],

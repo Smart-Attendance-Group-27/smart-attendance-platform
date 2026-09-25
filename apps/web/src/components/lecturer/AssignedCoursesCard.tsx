@@ -93,7 +93,7 @@ export function AssignedCoursesCard({
       <DataTable<LecturerCourse>
         emptyTitle={isFiltered ? "No courses match these filters" : "No assigned courses yet"}
         emptyDescription={
-          isFiltered ? undefined : "Courses synchronised from University systems will appear here."
+          isFiltered ? undefined : "Courses an administrator assigns to you will appear here."
         }
         columns={[
           { key: "code", header: "Code", render: (row) => <span className="font-semibold text-[var(--link)]">{row.courseCode}</span> },
