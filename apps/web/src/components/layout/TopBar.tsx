@@ -1,6 +1,5 @@
 import Image from "next/image";
 import uniLogo from "../../../assests/Uni.jpg";
-import { BellIcon, SearchIcon } from "@/components/icons";
 import { AccountMenu } from "@/components/layout/AccountMenu";
 import { WebRole } from "@/lib/auth/roles";
 
@@ -30,29 +29,7 @@ export function TopBar({ userName, role }: TopBarProps) {
         </div>
       </div>
 
-      <nav aria-label="University systems" className="ml-4 hidden h-full items-center xl:flex">
-        <a
-          className="flex h-full items-center border-l border-white/10 px-4 text-[13px] text-white hover:bg-black/15"
-          href="#"
-        >
-          Moodle
-        </a>
-        <a
-          className="flex h-full items-center border-l border-white/10 px-4 text-[13px] text-white hover:bg-black/15"
-          href="#"
-        >
-          Help
-        </a>
-      </nav>
-
       <div className="ml-auto flex h-full items-center gap-1 pr-3">
-        <SearchIcon aria-hidden="true" className="hidden text-white/70 sm:block" />
-        <span className="relative hidden text-white/70 sm:block">
-          <BellIcon aria-hidden="true" />
-          <span className="absolute -right-1 -top-1 grid h-[15px] min-w-[15px] place-items-center rounded-full border-2 border-[var(--uom-blue)] bg-[#c63434] px-0.5 text-[9px] font-semibold text-white">
-            3
-          </span>
-        </span>
         <AccountMenu name={userName} roleLabel={ROLE_LABELS[role]} />
       </div>
     </header>

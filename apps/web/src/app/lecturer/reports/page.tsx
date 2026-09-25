@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/ui/PageHeader";
-import { FilterBar, FilterSelect } from "@/components/ui/FilterBar";
 import { SummaryStrip } from "@/components/ui/SummaryStrip";
 import { Card } from "@/components/ui/Card";
 import { DataTable, CellPrimary } from "@/components/ui/DataTable";
@@ -31,29 +30,14 @@ export default async function LecturerReportsPage() {
         }
       />
 
-      <div className="mb-4 border border-[var(--line)]">
-        <FilterBar>
-          <FilterSelect>
-            <option>Semester 2 · 2026</option>
-          </FilterSelect>
-          <FilterSelect>
-            <option>All assigned courses</option>
-          </FilterSelect>
-          <input type="date" defaultValue="2026-07-01" className="h-8 border border-[#c8d0d7] bg-white px-2.5 text-[11px] text-[#33414c]" />
-          <input type="date" defaultValue="2026-07-31" className="h-8 border border-[#c8d0d7] bg-white px-2.5 text-[11px] text-[#33414c]" />
-          <Button variant="primary">Update report</Button>
-        </FilterBar>
-      </div>
-
       <SummaryStrip
         items={[
-          { label: "Overall attendance", value: `${summary.overallAttendancePercent}%`, note: "Target met", noteTone: "good" },
-          { label: "Sessions completed", value: summary.sessionsCompleted, note: "Selected period" },
+          { label: "Overall attendance", value: `${summary.overallAttendancePercent}%`, note: "All closed sessions" },
+          { label: "Sessions completed", value: summary.sessionsCompleted, note: "Closed sessions" },
           {
             label: "Average late rate",
             value: `${summary.averageLateRatePercent}%`,
-            note: `Down ${Math.abs(summary.averageLateRateDeltaPercent)}%`,
-            noteTone: "good",
+            note: "Of present and late check-ins",
           },
           { label: "Students at risk", value: summary.studentsAtRiskCount, note: "Below 70% attendance", noteTone: "warn" },
         ]}
@@ -82,11 +66,6 @@ export default async function LecturerReportsPage() {
           <Card
             title="Students below attendance threshold"
             flush
-            actions={
-              <a href="#" className="text-[11px] text-[var(--link)]">
-                View all {summary.studentsAtRiskCount}
-              </a>
-            }
           >
             <DataTable<AtRiskStudent>
               emptyTitle="No students below the attendance threshold"
