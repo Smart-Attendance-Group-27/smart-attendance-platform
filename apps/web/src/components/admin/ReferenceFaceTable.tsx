@@ -1,7 +1,6 @@
 import { Card } from "@/components/ui/Card";
 import { DataTable, CellPrimary } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Button } from "@/components/ui/Button";
 import { embeddingGenerationStatusDisplay, readinessStatusDisplay } from "@/lib/status";
 import { ReferenceFaceRecord } from "@/types/admin";
 
@@ -35,16 +34,6 @@ export function ReferenceFaceTable({ records }: { records: ReferenceFaceRecord[]
           },
           { key: "generated", header: "Last generated", render: (row) => row.generatedAtLabel ?? "—" },
           { key: "checked", header: "Readiness checked", render: (row) => row.readinessCheckedAtLabel ?? "—" },
-          {
-            key: "action",
-            header: "Action",
-            align: "right",
-            render: () => (
-              <Button title="Available once reference-face governance API is integrated" disabled>
-                Revoke
-              </Button>
-            ),
-          },
         ]}
         rows={records}
         getRowKey={(row) => row.studentId}

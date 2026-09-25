@@ -4,7 +4,6 @@ import { SummaryStrip } from "@/components/ui/SummaryStrip";
 import { Card } from "@/components/ui/Card";
 import { ActivityList } from "@/components/ui/ActivityList";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Button } from "@/components/ui/Button";
 import Link from "next/link";
 import { ClassroomGeofencePanel } from "@/components/admin/ClassroomGeofencePanel";
 import { AttendancePolicyForm } from "@/components/admin/AttendancePolicyForm";
@@ -61,11 +60,6 @@ export default async function AdminDashboardPage() {
           <Card
             title="Academic-data synchronisation"
             className="border-l-4 border-l-[var(--uom-gold)]"
-            actions={
-              <Button title="Available once academic-source sync API is integrated" disabled>
-                Run sync
-              </Button>
-            }
           >
             <ActivityList
               emptyTitle="No synchronisation activity yet"

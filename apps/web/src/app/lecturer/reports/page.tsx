@@ -3,7 +3,7 @@ import { SummaryStrip } from "@/components/ui/SummaryStrip";
 import { Card } from "@/components/ui/Card";
 import { DataTable, CellPrimary } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Button } from "@/components/ui/Button";
+import { ExportCsvButton } from "@/components/ui/ExportCsvButton";
 import { LineChart } from "@/components/charts/LineChart";
 import { BarChart } from "@/components/charts/BarChart";
 import { getLecturerReports } from "@/services/lecturerService";
@@ -19,14 +19,20 @@ export default async function LecturerReportsPage() {
         title="Attendance reports"
         description="Analyse attendance across assigned courses and scheduled sessions."
         actions={
-          <>
-            <Button title="Available once the report export API is integrated" disabled>
-              Export CSV
-            </Button>
-            <Button variant="primary" title="Available once the report export API is integrated" disabled>
-              Generate PDF report
-            </Button>
-          </>
+          <ExportCsvButton
+            filenamePrefix="students-below-threshold"
+            label="Export at-risk list"
+            headers={["Index", "Student", "Course", "Attendance (%)", "Late count", "Last attended", "Risk level"]}
+            rows={atRiskStudents.map((student) => [
+              student.studentIndex,
+              student.studentName,
+              student.courseCode,
+              student.attendanceRatePercent,
+              student.lateCount,
+              student.lastAttendedLabel,
+              student.riskLevel,
+            ])}
+          />
         }
       />
 
