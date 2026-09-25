@@ -84,6 +84,7 @@ describe("geofenceResultDisplay", () => {
     expect(geofenceResultDisplay("within_radius").tone).toBe("success");
     expect(geofenceResultDisplay("boundary").tone).toBe("warning");
     expect(geofenceResultDisplay("outside_radius").tone).toBe("danger");
+    expect(geofenceResultDisplay("not_recorded")).toEqual({ label: "Not recorded", tone: "neutral" });
   });
 });
 

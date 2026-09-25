@@ -285,7 +285,7 @@ function deriveReviewIssue(item: ApiManualReviewQueueItem): { issueType: ReviewI
     return { issueType: "expired_qr_submission", issueLabel: "QR verification issue" };
   }
   return {
-    issueType: "duplicate_submission",
+    issueType: "other_verification_issue",
     issueLabel: item.failureReason ? humanizeReason(item.failureReason) : "Verification issue",
   };
 }
@@ -293,9 +293,8 @@ function deriveReviewIssue(item: ApiManualReviewQueueItem): { issueType: ReviewI
 function deriveGeofenceResult(item: ApiManualReviewQueueItem): ReviewCase["geofenceResult"] {
   if (item.geofenceFailureReason === "NEAR_GEOFENCE_BOUNDARY") return "boundary";
   if (item.geofenceStatus === "failed") return "outside_radius";
-  // Geofence gates face verification — if a face attempt exists at all, the
-  // geofence step necessarily passed first.
-  return "within_radius";
+  if (item.geofenceStatus === "passed") return "within_radius";
+  return "not_recorded";
 }
 
 function humanizeReason(reason: string): string {
@@ -306,11 +305,11 @@ function humanizeReason(reason: string): string {
     .join(" ");
 }
 
-function buildReviewReason(item: ApiManualReviewQueueItem, faceScorePercent: number): string {
+function buildReviewReason(item: ApiManualReviewQueueItem, faceScorePercent: number | null): string {
   if (item.geofenceFailureReason === "NEAR_GEOFENCE_BOUNDARY") {
     return "The student's location reading was near the edge of the configured geofence radius.";
   }
-  if (item.faceStatus === "failed") {
+  if (item.faceStatus === "failed" && faceScorePercent !== null) {
     return `The submitted face similarity score (${faceScorePercent}%) did not pass the configured threshold.`;
   }
   if (item.qrStatus === "failed") {
@@ -326,7 +325,7 @@ export async function getReviewCases(): Promise<ReviewCase[]> {
   const items = await getManualReviewQueue();
 
   return items.map((item) => {
-    const faceScorePercent = Math.round((item.faceSimilarityScore ?? 0) * 100);
+    const faceScorePercent = item.faceSimilarityScore === null ? null : Math.round(item.faceSimilarityScore * 100);
     const { issueType, issueLabel } = deriveReviewIssue(item);
 
     return {
@@ -343,10 +342,10 @@ export async function getReviewCases(): Promise<ReviewCase[]> {
       geofenceResult: deriveGeofenceResult(item),
       time: formatClockTime(item.startedAt),
       status: "pending",
-      livenessPassed: item.faceLivenessPassed ?? false,
+      livenessPassed: item.faceLivenessPassed,
       // No distance-from-centre value is exposed on the review queue yet —
       // only the pass/fail/boundary outcome is.
-      geofenceDistanceMeters: 0,
+      geofenceDistanceMeters: null,
       qrEventLabel: item.qrStatus === null ? "Not required" : item.qrStatus === "passed" ? "Submitted and verified" : "Submitted but not verified",
       reviewReason: buildReviewReason(item, faceScorePercent),
     };

@@ -119,7 +119,9 @@ export function reviewCaseStatusDisplay(status: "pending" | "information"): Stat
   return status === "pending" ? { label: "Pending", tone: "warning" } : { label: "Information", tone: "info" };
 }
 
-export function geofenceResultDisplay(result: "within_radius" | "boundary" | "outside_radius"): StatusDisplay {
+export function geofenceResultDisplay(
+  result: "within_radius" | "boundary" | "outside_radius" | "not_recorded",
+): StatusDisplay {
   switch (result) {
     case "within_radius":
       return { label: "Within radius", tone: "success" };
@@ -127,6 +129,8 @@ export function geofenceResultDisplay(result: "within_radius" | "boundary" | "ou
       return { label: "Boundary", tone: "warning" };
     case "outside_radius":
       return { label: "Outside radius", tone: "danger" };
+    case "not_recorded":
+      return { label: "Not recorded", tone: "neutral" };
   }
 }
 

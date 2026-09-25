@@ -123,8 +123,8 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
                   key: "face",
                   header: "Face score",
                   render: (row) => (
-                    <StatusBadge tone={row.faceScorePercent < 70 ? "danger" : "success"}>
-                      {row.faceScorePercent}%
+                    <StatusBadge tone={row.faceScorePercent === null ? "neutral" : row.faceScorePercent < 70 ? "danger" : "success"}>
+                      {row.faceScorePercent === null ? "—" : `${row.faceScorePercent}%`}
                     </StatusBadge>
                   ),
                 },
@@ -181,20 +181,24 @@ export function ReviewWorkspace({ initialCases }: { initialCases: ReviewCase[] }
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <div className="border border-[var(--line)] bg-white p-2.5">
                   <small className="block text-[9px] uppercase text-[var(--muted)]">Face match</small>
-                  <strong className={`mt-1 block text-[11px] ${selected.faceScorePercent < 70 ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>
-                    {selected.faceScorePercent}% {selected.faceScorePercent < 70 ? "· Below threshold" : ""}
+                  <strong className={`mt-1 block text-[11px] ${selected.faceScorePercent === null ? "" : selected.faceScorePercent < 70 ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>
+                    {selected.faceScorePercent === null
+                      ? "Not recorded"
+                      : `${selected.faceScorePercent}% ${selected.faceScorePercent < 70 ? "· Below threshold" : ""}`}
                   </strong>
                 </div>
                 <div className="border border-[var(--line)] bg-white p-2.5">
                   <small className="block text-[9px] uppercase text-[var(--muted)]">Liveness</small>
-                  <strong className="mt-1 block text-[11px] text-[var(--success)]">
-                    {selected.livenessPassed ? "Passed" : "Failed"}
+                  <strong className={`mt-1 block text-[11px] ${selected.livenessPassed === null ? "" : selected.livenessPassed ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>
+                    {selected.livenessPassed === null ? "Not recorded" : selected.livenessPassed ? "Passed" : "Failed"}
                   </strong>
                 </div>
                 <div className="border border-[var(--line)] bg-white p-2.5">
                   <small className="block text-[9px] uppercase text-[var(--muted)]">Geofence</small>
-                  <strong className="mt-1 block text-[11px] text-[var(--success)]">
-                    Within {selected.geofenceDistanceMeters} m
+                  <strong className="mt-1 block text-[11px]">
+                    {selected.geofenceDistanceMeters === null
+                      ? geofenceResultDisplay(selected.geofenceResult).label
+                      : `Within ${selected.geofenceDistanceMeters} m`}
                   </strong>
                 </div>
                 <div className="border border-[var(--line)] bg-white p-2.5">

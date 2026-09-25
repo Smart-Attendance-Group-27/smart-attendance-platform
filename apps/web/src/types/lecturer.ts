@@ -204,7 +204,8 @@ export type ReviewIssueType =
   | "low_confidence_face_match"
   | "borderline_geofence"
   | "expired_qr_submission"
-  | "duplicate_submission";
+  | "duplicate_submission"
+  | "other_verification_issue";
 
 export type ReviewCaseStatus = "pending" | "information";
 
@@ -217,12 +218,14 @@ export type ReviewCase = {
   courseCode: string;
   issueType: ReviewIssueType;
   issueLabel: string;
-  faceScorePercent: number;
-  geofenceResult: "within_radius" | "boundary" | "outside_radius";
+  // null when no face comparison was recorded for the attempt.
+  faceScorePercent: number | null;
+  geofenceResult: "within_radius" | "boundary" | "outside_radius" | "not_recorded";
   time: string;
   status: ReviewCaseStatus;
-  livenessPassed: boolean;
-  geofenceDistanceMeters: number;
+  // null when the backend recorded no liveness result / exposes no distance.
+  livenessPassed: boolean | null;
+  geofenceDistanceMeters: number | null;
   qrEventLabel: string;
   reviewReason: string;
 };
