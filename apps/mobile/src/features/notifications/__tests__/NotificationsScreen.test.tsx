@@ -58,4 +58,48 @@ describe('NotificationsScreen', () => {
       expect(markAsRead).toHaveBeenCalledWith('attendance-opening');
     });
   });
+
+  test('opens the related screen after marking a notification read', async () => {
+    const service = new MockNotificationsService();
+    const onOpenNotification = jest.fn();
+    const { findByLabelText } = await render(
+      <NotificationsScreen notificationsService={service} onOpenNotification={onOpenNotification} />,
+    );
+
+    await fireEvent.press(await findByLabelText(/Attendance opens in 10 minutes.*Unread/));
+    await waitFor(() => expect(onOpenNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'attendance-opening' }),
+    ));
+  });
+
+  test('marks all unread notifications with one service request', async () => {
+    const service = new MockNotificationsService();
+    const markAllAsRead = jest.spyOn(service, 'markAllAsRead');
+    const { findByRole } = await render(
+      <NotificationsScreen notificationsService={service} />,
+    );
+
+    await fireEvent.press(await findByRole('button', { name: 'Mark all notifications as read' }));
+    await waitFor(() => expect(markAllAsRead).toHaveBeenCalledTimes(1));
+    expect(await service.getUnreadCount()).toBe(0);
+  });
+
+  test('loads more notifications when the first page is full', async () => {
+    const notifications = Array.from({ length: 31 }, (_, index) => ({
+      id: `item-${index}`,
+      title: `Notice ${index}`,
+      message: 'Message',
+      type: 'general' as const,
+      createdAt: '2026-09-25T12:00:00Z',
+      isRead: true,
+    }));
+    const service = new MockNotificationsService({ initialNotifications: notifications });
+    const { findByRole, findByText, queryByText } = await render(
+      <NotificationsScreen notificationsService={service} />,
+    );
+
+    expect(queryByText('Notice 30')).toBeNull();
+    await fireEvent.press(await findByRole('button', { name: 'Load more notifications' }));
+    expect(await findByText('Notice 30')).toBeTruthy();
+  });
 });

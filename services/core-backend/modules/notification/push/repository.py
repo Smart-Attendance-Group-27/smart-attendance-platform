@@ -17,6 +17,7 @@ from modules.notification.push.state import (
 class ClaimedDelivery:
     id: UUID
     notification_id: UUID
+    notification_code: str
     device_token_id: UUID
     expo_push_token: str
     attempt_number: int
@@ -60,6 +61,7 @@ class PushDeliveryRepository:
                     SELECT
                         da.id,
                         da.notification_id,
+                        n.notification_type AS notification_code,
                         da.device_token_id,
                         COALESCE(da.attempt_number, 0) AS attempt_number,
                         dt.expo_push_token,
@@ -117,6 +119,7 @@ class PushDeliveryRepository:
             ClaimedDelivery(
                 id=row["id"],
                 notification_id=row["notification_id"],
+                notification_code=row["notification_code"],
                 device_token_id=row["device_token_id"],
                 expo_push_token=row["expo_push_token"],
                 attempt_number=int(row["attempt_number"]) + 1,

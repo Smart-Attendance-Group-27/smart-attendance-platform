@@ -17,6 +17,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import type { CoreApiClient } from '../../../services/api/coreApiClient';
+import { setPushRegistrationStatus } from './pushRegistrationStatus';
 
 const deviceRegistrationPath = '/api/v1/notifications/devices';
 
@@ -34,7 +35,26 @@ export type PushRegistrationResult =
   | { readonly status: 'registered' }
   | { readonly status: 'permission-denied' }
   | { readonly status: 'not-a-physical-device' }
+  | { readonly status: 'unsupported-platform' }
   | { readonly status: 'error'; readonly reason: string };
+
+type PushNotificationsApi = Pick<typeof Notifications,
+  'setNotificationChannelAsync' | 'getPermissionsAsync' |
+  'requestPermissionsAsync' | 'getExpoPushTokenAsync' | 'addPushTokenListener'>;
+
+export type PushRegistrationOptions = {
+  notifications?: PushNotificationsApi;
+  isDevice?: boolean;
+  platform?: string;
+  projectId?: string;
+};
+
+let lastRegisteredToken: string | undefined;
+
+export function resetPushRegistrationStatus(): void {
+  lastRegisteredToken = undefined;
+  setPushRegistrationStatus('checking');
+}
 
 /**
  * Request permission, obtain an Expo push token, and register it with the
@@ -42,90 +62,90 @@ export type PushRegistrationResult =
  */
 export async function registerForPushNotifications(
   coreApiClient: CoreApiClient,
+  options: PushRegistrationOptions = {},
 ): Promise<PushRegistrationResult> {
+  const notificationApi = options.notifications ?? Notifications;
+  setPushRegistrationStatus('checking');
+  const finish = (result: PushRegistrationResult): PushRegistrationResult => {
+    setPushRegistrationStatus(result.status);
+    return result;
+  };
+  if ((options.platform ?? Platform.OS) !== 'android') {
+    return finish({ status: 'unsupported-platform' });
+  }
   // Expo push tokens are only issued for physical devices.
-  if (!Device.isDevice) {
+  if (!(options.isDevice ?? Device.isDevice)) {
     console.warn(
       '[PushNotifications] Push notifications are not available on the emulator.',
     );
-    return { status: 'not-a-physical-device' };
+    return finish({ status: 'not-a-physical-device' });
   }
 
-  // Android 13+ requires an explicit POST_NOTIFICATIONS permission request.
-  // On older Android and on iOS, this call shows the system permission dialog.
-  const { status: existingStatus } =
-    await Notifications.getPermissionsAsync();
-
-  let finalStatus = existingStatus;
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== 'granted') {
-    console.warn('[PushNotifications] Permission not granted by the user.');
-    return { status: 'permission-denied' };
-  }
-
-  // Android requires a notification channel to be created before tokens are
-  // useful. This is a no-op on iOS.
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
+  // Android 13 needs a channel before its notification permission dialog.
+  try {
+    await notificationApi.setNotificationChannelAsync('default', {
       name: 'UniAttend Notifications',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#208AEF',
     });
+
+    const { status: existingStatus } = await notificationApi.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const response = await notificationApi.requestPermissionsAsync();
+      finalStatus = response.status;
+    }
+    if (finalStatus !== 'granted') {
+      return finish({ status: 'permission-denied' });
+    }
+  } catch {
+    return finish({ status: 'error', reason: 'Could not check notification permission.' });
   }
-
-  let expoPushToken: string;
-  try {
-    const projectId =
-      Constants?.expoConfig?.extra?.eas?.projectId ??
-      Constants?.easConfig?.projectId;
-
-    const tokenResponse = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : undefined,
-    );
-    expoPushToken = tokenResponse.data;
-  } catch (error) {
-    const reason =
-      error instanceof Error ? error.message : 'Unknown error getting token';
-    console.error('[PushNotifications] Failed to get Expo push token:', reason);
-    return { status: 'error', reason };
-  }
-
-  const platform = resolvePlatform();
-  const result = await coreApiClient.post<unknown>(deviceRegistrationPath, {
-    expo_push_token: expoPushToken,
-    platform,
-  });
-
-  if (result.status !== 'ok') {
-    console.error(
-      '[PushNotifications] Failed to register token with backend:',
-      result.status,
-    );
-    return {
-      status: 'error',
-      reason: `Backend registration failed: ${result.status}`,
-    };
-  }
-
-  // The token itself is a delivery credential: anyone holding it can push to
-  // this device. Log that registration happened, never what was registered.
-  console.info(
-    '[PushNotifications] Device token registered successfully.',
-    { platform },
-  );
-
-  return { status: 'registered' };
+  return finish(await registerCurrentToken(
+    coreApiClient, notificationApi, options.projectId ?? resolveProjectId()?.projectId,
+  ));
 }
 
-function resolvePlatform(): 'android' | 'ios' | 'web' {
-  if (Platform.OS === 'android') return 'android';
-  if (Platform.OS === 'ios') return 'ios';
-  return 'web';
+async function registerCurrentToken(
+  coreApiClient: CoreApiClient,
+  notificationApi: PushNotificationsApi,
+  projectId: string | undefined,
+): Promise<PushRegistrationResult> {
+  try {
+    if (!projectId) return { status: 'error', reason: 'EAS project ID is missing.' };
+    const expoPushToken = (await notificationApi.getExpoPushTokenAsync({ projectId })).data;
+    const result = await coreApiClient.post<unknown>(deviceRegistrationPath, {
+      expo_push_token: expoPushToken,
+      platform: 'android',
+    });
+    if (result.status !== 'ok') {
+      return { status: 'error', reason: `Backend registration failed: ${result.status}` };
+    }
+    const previousToken = lastRegisteredToken;
+    lastRegisteredToken = expoPushToken;
+    if (previousToken && previousToken !== expoPushToken) {
+      await revokePushNotifications(coreApiClient, previousToken);
+    }
+    return { status: 'registered' };
+  } catch {
+    return { status: 'error', reason: 'Could not obtain an Expo push token.' };
+  }
+}
+
+export function listenForPushTokenChanges(
+  coreApiClient: CoreApiClient,
+  notificationApi: PushNotificationsApi = Notifications,
+  projectId: string | undefined = resolveProjectId()?.projectId,
+): () => void {
+  const subscription = notificationApi.addPushTokenListener(() => {
+    // The listener supplies a native FCM token. Re-register its current Expo
+    // token because the Core API stores Expo tokens, never native tokens.
+    void registerCurrentToken(coreApiClient, notificationApi, projectId).then((result) => {
+      setPushRegistrationStatus(result.status);
+    });
+  });
+  return () => subscription.remove();
 }
 
 /**
@@ -136,10 +156,10 @@ export async function revokePushNotifications(
   expoPushToken?: string,
 ): Promise<boolean> {
   try {
-    if (!Device.isDevice) {
+    if (!Device.isDevice && !expoPushToken && !lastRegisteredToken) {
       return false;
     }
-    const token = expoPushToken ?? (
+    const token = expoPushToken ?? lastRegisteredToken ?? (
       await Notifications.getExpoPushTokenAsync(resolveProjectId())
     ).data;
     const result = await coreApiClient.post<unknown>(
@@ -148,6 +168,9 @@ export async function revokePushNotifications(
         expo_push_token: token,
       },
     );
+    if (result.status === 'ok' && token === lastRegisteredToken) {
+      lastRegisteredToken = undefined;
+    }
     return result.status === 'ok';
   } catch {
     console.warn('[PushNotifications] Failed to revoke push token.');

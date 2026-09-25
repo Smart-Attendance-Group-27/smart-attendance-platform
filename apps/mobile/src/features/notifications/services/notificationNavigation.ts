@@ -5,13 +5,27 @@ export type NotificationDestination =
 export function destinationForNotificationData(
   data: Record<string, unknown> | undefined,
 ): NotificationDestination {
+  const code = readString(data?.notificationCode ?? data?.code)?.toUpperCase();
+  if (code === 'ATTENDANCE_SESSION_CANCELLED' || code === 'GENERAL' || code === 'ATTENDANCE_RISK') {
+    return '/(student)/(tabs)/notifications';
+  }
   const entityType = readString(data?.relatedEntityType)?.toUpperCase();
-  const entityId = readString(data?.relatedEntityId);
+  const entityId = readString(data?.relatedEntityId ?? data?.relatedId);
 
   if (entityType === 'ATTENDANCE_SESSION' && entityId) {
     return `/(student)/attendance/${entityId}/progress`;
   }
   return '/(student)/(tabs)/notifications';
+}
+
+export function destinationForNotificationItem(item: {
+  code?: string; relatedEntityType?: string; relatedId?: string;
+}): NotificationDestination {
+  return destinationForNotificationData({
+    notificationCode: item.code,
+    relatedEntityType: item.relatedEntityType,
+    relatedEntityId: item.relatedId,
+  });
 }
 
 export function destinationForNotificationResponse(

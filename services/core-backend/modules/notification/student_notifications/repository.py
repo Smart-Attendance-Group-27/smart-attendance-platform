@@ -22,6 +22,9 @@ class StudentNotificationRepository:
         self,
         connection: asyncpg.Connection,
         user_id: UUID,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[StudentNotificationRecord]:
         rows = await connection.fetch(
             """
@@ -40,8 +43,11 @@ class StudentNotificationRepository:
               AND (expires_at IS NULL OR expires_at > now())
               AND (scheduled_for IS NULL OR scheduled_for <= now())
             ORDER BY created_at DESC, id ASC
+            LIMIT $2 OFFSET $3
             """,
             user_id,
+            limit,
+            offset,
         )
 
         return [
@@ -77,3 +83,30 @@ class StudentNotificationRepository:
             user_id,
         )
         return result == "UPDATE 1"
+
+    async def unread_count(self, connection: asyncpg.Connection, user_id: UUID) -> int:
+        return int(await connection.fetchval(
+            """
+            SELECT count(*) FROM notification.notifications
+            WHERE recipient_user_id = $1
+              AND in_app_visible IS TRUE
+              AND read_at IS NULL
+              AND (expires_at IS NULL OR expires_at > now())
+              AND (scheduled_for IS NULL OR scheduled_for <= now())
+            """,
+            user_id,
+        ))
+
+    async def mark_all_as_read(self, connection: asyncpg.Connection, user_id: UUID) -> int:
+        result = await connection.execute(
+            """
+            UPDATE notification.notifications SET read_at = now()
+            WHERE recipient_user_id = $1
+              AND in_app_visible IS TRUE
+              AND read_at IS NULL
+              AND (expires_at IS NULL OR expires_at > now())
+              AND (scheduled_for IS NULL OR scheduled_for <= now())
+            """,
+            user_id,
+        )
+        return int(result.split()[-1])

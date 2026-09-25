@@ -23,6 +23,13 @@ class StudentNotification:
     related_entity_type: str | None
 
 
+@dataclass(frozen=True)
+class StudentNotificationPage:
+    items: list[StudentNotification]
+    next_offset: int | None
+    unread_count: int
+
+
 class StudentNotificationService:
     def __init__(
         self,
@@ -39,6 +46,29 @@ class StudentNotificationService:
             records = await self._repository.list_for_user(connection, user_id)
 
         return [_to_notification(record) for record in records]
+
+    async def page_for_user(
+        self, pool: asyncpg.Pool, user_id: UUID, *, limit: int, offset: int,
+    ) -> StudentNotificationPage:
+        async with pool.acquire() as connection:
+            records = await self._repository.list_for_user(
+                connection, user_id, limit=limit + 1, offset=offset,
+            )
+            unread_count = await self._repository.unread_count(connection, user_id)
+        has_more = len(records) > limit
+        return StudentNotificationPage(
+            items=[_to_notification(record) for record in records[:limit]],
+            next_offset=offset + limit if has_more else None,
+            unread_count=unread_count,
+        )
+
+    async def unread_count(self, pool: asyncpg.Pool, user_id: UUID) -> int:
+        async with pool.acquire() as connection:
+            return await self._repository.unread_count(connection, user_id)
+
+    async def mark_all_as_read(self, pool: asyncpg.Pool, user_id: UUID) -> int:
+        async with pool.acquire() as connection:
+            return await self._repository.mark_all_as_read(connection, user_id)
 
     async def mark_as_read(
         self,
@@ -75,7 +105,6 @@ def _map_notification_type(value: str | None) -> str:
     if value in {
         "ATTENDANCE_SESSION_STARTED",
         "ATTENDANCE_SESSION_OPENED",
-        "ATTENDANCE_SESSION_CANCELLED",
         "UPCOMING_CLASS",
         "UPCOMING_SESSION_REMINDER",
     }:

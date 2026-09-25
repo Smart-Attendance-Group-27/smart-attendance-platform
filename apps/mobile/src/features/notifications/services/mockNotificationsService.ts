@@ -1,5 +1,5 @@
 import type { NotificationItem } from '../types/notification';
-import type { NotificationsService } from './notificationsService';
+import type { NotificationPage, NotificationsService } from './notificationsService';
 
 export type MockNotificationsServiceOptions = {
   readonly initialNotifications?: readonly NotificationItem[];
@@ -85,6 +85,20 @@ export class MockNotificationsService implements NotificationsService {
     return this.notifications.map(cloneNotification);
   }
 
+  async getPage(offset: number, limit: number): Promise<NotificationPage> {
+    this.throwIfFailureIsEnabled();
+    return {
+      items: this.notifications.slice(offset, offset + limit).map(cloneNotification),
+      nextOffset: offset + limit < this.notifications.length ? offset + limit : null,
+      unreadCount: this.notifications.filter((item) => !item.isRead).length,
+    };
+  }
+
+  async getUnreadCount(): Promise<number> {
+    this.throwIfFailureIsEnabled();
+    return this.notifications.filter((item) => !item.isRead).length;
+  }
+
   async markAsRead(notificationId: string): Promise<void> {
     this.throwIfFailureIsEnabled();
 
@@ -93,6 +107,11 @@ export class MockNotificationsService implements NotificationsService {
         ? { ...notification, isRead: true }
         : notification,
     );
+  }
+
+  async markAllAsRead(): Promise<void> {
+    this.throwIfFailureIsEnabled();
+    this.notifications = this.notifications.map((item) => ({ ...item, isRead: true }));
   }
 
   private throwIfFailureIsEnabled(): void {
