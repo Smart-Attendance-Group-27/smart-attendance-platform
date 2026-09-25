@@ -12,6 +12,7 @@ import {
   getLecturerSessionDetail,
   getLecturerSessionStudents,
   getLecturerQrBatches,
+  getLecturerSessionCreationOptions,
   getLecturerSessions,
   getLecturerTimetable,
   getManualReviewQueue,
@@ -187,6 +188,17 @@ export async function getSessionCreationOptions(): Promise<TimetableOption[]> {
     id: entry.id,
     label: `${entry.courseCode} · ${formatDayOfWeek(entry.dayOfWeek)} ${formatTimeRange(entry.startTime, entry.endTime)} · ${entry.classroomCode ?? "No room"}`,
   }));
+}
+
+// Whether the backend will accept sessions that require face verification. If
+// the lookup itself fails the option stays visible; the create endpoint still
+// enforces the real rule.
+export async function getFaceAttendanceEnabled(): Promise<boolean> {
+  try {
+    return (await getLecturerSessionCreationOptions()).faceAttendanceEnabled;
+  } catch {
+    return true;
+  }
 }
 
 function mapAttemptStatus(value: string | null): LiveSessionDetail["students"][number]["attemptStatus"] {

@@ -25,7 +25,13 @@ function defaultEndValue(startValue: string): string {
   return toDateTimeLocalValue(new Date(start.getTime() + 60 * 60_000));
 }
 
-export function CreateSessionButton({ timetableOptions }: { timetableOptions: TimetableOption[] }) {
+export function CreateSessionButton({
+  timetableOptions,
+  faceAttendanceEnabled = true,
+}: {
+  timetableOptions: TimetableOption[];
+  faceAttendanceEnabled?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [timetableEntryId, setTimetableEntryId] = useState(timetableOptions[0]?.id ?? "");
@@ -63,7 +69,7 @@ export function CreateSessionButton({ timetableOptions }: { timetableOptions: Ti
       sessionTitle: sessionTitle.trim(),
       scheduledStartAt: new Date(scheduledStartAt).toISOString(),
       scheduledEndAt: new Date(scheduledEndAt).toISOString(),
-      requiresFaceVerification,
+      requiresFaceVerification: faceAttendanceEnabled && requiresFaceVerification,
       requiresQr,
     });
     setIsSubmitting(false);
@@ -145,14 +151,18 @@ export function CreateSessionButton({ timetableOptions }: { timetableOptions: Ti
 
           <FormField label="Verification requirements" htmlFor="create-session-requirements">
             <div id="create-session-requirements" className="flex flex-col gap-1.5 text-xs">
-              <label className="flex items-center gap-1.5">
-                <input
-                  type="checkbox"
-                  checked={requiresFaceVerification}
-                  onChange={(event) => setRequiresFaceVerification(event.target.checked)}
-                />
-                Require face verification
-              </label>
+              {faceAttendanceEnabled ? (
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={requiresFaceVerification}
+                    onChange={(event) => setRequiresFaceVerification(event.target.checked)}
+                  />
+                  Require face verification
+                </label>
+              ) : (
+                <p>Face verification is not enabled for this deployment.</p>
+              )}
               <p>Geofence check is required for every session.</p>
               <label className="flex items-center gap-1.5">
                 <input

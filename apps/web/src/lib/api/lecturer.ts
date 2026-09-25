@@ -201,6 +201,11 @@ export function getLecturerSessions(): Promise<ApiLecturerSession[]> {
   return coreBackendFetch("/api/v1/lecturers/me/attendance-sessions");
 }
 
+export function getLecturerSessionCreationOptions(): Promise<{ faceAttendanceEnabled: boolean }> {
+  if (isWebMockMode()) return Promise.resolve({ faceAttendanceEnabled: true });
+  return coreBackendFetch("/api/v1/lecturers/me/attendance-sessions/creation-options");
+}
+
 export function createLecturerSession(body: ApiCreateSessionRequest): Promise<ApiLecturerSession> {
   return coreBackendFetch("/api/v1/lecturers/me/attendance-sessions", {
     method: "POST",
