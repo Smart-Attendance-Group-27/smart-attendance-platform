@@ -11,7 +11,7 @@ beforeEach(() => {
   process.env.KEYCLOAK_CLIENT_SECRET = "test-secret";
 });
 
-const { buildAuthorizationUrl, buildEndSessionUrl, generatePkcePair, generateRandomToken, getOidcDiscovery, isKeycloakConfigured } =
+const { buildAuthorizationUrl, buildEndSessionUrl, generatePkcePair, generateRandomToken, getOidcDiscovery, isKeycloakConfigured, terminateKeycloakSession } =
   await import("@/lib/auth/oidc");
 
 const SAMPLE_DISCOVERY = {
@@ -138,5 +138,31 @@ describe("buildEndSessionUrl", () => {
     expect(url.searchParams.get("client_id")).toBe("uniattend-web");
     expect(url.searchParams.get("id_token_hint")).toBe("id-token-abc");
     expect(url.searchParams.get("post_logout_redirect_uri")).toBe("http://localhost:3000/login");
+  });
+});
+
+describe("terminateKeycloakSession", () => {
+  it("uses the refresh token to terminate the server-side Keycloak session", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 204 }),
+    );
+
+    await terminateKeycloakSession({
+      discovery: SAMPLE_DISCOVERY,
+      refreshToken: "student-refresh-token",
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://localhost:8080/realms/uniattend/protocol/openid-connect/logout");
+    expect(init).toMatchObject({
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      cache: "no-store",
+    });
+    const body = new URLSearchParams(String(init?.body));
+    expect(body.get("client_id")).toBe("uniattend-web");
+    expect(body.get("client_secret")).toBe("test-secret");
+    expect(body.get("refresh_token")).toBe("student-refresh-token");
   });
 });

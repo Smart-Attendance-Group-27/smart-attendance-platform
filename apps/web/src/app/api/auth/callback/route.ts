@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exchangeCodeForTokens, getOidcDiscovery, verifyAccessToken, verifyIdToken } from "@/lib/auth/oidc";
+import {
+  buildEndSessionUrl,
+  exchangeCodeForTokens,
+  getOidcDiscovery,
+  terminateKeycloakSession,
+  verifyAccessToken,
+  verifyIdToken,
+} from "@/lib/auth/oidc";
 import { readAndClearOidcFlowCookie } from "@/lib/auth/oidcFlowState";
 import { createSession } from "@/lib/auth/session";
 import { dashboardPathForRole, isWebRole } from "@/lib/auth/roles";
@@ -52,8 +59,21 @@ export async function GET(request: NextRequest) {
 
   const webRole = roles.find(isWebRole);
   if (!webRole) {
-    // Students (and any account without a lecturer/administrator realm role) are
-    // mobile-only — they must never reach the web dashboard.
+    // Students and other accounts without a web role are mobile-only. End the
+    // Keycloak session so the next web login cannot silently reuse this account.
+    try {
+      await terminateKeycloakSession({
+        discovery,
+        refreshToken: tokens.refreshToken,
+      });
+    } catch (error) {
+      console.error("Failed to terminate rejected Keycloak web session:", error);
+      return NextResponse.redirect(buildEndSessionUrl({
+        discovery,
+        idTokenHint: tokens.idToken,
+        postLogoutRedirectUri: webUrl("/login", request.url).toString(),
+      }));
+    }
     return loginError(request, "no_web_role");
   }
 
