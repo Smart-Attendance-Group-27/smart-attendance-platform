@@ -9,6 +9,7 @@ from modules.academic.lecturer_correction_requests.exception import (
 from modules.academic.lecturer_correction_requests.schemas import (
     CorrectionRequestResponse,
     CreateCorrectionRequestBody,
+    OwnCorrectionRequestResponse,
 )
 from modules.academic.lecturer_correction_requests.service import CorrectionRequestService
 from modules.academic.lecturer_profile.exception import LecturerProfileNotFoundError
@@ -19,6 +20,55 @@ router = APIRouter(prefix="/lecturers", tags=["lecturer-correction-requests"])
 
 def get_correction_request_service() -> CorrectionRequestService:
     return CorrectionRequestService()
+
+
+@router.get(
+    "/me/correction-requests",
+    response_model=list[OwnCorrectionRequestResponse],
+    status_code=status.HTTP_200_OK,
+)
+async def list_my_correction_requests(
+    http_request: Request,
+    current_lecturer: CurrentLecturer,
+    service: Annotated[
+        CorrectionRequestService,
+        Depends(get_correction_request_service),
+    ] = None,  # type: ignore[assignment]
+) -> list[OwnCorrectionRequestResponse]:
+    # Only the caller's own requests: the identity comes from the token.
+    try:
+        records = await service.list_own(
+            http_request.app.state.db_pool,
+            user_id=current_lecturer.user_id,
+        )
+    except LecturerProfileNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "LECTURER_PROFILE_NOT_FOUND",
+                "message": "An active lecturer profile was not found for this account.",
+            },
+        ) from error
+
+    return [
+        OwnCorrectionRequestResponse(
+            id=record.id,
+            request_type=record.request_type,
+            category=record.category,
+            course_code=record.course_code,
+            course_name=record.course_name,
+            timetable_day_of_week=record.timetable_day_of_week,
+            timetable_start_time=record.timetable_start_time,
+            timetable_end_time=record.timetable_end_time,
+            timetable_classroom_code=record.timetable_classroom_code,
+            description=record.description,
+            status=record.status,
+            review_note=record.review_note,
+            created_at=record.created_at,
+            reviewed_at=record.reviewed_at,
+        )
+        for record in records
+    ]
 
 
 @router.post(

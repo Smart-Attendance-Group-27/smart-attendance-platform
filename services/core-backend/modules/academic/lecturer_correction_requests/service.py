@@ -9,6 +9,7 @@ from modules.academic.lecturer_correction_requests.exception import (
 from modules.academic.lecturer_correction_requests.repository import (
     CorrectionRequestRecord,
     CorrectionRequestRepository,
+    OwnCorrectionRequestRecord,
 )
 from modules.academic.lecturer_correction_requests.schemas import (
     CorrectionCategory,
@@ -55,6 +56,20 @@ class CorrectionRequestService:
         self._lecturer_profile_repository = (
             lecturer_profile_repository or LecturerProfileRepository()
         )
+
+    async def list_own(
+        self,
+        pool: asyncpg.Pool,
+        *,
+        user_id: UUID,
+    ) -> list[OwnCorrectionRequestRecord]:
+        async with pool.acquire() as connection:
+            profile = await self._lecturer_profile_repository.find_by_user_id(connection, user_id)
+            if profile is None or profile.profile_status != ACTIVE_PROFILE_STATUS:
+                raise LecturerProfileNotFoundError(
+                    "No active lecturer profile exists for this account."
+                )
+            return await self._repository.list_for_requester(connection, user_id)
 
     async def submit(
         self,

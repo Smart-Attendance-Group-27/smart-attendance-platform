@@ -132,3 +132,13 @@ describe("faceScoreTone", () => {
     expect(faceScoreTone(72, null)).toBe("neutral");
   });
 });
+
+describe("correctionStatusDisplay", () => {
+  it("labels each review status", async () => {
+    const { correctionStatusDisplay } = await import("@/lib/status");
+    expect(correctionStatusDisplay("pending")).toEqual({ label: "Pending", tone: "warning" });
+    expect(correctionStatusDisplay("approved").tone).toBe("info");
+    expect(correctionStatusDisplay("rejected").tone).toBe("danger");
+    expect(correctionStatusDisplay("resolved").tone).toBe("success");
+  });
+});

@@ -6,11 +6,15 @@ import { ActivityList } from "@/components/ui/ActivityList";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { CorrectionRequestButton } from "@/components/lecturer/CorrectionRequestButton";
 import { AssignedCoursesCard } from "@/components/lecturer/AssignedCoursesCard";
-import { getLecturerCourses } from "@/services/lecturerService";
+import { MyCorrectionRequestsCard } from "@/components/lecturer/MyCorrectionRequestsCard";
+import { getLecturerCourses, getMyCorrectionRequests } from "@/services/lecturerService";
 import { TimetableEntry } from "@/types/lecturer";
 
 export default async function LecturerCoursesPage() {
-  const { semesterLabel, courses, timetable, sourceStatus } = await getLecturerCourses();
+  const [{ semesterLabel, courses, timetable, sourceStatus }, correctionRequests] = await Promise.all([
+    getLecturerCourses(),
+    getMyCorrectionRequests(),
+  ]);
 
   return (
     <div>
@@ -38,6 +42,10 @@ export default async function LecturerCoursesPage() {
       </Notice>
 
       <AssignedCoursesCard courses={courses} semesterLabel={semesterLabel} />
+
+      <div className="mt-4">
+        <MyCorrectionRequestsCard requests={correctionRequests} />
+      </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="lg:col-span-8">

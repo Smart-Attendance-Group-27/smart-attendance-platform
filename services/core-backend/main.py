@@ -11,6 +11,9 @@ from db.pool import close_database_pool, create_database_pool
 from modules.academic.admin_academic_data.route import (
     router as admin_academic_data_router,
 )
+from modules.academic.admin_correction_requests.route import (
+    router as admin_correction_requests_router,
+)
 from modules.academic.admin_classrooms.route import router as admin_classrooms_router
 from modules.academic.admin_dashboard.route import router as admin_dashboard_router
 from modules.academic.admin_institution_reports.route import (
@@ -205,6 +208,7 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
     app.include_router(manual_review_router, prefix="/api/v1")
     app.include_router(lecturer_reports_router, prefix="/api/v1")
     app.include_router(admin_classrooms_router, prefix="/api/v1")
+    app.include_router(admin_correction_requests_router, prefix="/api/v1")
     app.include_router(admin_users_router, prefix="/api/v1")
     app.include_router(admin_academic_data_router, prefix="/api/v1")
     app.include_router(admin_reference_faces_router, prefix="/api/v1")

@@ -112,6 +112,21 @@ export function faceScoreTone(
   return scorePercent < thresholdPercent ? "danger" : "success";
 }
 
+export function correctionStatusDisplay(status: string): StatusDisplay {
+  switch (status) {
+    case "pending":
+      return { label: "Pending", tone: "warning" };
+    case "approved":
+      return { label: "Approved", tone: "info" };
+    case "rejected":
+      return { label: "Rejected", tone: "danger" };
+    case "resolved":
+      return { label: "Resolved", tone: "success" };
+    default:
+      return { label: status, tone: "neutral" };
+  }
+}
+
 export function weeklyDeltaNote(deltaPercent: number | null): { note: string; tone: "neutral" | "good" | "warn" } {
   if (deltaPercent === null) return { note: "No previous week to compare", tone: "neutral" };
   if (deltaPercent > 0) return { note: `Up ${deltaPercent}% from last week`, tone: "good" };

@@ -272,6 +272,28 @@ export function submitLecturerCorrectionRequest(body: {
   return coreBackendFetch("/api/v1/lecturers/me/correction-requests", { method: "POST", body });
 }
 
+export type ApiOwnCorrectionRequest = {
+  id: string;
+  requestType: CorrectionRequestType;
+  category: string;
+  courseCode: string | null;
+  courseName: string | null;
+  timetableDayOfWeek: number | null;
+  timetableStartTime: string | null;
+  timetableEndTime: string | null;
+  timetableClassroomCode: string | null;
+  description: string;
+  status: string;
+  reviewNote: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+};
+
+export function getLecturerCorrectionRequests(): Promise<ApiOwnCorrectionRequest[]> {
+  if (isWebMockMode()) return Promise.resolve([]);
+  return coreBackendFetch("/api/v1/lecturers/me/correction-requests");
+}
+
 export function activateLecturerSession(sessionId: string): Promise<ApiLecturerSession> {
   return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${sessionId}/activate`, {
     method: "POST",

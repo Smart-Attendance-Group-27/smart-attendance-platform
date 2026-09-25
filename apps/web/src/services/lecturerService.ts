@@ -7,6 +7,7 @@ import {
   ApiSessionStatus,
   getLecturerAtRiskStudents,
   getLecturerAttendanceTrend,
+  getLecturerCorrectionRequests,
   getLecturerCourses as fetchLecturerCourses,
   getLecturerDashboardOverview,
   getLecturerSessionDetail,
@@ -20,6 +21,8 @@ import {
 import { formatClockTime, formatDateLabel, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
 import { isWebMockMode } from "@/lib/api/mode";
 import { isSameCalendarDay } from "@/lib/appTimezone";
+import { toCorrectionRequestRow } from "@/lib/api/correctionRequestRows";
+import type { CorrectionRequestRow } from "@/lib/correctionRequests";
 import {
   AtRiskStudent,
   LecturerCoursesData,
@@ -169,6 +172,10 @@ export async function getLecturerCourses(): Promise<LecturerCoursesData> {
       },
     ],
   };
+}
+
+export async function getMyCorrectionRequests(): Promise<CorrectionRequestRow[]> {
+  return (await getLecturerCorrectionRequests()).map(toCorrectionRequestRow);
 }
 
 export async function getSessionList(): Promise<TodayLecture[]> {

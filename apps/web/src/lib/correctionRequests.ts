@@ -29,3 +29,35 @@ export const CORRECTION_CATEGORIES: Record<
 
 export const CORRECTION_DESCRIPTION_MIN = 10;
 export const CORRECTION_DESCRIPTION_MAX = 1000;
+
+export type CorrectionRequestStatus = "pending" | "approved" | "rejected" | "resolved";
+export type CorrectionDecision = "approved" | "rejected" | "resolved";
+
+export function correctionCategoryLabel(category: string): string {
+  const all = [...CORRECTION_CATEGORIES.course_data, ...CORRECTION_CATEGORIES.timetable];
+  return all.find((option) => option.value === category)?.label ?? category;
+}
+
+// What the review tables show for one request; built on the server.
+export type CorrectionRequestRow = {
+  id: string;
+  requestType: CorrectionRequestType;
+  typeLabel: string;
+  categoryLabel: string;
+  courseLabel: string;
+  // The timetable entry a timetable request is about, otherwise a dash.
+  targetLabel: string;
+  requesterName: string;
+  description: string;
+  status: string;
+  reviewNote: string | null;
+  createdLabel: string;
+  reviewedLabel: string | null;
+};
+
+// The next decisions an administrator may take, mirroring the backend rules.
+export function allowedDecisions(status: string): CorrectionDecision[] {
+  if (status === "pending") return ["approved", "rejected"];
+  if (status === "approved") return ["resolved"];
+  return [];
+}

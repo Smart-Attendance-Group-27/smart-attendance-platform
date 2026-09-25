@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
@@ -18,7 +19,10 @@ from modules.academic.lecturer_correction_requests.exception import (
     CorrectionRequestInvalidError,
     CorrectionTargetNotFoundError,
 )
-from modules.academic.lecturer_correction_requests.repository import CorrectionRequestRecord
+from modules.academic.lecturer_correction_requests.repository import (
+    CorrectionRequestRecord,
+    OwnCorrectionRequestRecord,
+)
 from modules.academic.lecturer_correction_requests.route import get_correction_request_service
 from modules.academic.lecturer_correction_requests.schemas import (
     CorrectionCategory,
@@ -213,6 +217,30 @@ class StubService:
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
         self.calls: list[dict] = []
+        self.listed_for: UUID | None = None
+
+    async def list_own(self, pool, *, user_id):
+        self.listed_for = user_id
+        if self.error is not None:
+            raise self.error
+        return [
+            OwnCorrectionRequestRecord(
+                id=REQUEST_ID,
+                request_type="course_data",
+                category="enrolment",
+                course_code="CS3203",
+                course_name="Software Engineering Project",
+                timetable_day_of_week=None,
+                timetable_start_time=None,
+                timetable_end_time=None,
+                timetable_classroom_code=None,
+                description=DESCRIPTION,
+                status="rejected",
+                review_note="Already correct in the register.",
+                created_at=datetime(2026, 9, 25, 4, 0, tzinfo=UTC),
+                reviewed_at=None,
+            )
+        ]
 
     async def submit(self, pool, **values):
         self.calls.append(values)
@@ -305,3 +333,24 @@ def test_domain_errors_map_to_http(jwks_document, make_access_token, error, stat
         response = client.post(URL, json=BODY, headers=headers(make_access_token))
 
     assert response.status_code == status_code
+
+
+def test_lecturer_lists_only_their_own_requests(jwks_document, make_access_token) -> None:
+    service = StubService()
+    with build_client(jwks_document, service) as client:
+        response = client.get(URL, headers=headers(make_access_token))
+
+    assert response.status_code == 200
+    assert response.json()[0]["status"] == "rejected"
+    assert response.json()[0]["reviewNote"] == "Already correct in the register."
+    assert service.listed_for == USER_ID
+
+
+def test_listing_requires_a_lecturer(jwks_document, make_access_token) -> None:
+    with build_client(jwks_document, StubService()) as client:
+        response = client.get(
+            URL,
+            headers=headers(make_access_token, LINKED_STUDENT_SUBJECT, ("student",)),
+        )
+
+    assert response.status_code == 403
