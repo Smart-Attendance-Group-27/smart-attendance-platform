@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  accountStatusDisplay,
   classroomStatusDisplay,
   courseStatusDisplay,
   faceScoreTone,
@@ -13,6 +14,16 @@ import {
   verificationOutcomeDisplay,
   verificationOutcomeLabel,
 } from "@/lib/status";
+
+describe("accountStatusDisplay", () => {
+  it("renders legacy inactive accounts without crashing", () => {
+    expect(accountStatusDisplay("inactive")).toEqual({ label: "Inactive", tone: "neutral" });
+  });
+
+  it("renders unexpected API account states as unknown", () => {
+    expect(accountStatusDisplay("unknown")).toEqual({ label: "Unknown", tone: "neutral" });
+  });
+});
 
 describe("sessionStatusDisplay", () => {
   it("maps in_progress to a success badge", () => {

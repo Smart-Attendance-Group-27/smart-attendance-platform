@@ -46,7 +46,7 @@ export type ApiClassroom = {
   updatedAt: string;
 };
 
-export type ApiAccountStatus = "active" | "suspended" | "locked";
+export type ApiAccountStatus = "active" | "inactive" | "suspended" | "locked";
 
 export type ApiStudentAccount = {
   userId: string;

@@ -178,14 +178,20 @@ export function riskLevelDisplay(risk: "high" | "medium" | "low"): StatusDisplay
   }
 }
 
-export function accountStatusDisplay(status: "active" | "suspended" | "locked"): StatusDisplay {
+export function accountStatusDisplay(
+  status: "active" | "inactive" | "suspended" | "locked" | "unknown",
+): StatusDisplay {
   switch (status) {
     case "active":
       return { label: "Active", tone: "success" };
+    case "inactive":
+      return { label: "Inactive", tone: "neutral" };
     case "suspended":
       return { label: "Suspended", tone: "warning" };
     case "locked":
       return { label: "Locked", tone: "danger" };
+    case "unknown":
+      return { label: "Unknown", tone: "neutral" };
   }
 }
 

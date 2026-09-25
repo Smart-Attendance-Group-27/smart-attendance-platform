@@ -65,7 +65,7 @@ export type AdminDashboardData = {
 // academic.*_profiles table for each account kind. Credentials stay in
 // Keycloak — nothing here models a password.
 
-export type AccountStatus = "active" | "suspended" | "locked";
+export type AccountStatus = "active" | "inactive" | "suspended" | "locked" | "unknown";
 export type ProfileStatus = "active" | "inactive";
 
 export type StudentAccount = {
