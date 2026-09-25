@@ -177,9 +177,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app(*, enable_database: bool = True) -> FastAPI:
+    # The interactive docs and schema describe every route to anyone who can
+    # reach the API host, so they are only served outside production.
+    docs_enabled = get_settings().app_environment.strip().lower() != "production"
     app = FastAPI(
         title="UniAttend Core API",
         lifespan=lifespan if enable_database else None,
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
     )
     app.include_router(health_router)
     app.include_router(auth_router, prefix="/api/v1")
