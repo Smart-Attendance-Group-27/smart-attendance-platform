@@ -87,6 +87,10 @@ class Settings(BaseSettings):
     face_verification_timeout_seconds: float = Field(default=30, gt=0)
     pilot_disable_face_attendance: bool = False
 
+    # IANA timezone used where the backend must decide what "today" means for
+    # people (for example the lecturer dashboard). Stored timestamps stay UTC.
+    app_timezone: str = "Asia/Colombo"
+
     # Expo Push Notification Service.
     # expo_push_timeout_seconds: how long to wait for a response from Expo.
     # expo_access_token: required only when Expo Enhanced Push Security is

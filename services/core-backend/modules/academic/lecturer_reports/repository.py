@@ -71,6 +71,7 @@ class LecturerReportRepository:
         self,
         connection: asyncpg.Connection,
         lecturer_id: UUID,
+        timezone: str,
     ) -> LecturerOverviewRecord:
         row = await connection.fetchrow(
             """
@@ -103,7 +104,8 @@ class LecturerReportRepository:
                         ON assignment.course_offering_id = offering.id
                     WHERE assignment.lecturer_id = $1
                       AND session.cancelled_at IS NULL
-                      AND session.scheduled_start_at::date = now()::date
+                      AND (session.scheduled_start_at AT TIME ZONE $2)::date
+                          = (now() AT TIME ZONE $2)::date
                 ) AS today_session_count,
                 (
                     SELECT
@@ -144,6 +146,7 @@ class LecturerReportRepository:
                 ) AS pending_review_count
             """,
             lecturer_id,
+            timezone,
         )
         return LecturerOverviewRecord(
             active_course_count=row["active_course_count"],

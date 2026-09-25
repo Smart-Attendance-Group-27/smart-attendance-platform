@@ -17,6 +17,7 @@ import {
 } from "@/lib/api/lecturer";
 import { formatClockTime, formatDateLabel, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
 import { isWebMockMode } from "@/lib/api/mode";
+import { isSameCalendarDay } from "@/lib/appTimezone";
 import {
   AtRiskStudent,
   LecturerCoursesData,
@@ -44,13 +45,7 @@ function mapSessionStatus(status: ApiSessionStatus): SessionStatus {
 }
 
 function isToday(iso: string): boolean {
-  const date = new Date(iso);
-  const now = new Date();
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  );
+  return isSameCalendarDay(new Date(iso), new Date());
 }
 
 function isCheckInOpen(session: ApiLecturerSession, now: Date): boolean {

@@ -1,4 +1,5 @@
 import "server-only";
+import { getAppTimeZone } from "@/lib/appTimezone";
 
 const TIME_FORMAT: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hour12: false };
 
@@ -12,7 +13,7 @@ export function formatClockTime(isoOrTime: string | null): string {
   if (/^\d{2}:\d{2}/.test(isoOrTime)) {
     return isoOrTime.slice(0, 5);
   }
-  return new Date(isoOrTime).toLocaleTimeString("en-GB", TIME_FORMAT);
+  return new Date(isoOrTime).toLocaleTimeString("en-GB", { ...TIME_FORMAT, timeZone: getAppTimeZone() });
 }
 
 export function formatTimeRange(startIso: string | null, endIso: string | null): string {
@@ -26,7 +27,12 @@ export function formatDayOfWeek(dayOfWeek: number): string {
 
 export function formatDateLabel(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: getAppTimeZone(),
+  });
 }
 
 export function formatDateTimeLabel(iso: string | null): string {
@@ -38,6 +44,7 @@ export function formatDateTimeLabel(iso: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone: getAppTimeZone(),
   });
 }
 
