@@ -111,10 +111,14 @@ async function registerCurrentToken(
   coreApiClient: CoreApiClient,
   notificationApi: PushNotificationsApi,
   projectId: string | undefined,
+  devicePushToken?: Notifications.DevicePushToken,
 ): Promise<PushRegistrationResult> {
   try {
     if (!projectId) return { status: 'error', reason: 'EAS project ID is missing.' };
-    const expoPushToken = (await notificationApi.getExpoPushTokenAsync({ projectId })).data;
+    const expoPushToken = (await notificationApi.getExpoPushTokenAsync({
+      projectId,
+      devicePushToken,
+    })).data;
     const result = await coreApiClient.post<unknown>(deviceRegistrationPath, {
       expo_push_token: expoPushToken,
       platform: 'android',
@@ -138,10 +142,11 @@ export function listenForPushTokenChanges(
   notificationApi: PushNotificationsApi = Notifications,
   projectId: string | undefined = resolveProjectId()?.projectId,
 ): () => void {
-  const subscription = notificationApi.addPushTokenListener(() => {
+  const subscription = notificationApi.addPushTokenListener((devicePushToken) => {
     // The listener supplies a native FCM token. Re-register its current Expo
-    // token because the Core API stores Expo tokens, never native tokens.
-    void registerCurrentToken(coreApiClient, notificationApi, projectId).then((result) => {
+    // token without fetching the native token again, which would re-fire this
+    // listener. Core stores Expo tokens, never native tokens.
+    void registerCurrentToken(coreApiClient, notificationApi, projectId, devicePushToken).then((result) => {
       setPushRegistrationStatus(result.status);
     });
   });

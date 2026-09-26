@@ -1,8 +1,8 @@
 # Android notification activation
 
 **Owner:** Manushan
-**Prepared:** 2026-09-25
-**Status:** Code review in progress; push and reminders remain off on the VPS.
+**Prepared:** 2026-09-25; updated 2026-09-26
+**Status:** Server release deployed; Android push activation paused for a mobile hotfix.
 
 ## Current state
 
@@ -25,19 +25,31 @@ private credential and stays outside this repository. Verify the FCM V1 key
 uploaded to EAS belongs to the same Firebase project. The EAS mobile project
 is owned by `manushanhasanka` after PR #103.
 
+On 2026-09-26 the first EAS APK from PR #106 registered a token, but its
+native-token listener repeatedly fetched the native token while handling a
+token-change event. The repeated registration calls interfered with the
+notification inbox. A single controlled test attempt reached an accepted Expo
+receipt, but phone display was not confirmed. The phone app was stopped and the
+VPS push worker was returned to `false`; reminders remain `false`. Install and
+test the corrected APK before resuming delivery.
+
 ## After this PR is merged, before enabling delivery
 
-1. Build a new internal EAS APK from the merged commit. The Firebase client
-   configuration and the new mobile code require an installed APK update.
+1. Build a new internal EAS APK from the merged hotfix commit. The Firebase
+   client configuration and the new mobile code require an installed APK update.
 2. On a physical Android phone, sign in as a mock student, grant notifications,
-   and confirm the Notifications tab says the device is registered. Confirm the
-   backend has an active token for that student's user ID. Never paste or log
-   the Expo token.
+   and confirm the Notifications tab says the device is registered and loads
+   its inbox. Confirm the backend has an active token for that student's user
+   ID. Never paste or log the Expo token.
 3. Review the read-only queue summary in
    `deployment/notification-status.sql`. Run
    `deployment/retire-queued-pushes.sql` with a UTC cutoff immediately before
    activation. Keep the in-app rows. Record the deletion count.
-4. Enable `PUSH_WORKER_ENABLED=true` on the VPS and restart only Core. Check
+4. Set `PUSH_WORKER_ENABLED=true` in the protected VPS environment and recreate
+   only Core with `docker compose --env-file /etc/uniattend/private.env -f
+   /opt/uniattend/current/deployment/compose.app.yml up -d --no-deps core-api`.
+   Check for and remove any site-specific Compose override that still forces
+   the worker off. Check
    startup logs for schema preflight and worker startup, then create one new
    pilot attendance event. Verify a new queued attempt becomes `sent` and then
    `delivered` by checking Expo receipts and the SQL summary. An Expo delivery
