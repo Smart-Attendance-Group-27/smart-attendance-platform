@@ -214,9 +214,9 @@ describe('createLivenessSessionController', () => {
 
   test('exposes S2 challenge timeout and deletes the timed-out capture', async () => {
     let currentTime = 1_000;
-    const sample = createMockSample(observation(7_001));
+    const sample = createMockSample(observation(11_001));
     const captureSample = jest.fn(async () => {
-      currentTime = 7_001;
+      currentTime = 11_001;
       return sample;
     });
     const controller = createLivenessSessionController({
@@ -240,9 +240,9 @@ describe('createLivenessSessionController', () => {
 
   test('exposes S2 whole-session timeout and deletes the timed-out capture', async () => {
     let currentTime = 1_000;
-    const sample = createMockSample(observation(26_001));
+    const sample = createMockSample(observation(46_001));
     const captureSample = jest.fn(async () => {
-      currentTime = 26_001;
+      currentTime = 46_001;
       return sample;
     });
     const controller = createLivenessSessionController({
@@ -269,11 +269,11 @@ describe('createLivenessSessionController', () => {
     const sequence = createSequenceSource([
       observation(1_000, { yawDegrees: 30 }),
       observation(1_300, { yawDegrees: 30 }),
-      observation(7_301, { yawDegrees: 0 }),
-      observation(7_500, { yawDegrees: -30 }),
-      observation(7_800, { yawDegrees: -30 }),
-      observation(7_900),
-      observation(8_400),
+      observation(11_301, { yawDegrees: 0 }),
+      observation(11_500, { yawDegrees: -30 }),
+      observation(11_800, { yawDegrees: -30 }),
+      observation(11_900),
+      observation(12_400),
     ], (timestampMs) => {
       currentTime = timestampMs;
     });
