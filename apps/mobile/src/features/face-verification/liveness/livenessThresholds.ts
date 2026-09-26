@@ -7,6 +7,6 @@ export const LIVENESS_THRESHOLDS = {
   frontalMaximumAbsoluteYawDegrees: 10,
   frontalHoldMs: 500,
   minimumFaceAreaRatio: 0.15,
-  challengeTimeoutMs: 6_000,
-  sessionTimeoutMs: 25_000,
+  challengeTimeoutMs: 10_000,
+  sessionTimeoutMs: 45_000,
 } as const;
