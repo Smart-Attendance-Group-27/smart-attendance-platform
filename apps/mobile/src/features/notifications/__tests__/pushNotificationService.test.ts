@@ -1,5 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 import { waitFor } from '@testing-library/react-native';
+import type { DevicePushToken } from 'expo-notifications';
 import type { CoreApiClient } from '../../../services/api/coreApiClient';
 import {
   listenForPushTokenChanges,
@@ -12,14 +13,14 @@ describe('push token registration', () => {
   test('registers a rotated native token as a new Expo token and revokes the old one', async () => {
     resetPushRegistrationStatus();
     const tokens = ['ExpoPushToken[old]', 'ExpoPushToken[new]'];
-    let listener: (() => void) | undefined;
+    let listener: ((token: DevicePushToken) => void) | undefined;
     const remove = jest.fn();
     const notifications = {
       setNotificationChannelAsync: jest.fn(async () => undefined),
       getPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
       requestPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
       getExpoPushTokenAsync: jest.fn(async () => ({ data: tokens.shift() })),
-      addPushTokenListener: jest.fn((callback: () => void) => {
+      addPushTokenListener: jest.fn((callback: (token: DevicePushToken) => void) => {
         listener = callback;
         return { remove };
       }),
@@ -38,8 +39,14 @@ describe('push token registration', () => {
     expect(result.status).toBe('registered');
     expect(notifications.setNotificationChannelAsync).toHaveBeenCalled();
     const stop = listenForPushTokenChanges(client, notifications, 'test-project');
-    listener?.();
+    const nativeToken: DevicePushToken = { type: 'android', data: 'new-native-fcm-token' };
+    listener?.(nativeToken);
     await waitFor(() => expect(posts).toHaveLength(3));
+
+    expect(notifications.getExpoPushTokenAsync).toHaveBeenLastCalledWith({
+      projectId: 'test-project',
+      devicePushToken: nativeToken,
+    });
 
     expect(posts.map(({ body }) => body.expo_push_token)).toEqual([
       'ExpoPushToken[old]', 'ExpoPushToken[new]', 'ExpoPushToken[old]',
