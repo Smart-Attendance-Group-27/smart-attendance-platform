@@ -558,7 +558,7 @@ describe('evaluateLivenessObservation session flow', () => {
 });
 
 describe('evaluateLivenessObservation timeouts', () => {
-  test('continues while the active challenge is under six seconds', () => {
+  test('continues while the active challenge is under ten seconds', () => {
     const result = evaluateLivenessObservation(
       createSessionState(),
       createObservation({ timestampMs: 6_999, yawDegrees: 0 }),
@@ -569,11 +569,11 @@ describe('evaluateLivenessObservation timeouts', () => {
     expect(result.state.timeoutReason).toBeNull();
   });
 
-  test('times out when the active challenge exceeds six seconds', () => {
+  test('times out when the active challenge exceeds ten seconds', () => {
     const result = evaluateLivenessObservation(
       createSessionState(),
-      createObservation({ timestampMs: 7_001, yawDegrees: 30 }),
-      7_001,
+      createObservation({ timestampMs: 11_001, yawDegrees: 30 }),
+      11_001,
     );
 
     expect(result.status).toBe('timed_out');
@@ -592,11 +592,11 @@ describe('evaluateLivenessObservation timeouts', () => {
     expect(result.state.timeoutReason).toBeNull();
   });
 
-  test('times out when the overall session exceeds twenty-five seconds', () => {
+  test('times out when the overall session exceeds forty-five seconds', () => {
     const result = evaluateLivenessObservation(
       advanceToFrontalConfirmation(),
-      createObservation({ timestampMs: 26_001, yawDegrees: 0 }),
-      26_001,
+      createObservation({ timestampMs: 46_001, yawDegrees: 0 }),
+      46_001,
     );
 
     expect(result.status).toBe('timed_out');
@@ -611,8 +611,8 @@ describe('evaluateLivenessObservation timeouts', () => {
     );
     const result = evaluateLivenessObservation(
       frontalStarted.state,
-      createObservation({ timestampMs: 26_001, yawDegrees: 0 }),
-      26_001,
+      createObservation({ timestampMs: 46_001, yawDegrees: 0 }),
+      46_001,
     );
 
     expect(result.status).toBe('timed_out');

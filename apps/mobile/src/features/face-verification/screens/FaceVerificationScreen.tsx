@@ -857,113 +857,115 @@ export function FaceVerificationScreen({
         title={isReadinessCheck ? 'Face Readiness Check' : 'Face Verification'}
       />
 
-      {isReadinessCheck ? null : (
-        <AttendanceProgressSteps phase="face" />
-      )}
+      <View style={isReadinessCheck ? styles.readinessBody : undefined}>
+        {isReadinessCheck ? null : (
+          <AttendanceProgressSteps phase="face" />
+        )}
 
-      {livenessRequired ? (
-        state.status === 'ready' ? (
-          <LivenessCamera
-            key={livenessSessionKey}
-            onSuccess={(result) => {
-              acceptLivenessResult(result, livenessSessionKey);
-            }}
-          />
-        ) : (
+        {livenessRequired ? (
+          state.status === 'ready' ? (
+            <LivenessCamera
+              key={livenessSessionKey}
+              onSuccess={(result) => {
+                acceptLivenessResult(result, livenessSessionKey);
+              }}
+            />
+          ) : (
+            <VerificationStage content={content} processing={processing} />
+          )
+        ) : showReadinessStage ? (
           <VerificationStage content={content} processing={processing} />
-        )
-      ) : showReadinessStage ? (
-        <VerificationStage content={content} processing={processing} />
-      ) : (
-        <FaceCameraPreview
-          cameraActive={cameraActive}
-          cameraRef={cameraRef}
-          onCameraError={() => {
-            setCameraActive(false);
-            setCameraReady(false);
-            setState({ status: 'camera_error' });
-          }}
-          onCameraReady={() => setCameraReady(true)}
-          processing={state.status === 'capturing' || processing}
-        />
-      )}
+        ) : (
+          <FaceCameraPreview
+            cameraActive={cameraActive}
+            cameraRef={cameraRef}
+            onCameraError={() => {
+              setCameraActive(false);
+              setCameraReady(false);
+              setState({ status: 'camera_error' });
+            }}
+            onCameraReady={() => setCameraReady(true)}
+            processing={state.status === 'capturing' || processing}
+          />
+        )}
 
-      {livenessRequired || showReadinessStage ? null : (
-        <StatusCard content={content} processing={processing} />
-      )}
+        {livenessRequired || showReadinessStage ? null : (
+          <StatusCard content={content} processing={processing} />
+        )}
 
-      {livenessRequired ? (
-        state.status === 'success' ? (
+        {livenessRequired ? (
+          state.status === 'success' ? (
+            <View style={styles.action}>
+              <AppButton
+                accessibilityLabel={
+                  isReadinessCheck
+                    ? 'Return to dashboard'
+                    : 'Continue to attendance progress'
+                }
+                onPress={continueToResult}
+                title={isReadinessCheck ? 'Done' : 'Continue'}
+              />
+            </View>
+          ) : canRetryWithFreshLiveness(state) ? (
+            <View style={styles.action}>
+              <AppButton
+                accessibilityLabel="Retry face verification"
+                onPress={retryRequiredLiveness}
+                title="Try Again"
+              />
+            </View>
+          ) : 'canRetry' in state && state.canRetry === false ? (
+            <View style={styles.action}>
+              <AppButton
+                accessibilityLabel="Return to attendance session"
+                onPress={cancelAndExit}
+                title="Return to Session"
+              />
+            </View>
+          ) : null
+        ) : (
           <View style={styles.action}>
-            <AppButton
-              accessibilityLabel={
+            <VerificationAction
+              cameraReady={cameraReady}
+              continueAccessibilityLabel={
                 isReadinessCheck
                   ? 'Return to dashboard'
                   : 'Continue to attendance progress'
               }
-              onPress={continueToResult}
-              title={isReadinessCheck ? 'Done' : 'Continue'}
-            />
-          </View>
-        ) : canRetryWithFreshLiveness(state) ? (
-          <View style={styles.action}>
-            <AppButton
-              accessibilityLabel="Retry face verification"
-              onPress={retryRequiredLiveness}
-              title="Try Again"
-            />
-          </View>
-        ) : 'canRetry' in state && state.canRetry === false ? (
-          <View style={styles.action}>
-            <AppButton
-              accessibilityLabel="Return to attendance session"
-              onPress={cancelAndExit}
-              title="Return to Session"
-            />
-          </View>
-        ) : null
-      ) : (
-        <View style={styles.action}>
-          <VerificationAction
-            cameraReady={cameraReady}
-            continueAccessibilityLabel={
-              isReadinessCheck
-                ? 'Return to dashboard'
-                : 'Continue to attendance progress'
-            }
-            continueTitle={isReadinessCheck ? 'Done' : 'Continue'}
-            onContinue={continueToResult}
-            onExit={cancelAndExit}
-            onOpenCamera={() => void openCamera()}
-            onVerify={() => {
-              if (isReadinessCheck && isVerificationFailureState(state.status)) {
-                void openCamera();
-                return;
-              }
+              continueTitle={isReadinessCheck ? 'Done' : 'Continue'}
+              onContinue={continueToResult}
+              onExit={cancelAndExit}
+              onOpenCamera={() => void openCamera()}
+              onVerify={() => {
+                if (isReadinessCheck && isVerificationFailureState(state.status)) {
+                  void openCamera();
+                  return;
+                }
 
-              void verifyFace();
-            }}
-            state={state}
+                void verifyFace();
+              }}
+              state={state}
+            />
+          </View>
+        )}
+
+        <View
+          accessible
+          accessibilityLabel={`Privacy notice. Your face is used only for ${
+            isReadinessCheck ? 'readiness' : 'attendance'
+          } verification and should not be stored unnecessarily.`}
+          style={styles.privacyNotice}
+        >
+          <SymbolView
+            name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
+            size={18}
+            tintColor={lightColors.neutral}
           />
+          <Text style={styles.privacyText}>
+            Your face is used only for {isReadinessCheck ? 'readiness' : 'attendance'} verification and should not be stored unnecessarily.
+          </Text>
         </View>
-      )}
-
-      <View
-        accessible
-        accessibilityLabel={`Privacy notice. Your face is used only for ${
-          isReadinessCheck ? 'readiness' : 'attendance'
-        } verification and should not be stored unnecessarily.`}
-        style={styles.privacyNotice}
-      >
-        <SymbolView
-          name={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
-          size={18}
-          tintColor={lightColors.neutral}
-        />
-        <Text style={styles.privacyText}>
-          Your face is used only for {isReadinessCheck ? 'readiness' : 'attendance'} verification and should not be stored unnecessarily.
-        </Text>
-      </View>
+        </View>
     </ScreenContainer>
   );
 }
@@ -1007,6 +1009,10 @@ function canRetryWithFreshLiveness(
 const styles = StyleSheet.create({
   screenContent: {
     paddingBottom: spacing.xxl,
+  },
+  readinessBody: {
+    flex: 1,
+    justifyContent: 'center',
   },
   header: {
     minHeight: 48,
