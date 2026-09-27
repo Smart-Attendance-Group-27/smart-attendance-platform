@@ -4,13 +4,18 @@ set -euo pipefail
 release_dir=${1:?Pass the absolute release directory}
 image_source=${2:-registry}
 env_file=/etc/uniattend/private.env
+database_env_file=/etc/uniattend/application-db.env
+database_compose="$release_dir/deployment/compose.database.yml"
 app_compose="$release_dir/deployment/compose.app.yml"
 face_compose="$release_dir/deployment/compose.face.yml"
 
 test -r "$env_file"
+test -r "$database_env_file"
+test -r "$database_compose"
 test -r "$app_compose"
 test -r "$face_compose"
 
+database=(docker compose --env-file "$database_env_file" -f "$database_compose")
 app=(docker compose --env-file "$env_file" -f "$app_compose")
 face=(docker compose --env-file "$env_file" -f "$face_compose")
 
@@ -32,15 +37,20 @@ wait_healthy() {
   return 1
 }
 
+"${database[@]}" config --quiet
 "${app[@]}" config --quiet
 "${face[@]}" config --quiet
 if [[ "$image_source" == registry ]]; then
+  "${database[@]}" pull
   "${app[@]}" pull
   "${face[@]}" pull
 elif [[ "$image_source" != local-images ]]; then
   printf 'Image source must be registry or local-images\n' >&2
   exit 2
 fi
+
+"${database[@]}" up -d application-db
+wait_healthy uniattend-database-application-db-1 120
 
 "${app[@]}" up -d keycloak-db redis
 wait_healthy uniattend-app-keycloak-db-1 120
@@ -58,5 +68,6 @@ wait_healthy uniattend-face-face-verification-1 600
 "${app[@]}" up -d web
 wait_healthy uniattend-app-web-1 180
 
+"${database[@]}" ps
 "${app[@]}" ps
 "${face[@]}" ps

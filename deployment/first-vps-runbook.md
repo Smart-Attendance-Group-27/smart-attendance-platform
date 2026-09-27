@@ -8,8 +8,10 @@ the VPS as `uniattend`, except where noted.
 ## Release inputs
 
 - `/etc/uniattend/private.env`: owner `uniattend`, mode `0600`. It contains the
-  full merged commit SHA, Supabase session-pooler URI, the existing face
+  full merged commit SHA, application database URI, the existing face
   embedding key, and newly generated Keycloak, web and QR secrets.
+- `/etc/uniattend/application-db.env`: owner `uniattend`, mode `0600`. It
+  contains only the private PostgreSQL database name, user and password.
 - `/etc/uniattend/realm.json`: rendered Keycloak realm, mode `0600`.
 - `/etc/uniattend/backup-recipient.txt`: public age recipient only. The
   corresponding private key is kept off the VPS.
@@ -32,6 +34,8 @@ gate on 2026-09-24; do not replay the migrations without a new read-only audit.
 
 ```bash
 deployment/ops/deploy_private.sh /opt/uniattend/current
+docker compose --env-file /etc/uniattend/application-db.env \
+  -f /opt/uniattend/current/deployment/compose.database.yml ps
 docker compose --env-file /etc/uniattend/private.env \
   -f /opt/uniattend/current/deployment/compose.app.yml ps
 docker compose --env-file /etc/uniattend/private.env \
@@ -77,10 +81,11 @@ Cloudflare R2 is independent of HTTPS. An R2 account and bucket credentials
 are still required for the later photo storage adapter; current enrollment
 continues to use approved local input files.
 
-## Keycloak backup and recovery
+## Database backup and recovery
 
-The backup timer runs daily at 02:30 UTC and writes a dated encrypted
-`pg_dump` under `/opt/uniattend/backups`. Copy the `.age` file off the VPS
+The Keycloak backup timer runs daily at 02:30 UTC. The application database
+backup timer runs at 03:00 UTC. Both write dated encrypted `pg_dump` archives
+under `/opt/uniattend/backups`. Copy the `.age` files off the VPS
 regularly and verify the copy before the local 30-day retention window ends.
 The backup script removes local database dumps older than 30 days only after
 creating a new encrypted dump successfully. The age private key must stay on
@@ -91,7 +96,9 @@ live Keycloak volume.
 
 ```bash
 sudo systemctl status uniattend-keycloak-backup.timer
+sudo systemctl status uniattend-application-db-backup.timer
 sudo systemctl start uniattend-keycloak-backup.service
+sudo systemctl start uniattend-application-db-backup.service
 ls -lh /opt/uniattend/backups/*.age
 ```
 
@@ -109,8 +116,12 @@ can catch up before the VPS's 30-day local retention expires. Check its last
 result and the local files weekly; realm exports must still be copied and
 verified manually after identity changes.
 
+Run `deployment/ops/pull_application_db_backups.ps1` through the same protected
+scheduled workflow. A restore test must use an isolated PostgreSQL container;
+never restore over either live database volume.
+
 The previous Railway Keycloak returned 404 on 2026-09-24. Seven role-bearing
-mock users were recreated in the new Keycloak and their Supabase subjects were
+mock users were recreated in the new Keycloak and their application identity subjects were
 remapped. Their generated credentials are held in the administrator's
 protected local file, outside Git and the VPS. Two extra local mock users
 had historical session, profile, audit or notification records. They were
@@ -161,7 +172,8 @@ against that release directory. Keep the Keycloak and Redis volumes; do not
 run `down -v`. A database rollback is separate from application rollback.
 
 By day 50, export the Keycloak realm, pull final encrypted Keycloak and
-Supabase backups off the VPS, record release/image digests and pilot evidence,
+application database backups off the VPS, preserve the last Supabase rollback
+archive, record release/image digests and pilot evidence,
 then stop ingress and application containers. Confirm the backups decrypt and
 the netcup cancellation date. Remove the VPS only after the owner confirms
 that student records and photos have been retained or deleted as agreed.
