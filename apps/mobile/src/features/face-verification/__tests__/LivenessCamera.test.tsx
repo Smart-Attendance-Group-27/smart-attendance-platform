@@ -266,6 +266,88 @@ describe('LivenessCamera', () => {
     expect(secondState.challenges[1].challenge).toBe('eyes_closed_hold');
   });
 
+  test('plays success feedback as each challenge completes', async () => {
+    const fake = createFakeController();
+    const hapticFeedback = jest.fn<
+      (kind: 'success' | 'error') => Promise<void>
+    >(async () => undefined);
+    await render(
+      <LivenessCamera
+        controllerFactory={() => fake.controller}
+        hapticFeedback={hapticFeedback}
+      />,
+    );
+
+    const secondState = moveToSecondChallenge(fake.sessionState);
+    await act(async () => {
+      fake.setSnapshot(createSnapshot('running', secondState));
+    });
+    expect(hapticFeedback).toHaveBeenCalledTimes(1);
+    expect(hapticFeedback).toHaveBeenLastCalledWith('success');
+
+    const frontalState: LivenessSessionState = {
+      ...secondState,
+      phase: 'frontal_confirmation',
+      challenges: [
+        secondState.challenges[0],
+        {
+          ...secondState.challenges[1],
+          progress: 'completed',
+          completedAtMs: 1_800,
+        },
+      ],
+      currentChallengeIndex: null,
+      phaseStartedAtMs: 1_800,
+      frontalConfirmation: {
+        ...secondState.frontalConfirmation,
+        progress: 'active',
+        startedAtMs: 1_800,
+      },
+    };
+    await act(async () => {
+      fake.setSnapshot(createSnapshot('running', frontalState));
+    });
+
+    expect(hapticFeedback).toHaveBeenCalledTimes(2);
+    expect(hapticFeedback).toHaveBeenLastCalledWith('success');
+  });
+
+  test.each(['failed', 'timed_out'] as const)(
+    'plays error feedback once when the session becomes %s',
+    async (status) => {
+      const fake = createFakeController();
+      const hapticFeedback = jest.fn<
+        (kind: 'success' | 'error') => Promise<void>
+      >(async () => undefined);
+      await render(
+        <LivenessCamera
+          controllerFactory={() => fake.controller}
+          hapticFeedback={hapticFeedback}
+        />,
+      );
+
+      const terminalSnapshot = createSnapshot(
+        status,
+        fake.sessionState,
+        status === 'failed'
+          ? { kind: 'observation', reason: 'no_face' }
+          : null,
+        null,
+        null,
+        status === 'timed_out' ? 'challenge_timeout' : null,
+      );
+      await act(async () => {
+        fake.setSnapshot(terminalSnapshot);
+      });
+      await act(async () => {
+        fake.setSnapshot({ ...terminalSnapshot });
+      });
+
+      expect(hapticFeedback).toHaveBeenCalledTimes(1);
+      expect(hapticFeedback).toHaveBeenCalledWith('error');
+    },
+  );
+
   test('shows a recoverable local failure and retries through the controller', async () => {
     const fake = createFakeController();
     const onSuccess = jest.fn();

@@ -1,4 +1,5 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
 import {
   useCallback,
   useEffect,
@@ -42,6 +43,7 @@ type LivenessControllerFactory = (
 
 type LivenessCameraProps = {
   readonly controllerFactory?: LivenessControllerFactory;
+  readonly hapticFeedback?: (kind: 'success' | 'error') => void | Promise<void>;
   readonly onCancel?: () => void;
   readonly onSuccess?: (result: LivenessCameraResult) => void;
 };
@@ -92,12 +94,17 @@ const CHALLENGE_INSTRUCTIONS: Record<LivenessChallenge, string> = {
 
 export function LivenessCamera({
   controllerFactory = defaultControllerFactory,
+  hapticFeedback = playHapticFeedback,
   onCancel,
   onSuccess,
 }: LivenessCameraProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const successReportedRef = useRef(false);
+  const previousFeedbackStateRef = useRef({
+    completedChallengeCount: 0,
+    status: 'idle' as LivenessSessionSnapshot['status'],
+  });
   const restartWhenCameraReadyRef = useRef(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -136,6 +143,30 @@ export function LivenessCamera({
 
     return () => subscription.remove();
   }, [controller]);
+
+  useEffect(() => {
+    const previous = previousFeedbackStateRef.current;
+    const challengeCompleted =
+      snapshot.completedChallengeCount > previous.completedChallengeCount;
+    const terminalFailureStarted =
+      (snapshot.status === 'failed' || snapshot.status === 'timed_out') &&
+      snapshot.status !== previous.status;
+
+    if (challengeCompleted) {
+      triggerHapticFeedback(hapticFeedback, 'success');
+    } else if (terminalFailureStarted) {
+      triggerHapticFeedback(hapticFeedback, 'error');
+    }
+
+    previousFeedbackStateRef.current = {
+      completedChallengeCount: snapshot.completedChallengeCount,
+      status: snapshot.status,
+    };
+  }, [
+    hapticFeedback,
+    snapshot.completedChallengeCount,
+    snapshot.status,
+  ]);
 
   useEffect(() => {
     if (
@@ -315,6 +346,25 @@ export function LivenessCamera({
         <AppButton onPress={cancel} title="Cancel" variant="secondary" />
       ) : null}
     </View>
+  );
+}
+
+function triggerHapticFeedback(
+  hapticFeedback: NonNullable<LivenessCameraProps['hapticFeedback']>,
+  kind: 'success' | 'error',
+): void {
+  try {
+    void Promise.resolve(hapticFeedback(kind)).catch(() => undefined);
+  } catch {
+    // Haptics are supplementary feedback and must not interrupt liveness.
+  }
+}
+
+function playHapticFeedback(kind: 'success' | 'error'): Promise<void> {
+  return Haptics.notificationAsync(
+    kind === 'success'
+      ? Haptics.NotificationFeedbackType.Success
+      : Haptics.NotificationFeedbackType.Error,
   );
 }
 
