@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily UniAttend application database backup
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+Unit=uniattend-application-db-backup.service
+
+[Install]
+WantedBy=timers.target
