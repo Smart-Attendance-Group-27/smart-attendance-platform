@@ -1,0 +1,6 @@
+﻿"scenario","target_logins","completed_logins","failures","min_ms","average_ms","median_ms","p95_ms","max_ms","result"
+"Simultaneous 20","20","20","0","1357","1884.6","1946","2321.05","2322","Pass"
+"Simultaneous 50","50","50","0","1586","3074.44","3168","4248.9","4377","Fail"
+"Simultaneous 100","100","100","0","5434","7033.94","6466","9550","9944","Fail"
+"Simultaneous 200","200","200","0","15569","18622.56","18557","21893.40","22561","Fail"
+"Controlled 200/min","200","201","0","661","955.89","723","2098","2507","Pass"
