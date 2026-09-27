@@ -1,0 +1,23 @@
+﻿Sun Sep 27 01:20:18 PM UTC 2026
+ 13:20:18 up 3 days, 17:58,  2 users,  load average: 1.13, 0.69, 0.72
+               total        used        free      shared  buff/cache   available
+Mem:            7947        2835         849          60        4621        5112
+Swap:           2047           0        2047
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vda4       125G   18G  103G  15% /
+uniattend-app-web-1|Up 4 hours (healthy)
+uniattend-face-face-verification-1|Up 4 hours (healthy)
+uniattend-app-core-api-1|Up 4 hours (healthy)
+uniattend-app-keycloak-1|Up 4 hours (healthy)
+uniattend-database-application-db-1|Up 5 hours (healthy)
+uniattend-ingress-caddy-1|Up 3 days
+uniattend-app-keycloak-db-1|Up 3 days (healthy)
+uniattend-app-redis-1|Up 3 days (healthy)
+/uniattend-app-web-1|restarts=0|status=running|health=healthy
+/uniattend-face-face-verification-1|restarts=0|status=running|health=healthy
+/uniattend-app-core-api-1|restarts=0|status=running|health=healthy
+/uniattend-app-keycloak-1|restarts=0|status=running|health=healthy
+/uniattend-database-application-db-1|restarts=0|status=running|health=healthy
+/uniattend-ingress-caddy-1|restarts=0|status=running|health=none
+/uniattend-app-keycloak-db-1|restarts=0|status=running|health=healthy
+/uniattend-app-redis-1|restarts=0|status=running|health=healthy

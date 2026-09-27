@@ -1,0 +1,5 @@
+scenario,iterations,min_ms,avg_ms,median_ms,p95_ms,max_ms,failure_rate,result
+Mobile PKCE login,200,671.00,824.61,771.50,1136.20,1718.00,0%,Pass
+Student profile,200,196.36,289.23,274.33,470.17,665.76,0%,Pass
+Active sessions,200,204.31,276.04,293.57,319.84,563.72,0%,Pass
+Face readiness status,200,199.62,262.34,239.37,319.64,346.17,0%,Pass
