@@ -19,6 +19,7 @@ import {
 import type { AuthenticatedSession } from '../../auth/types/auth.types';
 import type { ProfileService } from '../services/profile.service';
 import type { StudentProfile } from '../types/profile.types';
+import { getProfileInitials } from '../utils/profileInitials';
 
 type ProfileScreenProps = {
   readonly onNotificationPreferencesPress?: () => void;
@@ -220,7 +221,10 @@ function ProfileContent({
   readonly profile: StudentProfile;
   readonly session: AuthenticatedSession;
 }) {
-  const initials = useMemo(() => getInitials(profile.fullName), [profile.fullName]);
+  const initials = useMemo(
+    () => getProfileInitials(profile.fullName),
+    [profile.fullName],
+  );
 
   return (
     <View style={styles.content}>
@@ -353,15 +357,6 @@ function StateMessage({
       {action}
     </View>
   );
-}
-
-function getInitials(fullName: string) {
-  return fullName
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((namePart) => namePart[0]?.toUpperCase() ?? '')
-    .join('');
 }
 
 const styles = StyleSheet.create({

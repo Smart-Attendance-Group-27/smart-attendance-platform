@@ -68,6 +68,7 @@ export function DashboardScreen({
   const [courseCards, setCourseCards] = useState<CourseSummary[]>([]);
   const [requiresReadinessCheck, setRequiresReadinessCheck] = useState(false);
   const [userName, setUserName] = useState<string>('');
+  const [studentFullName, setStudentFullName] = useState<string>('');
   const [now, setNow] = useState(() => new Date());
   const [semester, setSemester] = useState<string | null>(null);
   const hasFocusedDashboard = useRef(false);
@@ -91,6 +92,7 @@ export function DashboardScreen({
           const full = profileResult.profile.fullName;
           const first = full.split(' ')[0] ?? full;
           setUserName(first);
+          setStudentFullName(full);
         }
       } catch {
         // ignore profile errors - non-blocking
@@ -130,6 +132,7 @@ export function DashboardScreen({
             const full = profileResult.profile.fullName;
             const first = full.split(' ')[0] ?? full;
             setUserName(first);
+            setStudentFullName(full);
           }
         } catch {
           // Profile greeting is non-blocking.
@@ -263,6 +266,7 @@ export function DashboardScreen({
   return (
     <ScreenContainer scrollable contentContainerStyle={styles.scrollContent}>
         <DashboardTopBar
+          fullName={studentFullName}
           onNotificationsPress={() => router.push('/(student)/(tabs)/notifications')}
           onProfilePress={() => router.push('/(student)/(tabs)/profile')}
           onSignOutPress={onSignOutPress}

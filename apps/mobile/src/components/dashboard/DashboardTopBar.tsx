@@ -2,14 +2,17 @@ import { SymbolView } from 'expo-symbols';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { lightColors, radii, spacing } from '../../theme';
+import { getProfileInitials } from '../../features/profile/utils/profileInitials';
 
 type DashboardTopBarProps = {
+  fullName: string;
   onNotificationsPress: () => void;
   onProfilePress: () => void;
   onSignOutPress?: () => void;
 };
 
 export function DashboardTopBar({
+  fullName,
   onNotificationsPress,
   onProfilePress,
   onSignOutPress,
@@ -76,7 +79,7 @@ export function DashboardTopBar({
             pressed && styles.pressed,
           ]}
         >
-          <Text style={styles.avatarText}>MH</Text>
+          <Text style={styles.avatarText}>{getProfileInitials(fullName)}</Text>
         </Pressable>
       </View>
     </View>
