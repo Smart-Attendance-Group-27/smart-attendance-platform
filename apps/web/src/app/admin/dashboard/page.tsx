@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Notice } from "@/components/ui/Notice";
 import { SummaryStrip } from "@/components/ui/SummaryStrip";
 import { Card } from "@/components/ui/Card";
 import { ActivityList } from "@/components/ui/ActivityList";
@@ -17,14 +16,8 @@ export default async function AdminDashboardPage() {
     <div>
       <PageHeader
         title="Administration"
-        description="Institutional user, academic-source, classroom, geofence, and attendance-policy controls."
         actions={<Link href="/admin/policies" className="text-xs text-[var(--link)] hover:underline">Edit attendance policy</Link>}
       />
-
-      <Notice variant="warning" title="Administrator-only controls.">
-        Institutional geofences, attendance policies, user access, and academic data
-        can only be changed by authorised administrators.
-      </Notice>
 
       <SummaryStrip
         items={[

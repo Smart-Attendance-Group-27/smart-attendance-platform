@@ -7,10 +7,7 @@ export default async function AdminCorrectionsPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Correction requests"
-        description="Review corrections lecturers have asked for in course data and timetables. Approving a request does not change the record; make the change in Academic data and then mark the request resolved."
-      />
+      <PageHeader title="Correction requests" />
       <CorrectionRequestsWorkspace requests={requests} />
     </div>
   );

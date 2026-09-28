@@ -10,10 +10,7 @@ export default async function AdminAcademicPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Academic data"
-        description="Courses, offerings, timetables, and enrolments. Lecturers see only the subset assigned to them."
-      />
+      <PageHeader title="Academic data" />
       <AcademicDataWorkspace data={data} references={references} />
     </div>
   );

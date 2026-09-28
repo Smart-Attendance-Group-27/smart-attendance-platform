@@ -16,7 +16,6 @@ export default async function AdminReportsPage() {
     <div>
       <PageHeader
         title="Institution reports"
-        description="University-wide attendance analytics across every faculty and course."
         actions={
           <ExportCsvButton
             filenamePrefix="courses-below-threshold"
