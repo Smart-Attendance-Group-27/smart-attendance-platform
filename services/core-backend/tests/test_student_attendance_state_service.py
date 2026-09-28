@@ -102,6 +102,7 @@ def build_session_row(**overrides) -> StudentSessionRow:
         course_name="Software Engineering Project",
         session_title="Week 7",
         session_type="lecture",
+        venue="LH-02",
         status="active",
         closed_at=None,
         cancelled_at=None,

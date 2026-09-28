@@ -47,6 +47,19 @@ describe('CoreApiAttendanceService', () => {
     }
   });
 
+  test('maps the allocated session venue into session details', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      response(200, myAttendanceFixtures[sessionId]),
+    );
+
+    const result = await service().getAttendanceSession(sessionId);
+
+    expect(result).toEqual(expect.objectContaining({
+      status: 'available',
+      session: expect.objectContaining({ venue: 'Lecture Hall 02' }),
+    }));
+  });
+
   test('reads the cancellation reason for a cancelled session', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue(
       response(200, myAttendanceFixtures['attendance-session-cancelled']),
