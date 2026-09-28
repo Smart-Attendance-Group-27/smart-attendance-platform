@@ -6,6 +6,7 @@ const base: MyAttendance = {
   courseName: 'Software Engineering Project',
   sessionTitle: 'Architecture Review Lecture',
   sessionType: 'lecture',
+  venue: 'Lecture Hall 02',
   sessionState: 'active',
   cancellationReason: null,
   scheduledStartAt: '2026-07-20T10:00:00+05:30',

@@ -9,7 +9,6 @@ export default async function LecturerReviewPage() {
     <div>
       <PageHeader
         title="Verification review"
-        description="Review uncertain verification results and authorised manual attendance requests."
       />
       <ReviewWorkspace initialCases={cases} />
     </div>

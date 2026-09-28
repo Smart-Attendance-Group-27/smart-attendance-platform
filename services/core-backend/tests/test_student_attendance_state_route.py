@@ -42,6 +42,7 @@ def build_state(**overrides) -> StudentAttendanceState:
         course_name="Software Engineering Project",
         session_title="Week 7",
         session_type="lecture",
+        venue="LH-02",
         session_state=SessionState.ACTIVE,
         cancelled_at=None,
         cancellation_reason=None,
@@ -117,6 +118,7 @@ def test_returns_the_camel_case_attendance_state(
     body = response.json()
     assert body["sessionId"] == str(SESSION_ID)
     assert body["sessionState"] == "active"
+    assert body["venue"] == "LH-02"
     assert body["canStartCheckIn"] is True
     assert body["verification"] == {
         "attemptStatus": None,

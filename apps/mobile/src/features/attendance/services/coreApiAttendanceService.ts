@@ -78,6 +78,7 @@ export function parseMyAttendance(value: unknown, sessionId: string): MyAttendan
     typeof value.courseName !== 'string' ||
     typeof value.sessionTitle !== 'string' ||
     typeof value.sessionType !== 'string' ||
+    !(value.venue === null || typeof value.venue === 'string') ||
     !['scheduled', 'active', 'closed', 'cancelled'].includes(String(value.sessionState)) ||
     !(value.cancellationReason === null || typeof value.cancellationReason === 'string') ||
     !isDate(value.scheduledStartAt) || !isDate(value.scheduledEndAt) ||
@@ -116,7 +117,7 @@ export function toAttendanceSession(state: MyAttendance): AttendanceSession {
       ? state.sessionType : 'lecture',
     startTime: state.scheduledStartAt,
     endTime: state.scheduledEndAt,
-    venue: 'Venue TBA',
+    venue: state.venue ?? 'Venue TBA',
     checkInOpensAt: state.checkInOpensAt ?? state.scheduledStartAt,
     checkInClosesAt: state.checkInClosesAt ?? state.scheduledEndAt,
     lateThreshold: state.lateAfterAt ?? state.checkInClosesAt ?? state.scheduledEndAt,

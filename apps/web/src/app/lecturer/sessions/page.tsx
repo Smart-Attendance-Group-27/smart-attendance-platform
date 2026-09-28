@@ -20,7 +20,6 @@ export default async function LecturerSessionsPage() {
     <div>
       <PageHeader
         title="Attendance sessions"
-        description="View and monitor your attendance sessions."
         actions={isWebMockMode()
           ? <span className="text-xs text-[var(--muted)]">Mock preview · creation unavailable</span>
           : <CreateSessionButton timetableOptions={timetableOptions} faceAttendanceEnabled={faceAttendanceEnabled} />}

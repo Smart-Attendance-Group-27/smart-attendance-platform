@@ -54,6 +54,7 @@ class StudentAttendanceState:
     course_name: str | None
     session_title: str | None
     session_type: str | None
+    venue: str | None
     session_state: SessionState
     cancelled_at: datetime | None
     cancellation_reason: str | None
@@ -77,6 +78,7 @@ class StudentSessionRow:
     course_name: str | None
     session_title: str | None
     session_type: str | None
+    venue: str | None
     status: str | None
     closed_at: datetime | None
     cancelled_at: datetime | None
@@ -161,6 +163,10 @@ class StudentAttendanceStateRepository:
                 course.course_name,
                 session.session_title,
                 session.session_type,
+                COALESCE(
+                    exception_classroom.classroom_code,
+                    timetable_classroom.classroom_code
+                ) AS venue,
                 session.status,
                 session.closed_at,
                 session.cancelled_at,
@@ -179,6 +185,14 @@ class StudentAttendanceStateRepository:
                 ON offering.id = session.course_offering_id
             JOIN academic.courses AS course
                 ON course.id = offering.course_id
+            LEFT JOIN academic.timetable_entries AS timetable
+                ON timetable.id = session.timetable_entry_id
+            LEFT JOIN academic.classrooms AS timetable_classroom
+                ON timetable_classroom.id = timetable.classroom_id
+            LEFT JOIN academic.timetable_exceptions AS timetable_exception
+                ON timetable_exception.id = session.timetable_exception_id
+            LEFT JOIN academic.classrooms AS exception_classroom
+                ON exception_classroom.id = timetable_exception.new_classroom_id
             WHERE session.id = $1 AND eligible_student.student_id = $2
             """,
             session_id,
@@ -192,6 +206,7 @@ class StudentAttendanceStateRepository:
             course_name=row["course_name"],
             session_title=row["session_title"],
             session_type=row["session_type"],
+            venue=row["venue"],
             status=row["status"],
             closed_at=row["closed_at"],
             cancelled_at=row["cancelled_at"],
@@ -382,6 +397,7 @@ class StudentAttendanceStateService:
             course_name=session_row.course_name,
             session_title=session_row.session_title,
             session_type=session_row.session_type,
+            venue=session_row.venue,
             session_state=session_state,
             cancelled_at=session_row.cancelled_at,
             cancellation_reason=session_row.cancellation_reason,

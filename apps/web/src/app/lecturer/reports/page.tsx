@@ -17,7 +17,6 @@ export default async function LecturerReportsPage() {
     <div>
       <PageHeader
         title="Attendance reports"
-        description="Analyse attendance across assigned courses and scheduled sessions."
         actions={
           <ExportCsvButton
             filenamePrefix="students-below-threshold"

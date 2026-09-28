@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Notice } from "@/components/ui/Notice";
 import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { ActivityList } from "@/components/ui/ActivityList";
@@ -20,7 +19,6 @@ export default async function LecturerCoursesPage() {
     <div>
       <PageHeader
         title="My courses and timetable"
-        description="View authorised academic data for assigned courses."
         actions={
           <CorrectionRequestButton
             requestType="course_data"
@@ -35,11 +33,6 @@ export default async function LecturerCoursesPage() {
           />
         }
       />
-
-      <Notice title="Read-only academic information.">
-        Course definitions, enrolments, lecturer assignments, and timetable records are
-        maintained by administrators. Corrections are submitted for administrative review.
-      </Notice>
 
       <AssignedCoursesCard courses={courses} semesterLabel={semesterLabel} />
 

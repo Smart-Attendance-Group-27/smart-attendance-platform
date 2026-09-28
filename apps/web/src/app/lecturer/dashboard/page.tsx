@@ -1,5 +1,4 @@
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Notice } from "@/components/ui/Notice";
 import { SummaryStrip } from "@/components/ui/SummaryStrip";
 import { Card } from "@/components/ui/Card";
 import { DataTable, CellPrimary } from "@/components/ui/DataTable";
@@ -11,7 +10,6 @@ import { LineChart } from "@/components/charts/LineChart";
 import { getLecturerOverview } from "@/services/lecturerService";
 import { sessionStatusDisplay, weeklyDeltaNote } from "@/lib/status";
 import { TodayLecture } from "@/types/lecturer";
-import { isWebMockMode } from "@/lib/api/mode";
 
 export default async function LecturerDashboardPage() {
   const { summary, todayLectures, attentionItems, weeklyTrend, recentActivity } = await getLecturerOverview();
@@ -23,7 +21,6 @@ export default async function LecturerDashboardPage() {
     <div>
       <PageHeader
         title="Attendance overview"
-        description="Current lecture activity and items requiring attention."
         actions={
           <>
             <LinkButton href="/lecturer/courses">View timetable</LinkButton>
@@ -39,12 +36,6 @@ export default async function LecturerDashboardPage() {
           </>
         }
       />
-
-      <Notice title="Academic data source:">
-        {isWebMockMode()
-          ? "Mock preview: session and roster data shown here is illustrative."
-          : "Courses, enrolments, lecturer assignments, and timetable entries are maintained by administrators. Lecturers have read-only access to these records."}
-      </Notice>
 
       <SummaryStrip
         aria-label="Today's attendance summary"

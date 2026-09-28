@@ -11,6 +11,7 @@ export type MyAttendance = {
   readonly courseName: string;
   readonly sessionTitle: string;
   readonly sessionType: string;
+  readonly venue: string | null;
   readonly sessionState: 'scheduled' | 'active' | 'closed' | 'cancelled';
   readonly cancellationReason: string | null;
   readonly scheduledStartAt: string;
