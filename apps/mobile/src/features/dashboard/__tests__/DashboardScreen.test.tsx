@@ -43,6 +43,31 @@ describe('DashboardScreen', () => {
     mockFocusCallback = undefined;
   });
 
+  test('shows the signed-in student first and last initials in the profile avatar', async () => {
+    const profileService: ProfileService = {
+      async getMyStudentProfile() {
+        return {
+          status: 'found',
+          profile: {
+            id: 'profile-1',
+            registrationNumber: '230001A',
+            fullName: 'Amal Nuwan Perera',
+            universityEmail: 'amal.perera@example.edu',
+          },
+        };
+      },
+    };
+
+    const { findByText } = await render(
+      <DashboardScreen
+        profileService={profileService}
+        dashboardService={createEmptyDashboardService()}
+      />,
+    );
+
+    expect(await findByText('AP')).toBeTruthy();
+  });
+
   test('renders upcoming lectures from the service', async () => {
     const fakeService: DashboardService = {
       async getUpcomingLectures() {
