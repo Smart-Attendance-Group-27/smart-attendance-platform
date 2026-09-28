@@ -24,7 +24,6 @@ class ActiveAttendanceSessionResponse(BaseModel):
     check_in_opens_at: datetime = Field(alias="checkInOpensAt")
     check_in_closes_at: datetime = Field(alias="checkInClosesAt")
     late_after_at: datetime | None = Field(alias="lateAfterAt")
-    venue: str | None = None
     requires_face_verification: bool = Field(alias="requiresFaceVerification")
     requires_geofence: bool = Field(alias="requiresGeofence")
     requires_qr: bool = Field(alias="requiresQr")
@@ -67,6 +66,7 @@ class StudentAttendanceStateResponse(BaseModel):
     course_name: str = Field(alias="courseName")
     session_title: str = Field(alias="sessionTitle")
     session_type: str = Field(alias="sessionType")
+    venue: str | None
     session_state: SessionState = Field(alias="sessionState")
     cancelled_at: datetime | None = Field(alias="cancelledAt")
     cancellation_reason: str | None = Field(alias="cancellationReason")
