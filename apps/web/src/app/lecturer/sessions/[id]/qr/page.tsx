@@ -17,6 +17,11 @@ export default async function LecturerSessionQrPage(props: PageProps<"/lecturer/
     notFound();
   }
   const batches = session.requiresQr ? await getSessionQrBatches(id) : [];
+  const activeBatch = batches.find((batch) =>
+    batch.status === "active" &&
+    !batch.voided &&
+    batch.deactivatedAt === null
+  );
 
   const isLaunchEnabled = session.status === "in_progress" && session.requiresQr === true;
 
@@ -43,6 +48,8 @@ export default async function LecturerSessionQrPage(props: PageProps<"/lecturer/
         mockReadOnly={isWebMockMode()}
         room={session.room}
         sessionId={session.sessionId}
+        activeBatchId={activeBatch?.qrSessionId ?? null}
+        activeBatchExpiresAt={activeBatch?.expiresAt ?? null}
       />
       {session.status === "in_progress" ? <SessionLiveRefresh /> : null}
       <QrBatchParticipationTable

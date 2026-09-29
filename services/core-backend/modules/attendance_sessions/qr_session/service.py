@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 import asyncpg
 
 from modules.attendance_sessions.qr_session.exception import (
+    ActiveQrBatchExistsError,
     ActiveStudentProfileNotFoundError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
@@ -233,6 +234,35 @@ class QrSessionService:
         await self._delete_cached_qr_batches([qr_session_id])
         return result
 
+    async def deactivate_qr_batch(
+        self, pool: asyncpg.Pool, session_id: UUID, qr_session_id: UUID,
+        lecturer_user_id: UUID,
+    ) -> QrBatchParticipation:
+        deactivated_at = self._ensure_utc(self._clock())
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                session = await self._repository.lock_attendance_session(connection, session_id)
+                if session is None:
+                    raise LecturerSessionAccessError()
+                await self._authorize_lecturer_for_session(connection, session_id, lecturer_user_id)
+                changed = await self._repository.deactivate_qr_batch(
+                    connection, session_id, qr_session_id, deactivated_at,
+                )
+                if not changed:
+                    raise QrSessionNotFoundError()
+                await write_audit_log(
+                    connection, actor_user_id=lecturer_user_id,
+                    actor_type=ACTOR_TYPE_LECTURER, action="qr_session.deactivate",
+                    entity_type=AUDIT_ENTITY_TYPE, entity_id=qr_session_id,
+                    new_values={"attendanceSessionId": str(session_id)},
+                )
+                batches = await self._evidence_repository.batch_participation_for_session(
+                    connection, session_id,
+                )
+                result = next(batch for batch in batches if batch.qr_session_id == qr_session_id)
+        await self._delete_cached_qr_batches([qr_session_id])
+        return result
+
     async def create_static_qr_session(
         self,
         pool: asyncpg.Pool,
@@ -273,6 +303,10 @@ class QrSessionService:
                         current_time,
                     )
                 )
+                if deactivated_qr_session_ids:
+                    raise ActiveQrBatchExistsError(
+                        "Wait for the active QR batch to finish before launching another one."
+                    )
                 await self._repository.insert_qr_batch(
                     connection,
                     qr_session_id,
@@ -359,6 +393,10 @@ class QrSessionService:
                         current_time,
                     )
                 )
+                if deactivated_qr_session_ids:
+                    raise ActiveQrBatchExistsError(
+                        "Wait for the active QR batch to finish before launching another one."
+                    )
                 await self._repository.insert_qr_batch(
                     connection,
                     qr_session_id,

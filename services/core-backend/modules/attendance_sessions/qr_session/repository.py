@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
@@ -58,6 +59,32 @@ class QrBatchVoidState:
 
 
 class QrSessionRepository:
+    async def deactivate_qr_batch(
+        self, connection: asyncpg.Connection, session_id: UUID,
+        qr_session_id: UUID, deactivated_at: datetime,
+    ) -> bool:
+        row = await connection.fetchrow(
+            """
+            UPDATE attendance_session.qr_token_batches
+            SET status = $4, deactivated_at = $3
+            WHERE id = $1 AND session_id = $2
+              AND status = $5 AND deactivated_at IS NULL AND voided_at IS NULL
+            RETURNING id
+            """,
+            qr_session_id, session_id, deactivated_at, INACTIVE_STATUS, ACTIVE_STATUS,
+        )
+        if row is None:
+            return False
+        await connection.execute(
+            """
+            UPDATE attendance_session.qr_tokens
+            SET revoked_at = COALESCE(revoked_at, $2)
+            WHERE qr_batch_id = $1
+            """,
+            qr_session_id, deactivated_at,
+        )
+        return True
+
     async def lock_qr_batch_for_void(
         self, connection: asyncpg.Connection, session_id: UUID, qr_session_id: UUID,
     ) -> QrBatchVoidState | None:
@@ -192,6 +219,8 @@ class QrSessionRepository:
                 WHERE session_id = $1
                   AND status = $4
                   AND deactivated_at IS NULL
+                  AND voided_at IS NULL
+                  AND expires_at > $2
                 RETURNING id
             ),
             revoked_tokens AS (
