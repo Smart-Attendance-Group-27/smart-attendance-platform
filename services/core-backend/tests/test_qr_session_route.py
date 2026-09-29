@@ -18,6 +18,7 @@ from fakes.notifications import RecordingNotificationProducer
 from fakes.attendance_policy import FakeAttendancePolicyProvider
 from main import create_app
 from modules.attendance_sessions.qr_session.exception import (
+    ActiveQrBatchExistsError,
     ActiveStudentProfileNotFoundError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
@@ -206,6 +207,19 @@ class QrNotRequiredService(SuccessfulQrSessionService):
         lecturer_id: UUID,
     ) -> CreatedQrSession:
         raise QrNotRequiredError()
+
+
+class ActiveQrBatchService(SuccessfulQrSessionService):
+    async def create_static_qr_session(
+        self,
+        pool: object,
+        attendance_session_id: UUID,
+        valid_for_seconds: int,
+        lecturer_id: UUID,
+    ) -> CreatedQrSession:
+        raise ActiveQrBatchExistsError(
+            "Wait for the active QR batch to finish before launching another one."
+        )
 
 
 class MissingQrSessionService(SuccessfulQrSessionService):
@@ -480,6 +494,26 @@ def test_create_static_qr_session_route_maps_inactive_session_to_409(
         "detail": {
             "code": "SESSION_NOT_ACTIVE",
             "message": "Attendance session is not active.",
+        },
+    }
+
+
+def test_create_qr_session_route_maps_active_batch_to_409(
+    jwks_document,
+    make_access_token,
+) -> None:
+    with build_client(jwks_document, ActiveQrBatchService()) as client:
+        response = client.post(
+            f"/api/v1/attendance-sessions/{SESSION_ID}/qr-sessions",
+            headers=authorize(lecturer_token(make_access_token)),
+            json={"validForSeconds": 300},
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": {
+            "code": "QR_BATCH_ACTIVE",
+            "message": "Wait for the active QR batch to finish before launching another one.",
         },
     }
 
