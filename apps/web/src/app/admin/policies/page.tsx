@@ -1,11 +1,10 @@
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AttendancePolicyForm } from "@/components/admin/AttendancePolicyForm";
-import { ReferenceFaceTable } from "@/components/admin/ReferenceFaceTable";
-import { getAttendancePolicy, getReferenceFaces } from "@/services/adminService";
+import { getAttendancePolicy } from "@/services/adminService";
 import { isWebMockMode } from "@/lib/api/mode";
 
 export default async function AdminPoliciesPage() {
-  const [policy, referenceFaces] = await Promise.all([getAttendancePolicy(), getReferenceFaces()]);
+  const policy = await getAttendancePolicy();
 
   return (
     <div>
@@ -14,7 +13,6 @@ export default async function AdminPoliciesPage() {
       />
       <div className="flex flex-col gap-4">
         <AttendancePolicyForm key={policy.updatedAt} policy={policy} readOnly={isWebMockMode()} />
-        <ReferenceFaceTable records={referenceFaces} />
       </div>
     </div>
   );
