@@ -7,6 +7,7 @@ from fastapi.responses import EventSourceResponse
 from fastapi.sse import ServerSentEvent
 
 from modules.attendance_sessions.qr_session.exception import (
+    ActiveQrBatchExistsError,
     ActiveStudentProfileNotFoundError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
@@ -159,6 +160,11 @@ async def create_qr_session(
             status_code=status.HTTP_409_CONFLICT,
             detail={"code": "SESSION_NOT_ACTIVE", "message": error.message},
         ) from error
+    except ActiveQrBatchExistsError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "QR_BATCH_ACTIVE", "message": str(error)},
+        ) from error
 
     return CreateQrSessionResponse(
         qr_session_id=created_qr_session.qr_session_id,
@@ -301,6 +307,27 @@ async def void_lecturer_qr_batch(
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             {"code": error.code, "message": "This session no longer permits voiding QR batches."},
+        ) from error
+    return LecturerQrBatchResponse.from_domain(batch)
+
+
+@lecturer_qr_batches_router.post(
+    "/{qr_session_id}/deactivate", response_model=LecturerQrBatchResponse,
+)
+async def deactivate_lecturer_qr_batch(
+    session_id: UUID, qr_session_id: UUID, http_request: Request,
+    current_lecturer: CurrentLecturer,
+    qr_session_service: QrSessionService = Depends(get_qr_session_service),
+) -> LecturerQrBatchResponse:
+    try:
+        batch = await qr_session_service.deactivate_qr_batch(
+            http_request.app.state.db_pool, session_id, qr_session_id,
+            current_lecturer.user_id,
+        )
+    except (LecturerSessionAccessError, QrSessionNotFoundError) as error:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            {"code": "ACTIVE_BATCH_NOT_FOUND", "message": "Active QR batch was not found."},
         ) from error
     return LecturerQrBatchResponse.from_domain(batch)
 

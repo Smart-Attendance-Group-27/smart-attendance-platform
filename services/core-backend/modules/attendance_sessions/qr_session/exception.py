@@ -42,6 +42,10 @@ class QrNotRequiredError(QrSessionError):
     """Raised when QR is not enabled for the attendance session."""
 
 
+class ActiveQrBatchExistsError(QrSessionError):
+    """Raised when a new batch is requested before the active batch finishes."""
+
+
 class ActiveStudentProfileNotFoundError(QrSessionError):
     """Raised when the caller has no active student profile."""
 

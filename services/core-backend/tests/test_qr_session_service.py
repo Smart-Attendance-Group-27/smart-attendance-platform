@@ -8,6 +8,7 @@ from fakes.notifications import RecordingNotificationProducer
 from fakes.attendance_policy import FakeAttendancePolicyProvider
 from modules.contracts.attendance_policy import AttendancePolicy
 from modules.attendance_sessions.qr_session.exception import (
+    ActiveQrBatchExistsError,
     ActiveStudentProfileNotFoundError,
     AttendanceSessionNotActiveError,
     AttendanceSessionNotFoundError,
@@ -806,7 +807,7 @@ async def test_get_qr_batch_metadata_redis_failure_falls_back_to_database() -> N
 
 
 @pytest.mark.asyncio
-async def test_create_dynamic_qr_session_invalidates_replaced_batch_cache() -> None:
+async def test_create_dynamic_qr_session_rejects_existing_active_batch() -> None:
     current_time = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
     attendance_session_id = UUID("40000000-0000-0000-0000-000000000001")
     old_qr_session_id = UUID("50000000-0000-0000-0000-000000000009")
@@ -829,15 +830,22 @@ async def test_create_dynamic_qr_session_invalidates_replaced_batch_cache() -> N
         uuid_factory=lambda: new_qr_session_id,
     )
 
-    await service.create_dynamic_qr_session(
-        FakePool(),
-        attendance_session_id,
-        valid_for_seconds=900,
-        refresh_interval_seconds=15,
-        lecturer_id=LECTURER_ID,
-    )
+    with pytest.raises(
+        ActiveQrBatchExistsError,
+        match="Wait for the active QR batch to finish before launching another one.",
+    ):
+        await service.create_dynamic_qr_session(
+            FakePool(),
+            attendance_session_id,
+            valid_for_seconds=900,
+            refresh_interval_seconds=15,
+            lecturer_id=LECTURER_ID,
+        )
 
-    assert cache.delete_calls == [old_qr_session_id]
+    assert repository.inserted_batch is None
+    assert repository.inserted_token is None
+    assert cache.delete_calls == []
+    assert cache.set_calls == []
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -38,6 +38,8 @@ type QrSessionLauncherProps = {
   room: string;
   checkInWindow: string;
   isLaunchEnabled: boolean;
+  activeBatchId?: string | null;
+  activeBatchExpiresAt?: string | null;
   mockReadOnly?: boolean;
 };
 
@@ -67,9 +69,10 @@ export function QrSessionLauncher({
   room,
   checkInWindow,
   isLaunchEnabled,
+  activeBatchId = null,
+  activeBatchExpiresAt = null,
   mockReadOnly = false,
 }: QrSessionLauncherProps) {
-  const router = useRouter();
   const [mode, setMode] = useState<QrMode>("static");
   const [validForSeconds, setValidForSeconds] = useState("");
   const [refreshIntervalSeconds, setRefreshIntervalSeconds] = useState("15");
@@ -77,12 +80,21 @@ export function QrSessionLauncher({
   const [dynamicQr, setDynamicQr] = useState<DynamicQrStreamPayload | null>(null);
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
   const [isLoading, setIsLoading] = useState(false);
+  const [isDeactivating, setIsDeactivating] = useState(false);
   const [error, setError] = useState("");
+  const [projectionRoot, setProjectionRoot] = useState<HTMLElement | null>(null);
+  const [hasExistingActiveBatch, setHasExistingActiveBatch] = useState(
+    () => Boolean(activeBatchExpiresAt && new Date(activeBatchExpiresAt).getTime() > Date.now()),
+  );
+  const projectionWindowRef = useRef<Window | null>(null);
+  const projectionBeforeUnloadRef = useRef<((event: BeforeUnloadEvent) => void) | null>(null);
 
   const validityNumber = Number(validForSeconds);
   const refreshIntervalNumber = Number(refreshIntervalSeconds);
   const canSubmit =
     isLaunchEnabled &&
+    !hasExistingActiveBatch &&
+    !qrSession &&
     (validForSeconds === "" || (Number.isInteger(validityNumber) &&
       validityNumber >= 30 && validityNumber <= 86400)) &&
     (mode === "static" ||
@@ -137,6 +149,89 @@ export function QrSessionLauncher({
     };
   }, [qrSession]);
 
+  useEffect(() => {
+    if (!activeBatchExpiresAt) {
+      const timeout = window.setTimeout(() => setHasExistingActiveBatch(false), 0);
+      return () => window.clearTimeout(timeout);
+    }
+
+    const delay = Math.max(0, new Date(activeBatchExpiresAt).getTime() - Date.now());
+    const syncTimeout = window.setTimeout(() => setHasExistingActiveBatch(delay > 0), 0);
+    const expiryTimeout = window.setTimeout(() => setHasExistingActiveBatch(false), delay);
+    return () => {
+      window.clearTimeout(syncTimeout);
+      window.clearTimeout(expiryTimeout);
+    };
+  }, [activeBatchExpiresAt]);
+
+  useEffect(() => {
+    if (!qrSession) return;
+
+    const expiresAt = new Date(qrSession.expiresAt).getTime();
+    const delay = Math.max(0, expiresAt - Date.now());
+    const timeout = window.setTimeout(() => {
+      const projectionWindow = projectionWindowRef.current;
+      const beforeUnload = projectionBeforeUnloadRef.current;
+      if (projectionWindow && beforeUnload) {
+        projectionWindow.removeEventListener("beforeunload", beforeUnload);
+      }
+      projectionWindow?.close();
+      projectionWindowRef.current = null;
+      projectionBeforeUnloadRef.current = null;
+      setProjectionRoot(null);
+      setQrSession(null);
+      window.focus();
+    }, delay);
+
+    return () => window.clearTimeout(timeout);
+  }, [qrSession]);
+
+  useEffect(() => () => {
+    const projectionWindow = projectionWindowRef.current;
+    const beforeUnload = projectionBeforeUnloadRef.current;
+    if (projectionWindow && beforeUnload) {
+      projectionWindow.removeEventListener("beforeunload", beforeUnload);
+    }
+    projectionWindow?.close();
+  }, []);
+
+  function openProjectionWindow(): Window | null {
+    const projectionWindow = window.open(
+      "",
+      `attendance-qr-${sessionId}`,
+      "popup=yes,width=1200,height=900",
+    );
+
+    if (!projectionWindow) return null;
+
+    projectionWindow.document.title = `${courseCode} attendance QR`;
+    projectionWindow.document.head.replaceChildren();
+    projectionWindow.document.body.replaceChildren();
+    projectionWindow.document.body.style.margin = "0";
+
+    const style = projectionWindow.document.createElement("style");
+    style.textContent = `
+      * { box-sizing: border-box; }
+      body { background: #f4f7fa; color: #172b3a; font-family: Arial, sans-serif; }
+      .qr-projector { align-items: center; display: flex; justify-content: center; min-height: 100vh; padding: 40px; text-align: center; }
+      .qr-projector__panel { background: white; border: 1px solid #d8e0e7; box-shadow: 0 18px 50px rgba(23, 43, 58, .12); max-width: 900px; padding: 48px; width: 100%; }
+      .qr-projector__course { color: #526572; font-size: 24px; margin: 0 0 28px; }
+      .qr-projector__code { display: block; height: auto; margin: 0 auto; max-height: 62vh; max-width: 100%; width: min(62vh, 620px); }
+      .qr-projector__instruction { font-size: 26px; font-weight: 700; margin: 28px 0 8px; }
+      .qr-projector__meta { color: #526572; font-size: 18px; margin: 0; }
+      .qr-projector__loading { color: #526572; font-size: 24px; margin: 0; }
+    `;
+    projectionWindow.document.head.appendChild(style);
+
+    const root = projectionWindow.document.createElement("div");
+    projectionWindow.document.body.appendChild(root);
+    projectionWindowRef.current = projectionWindow;
+    setProjectionRoot(root);
+    projectionWindow.focus();
+
+    return projectionWindow;
+  }
+
   function selectMode(nextMode: QrMode) {
     setMode(nextMode);
     setQrSession(null);
@@ -147,6 +242,12 @@ export function QrSessionLauncher({
 
   async function launchQrSession() {
     if (!canSubmit) return;
+
+    const projectionWindow = openProjectionWindow();
+    if (!projectionWindow) {
+      setError("The QR display window was blocked. Allow pop-ups for this site and try again.");
+      return;
+    }
 
     setIsLoading(true);
     setError("");
@@ -181,23 +282,96 @@ export function QrSessionLauncher({
       }
 
       setQrSession(createdSession);
+      const preventClose = (event: BeforeUnloadEvent) => {
+        if (Date.now() < new Date(createdSession.expiresAt).getTime()) {
+          event.preventDefault();
+          event.returnValue = "";
+        }
+      };
+      projectionBeforeUnloadRef.current = preventClose;
+      projectionWindow.addEventListener("beforeunload", preventClose);
       setStreamStatus(createdSession.mode === "dynamic" ? "connecting" : "idle");
-      router.refresh();
     } catch (caughtError) {
+      projectionWindow.close();
+      projectionWindowRef.current = null;
+      setProjectionRoot(null);
       setError(caughtError instanceof Error ? caughtError.message : "Unexpected QR launch error.");
     } finally {
       setIsLoading(false);
     }
   }
 
-  return (
-    <div className="grid gap-4 lg:grid-cols-[380px_minmax(0,1fr)]">
-      <Card title="QR launch settings" subtitle={`${courseCode} · ${room}`}>
-        <div className="space-y-4">
-          <Notice title="Screen sharing mode">
-            Launch the QR session, then share this page with students. Static QR keeps the same value until the QR session expires; dynamic QR rotates through the live stream.
-          </Notice>
+  async function deactivateQrSession() {
+    const qrSessionId = qrSession?.qrSessionId ?? activeBatchId;
+    if (!qrSessionId || isDeactivating) return;
 
+    setIsDeactivating(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/attendance-sessions/${sessionId}/qr-sessions/${qrSessionId}/deactivate`,
+        { method: "POST" },
+      );
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.detail?.message ?? data?.detail ?? "QR batch could not be deactivated.");
+      }
+
+      const projectionWindow = projectionWindowRef.current;
+      const beforeUnload = projectionBeforeUnloadRef.current;
+      if (projectionWindow && beforeUnload) {
+        projectionWindow.removeEventListener("beforeunload", beforeUnload);
+      }
+      projectionWindow?.close();
+      projectionWindowRef.current = null;
+      projectionBeforeUnloadRef.current = null;
+      setProjectionRoot(null);
+      setQrSession(null);
+      setDynamicQr(null);
+      setHasExistingActiveBatch(false);
+      setStreamStatus("idle");
+      window.focus();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Unexpected QR deactivation error.");
+    } finally {
+      setIsDeactivating(false);
+    }
+  }
+
+  const projection = projectionRoot
+    ? createPortal(
+        <main className="qr-projector">
+          <section className="qr-projector__panel">
+            {qrSession && qrCodePayload ? (
+              <>
+                <p className="qr-projector__course">{courseCode} · {courseName} · {room}</p>
+                <QRCodeSVG
+                  className="qr-projector__code"
+                  value={qrCodePayload}
+                  size={620}
+                  level="M"
+                  marginSize={4}
+                />
+                <p className="qr-projector__instruction">Scan QR to complete check-in</p>
+                <p className="qr-projector__meta">
+                  Scan before {formatDateTime(qrSession.expiresAt)}
+                </p>
+              </>
+            ) : (
+              <p className="qr-projector__loading">Preparing attendance QR…</p>
+            )}
+          </section>
+        </main>,
+        projectionRoot,
+      )
+    : null;
+
+  return (
+    <>
+      {projection}
+      <div className="grid gap-4 lg:grid-cols-[380px_minmax(0,1fr)]">
+        <Card className="h-full" title="QR launch settings" subtitle={`${courseCode} · ${room}`}>
+        <div className="space-y-4">
           {!isLaunchEnabled ? (
             <Notice variant="warning" title="QR launch unavailable">
               {mockReadOnly
@@ -278,20 +452,37 @@ export function QrSessionLauncher({
             onClick={launchQrSession}
             variant="primary"
           >
-            {isLoading ? `Launching ${mode} QR session...` : `Launch ${mode} QR session`}
+            {isLoading ? "Launching QR..." : "Launch QR"}
           </Button>
+
+          {(qrSession || (hasExistingActiveBatch && activeBatchId)) ? (
+            <Button
+              className="w-full justify-center"
+              disabled={isDeactivating}
+              onClick={deactivateQrSession}
+              variant="danger"
+            >
+              {isDeactivating ? "Deactivating QR..." : "Deactivate QR"}
+            </Button>
+          ) : null}
+
+          {hasExistingActiveBatch && !qrSession ? (
+            <p className="text-xs text-[var(--muted)]">
+              Wait for the active QR batch to finish before launching another one.
+            </p>
+          ) : null}
 
           {error ? (
             <p className="border border-[#e5bcbc] bg-[var(--danger-bg)] px-3 py-2 text-xs text-[var(--danger)]">
               {error}
             </p>
           ) : null}
-        </div>
-      </Card>
+          </div>
+        </Card>
 
-      <Card title="Student display" subtitle={courseName}>
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
-          <div className="flex min-h-[520px] items-center justify-center border border-dashed border-[#cbd4dc] bg-[#f7fafc] p-6">
+        <Card className="h-full" title="Student display" subtitle={courseName}>
+        <div className="grid h-full gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="flex h-full min-h-[240px] items-center justify-center border border-dashed border-[#cbd4dc] bg-[#f7fafc] p-6">
             {qrSession && qrCodePayload ? (
               <div className="flex flex-col items-center text-center">
                 <QRCodeSVG value={qrCodePayload} size={340} level="M" marginSize={4} />
@@ -302,10 +493,7 @@ export function QrSessionLauncher({
                   <StatusBadge tone="info">{formatDuration(validityNumber)}</StatusBadge>
                 </div>
                 <p className="mt-4 text-sm font-semibold text-[#2d3d49]">
-                  Scan this QR after location and face verification
-                </p>
-                <p className="mt-1 max-w-lg text-xs leading-relaxed text-[var(--muted)]">
-                  The code contains only the QR session ID and the current QR value. Raw QR values are verified by the backend and are not shown to students here.
+                  Scan QR to complete check-in
                 </p>
               </div>
             ) : (
@@ -355,7 +543,8 @@ export function QrSessionLauncher({
             </div>
           </aside>
         </div>
-      </Card>
-    </div>
+        </Card>
+      </div>
+    </>
   );
 }
