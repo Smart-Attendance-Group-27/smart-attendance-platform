@@ -4,12 +4,14 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from adapters.insightface_engine import create_configured_insightface_engine
-from core.config import get_settings
+from core.config import Settings, get_settings
 from db.engine import create_database_engine, dispose_database_engine
-from db.session import create_session_factory
+from db.session import AsyncSessionFactory, create_session_factory
 from repositories.student_profile_repository import StudentProfileRepository
+from services.face_engine import FaceEngine
 from services.reference_enrollment_service import (
     ReferenceEnrollmentService,
     ReferenceEnrollmentStatus,
@@ -70,25 +72,34 @@ def find_duplicate_registration_numbers(photos: Sequence[Path],) -> set[str]:
     }
 
 # Validate a photo batch and optionally store reference embeddings.
-async def import_reference_photos(*, photos_directory: Path,commit: bool,) -> ImportSummary:
+async def import_reference_photos(
+    *,
+    photos_directory: Path,
+    commit: bool,
+    settings: Settings | None = None,
+    session_factory: AsyncSessionFactory | None = None,
+    face_engine: FaceEngine | None = None,
+    report: Callable[[str], None] = print,
+) -> ImportSummary:
 
     photos = discover_reference_photos(photos_directory)
     summary = ImportSummary(discovered=len(photos))
 
     if not photos:
-        print("No supported JPEG or PNG photographs were found.")
+        report("No supported JPEG or PNG photographs were found.")
         return summary
 
     duplicate_registration_numbers = find_duplicate_registration_numbers(photos)
 
-    settings = get_settings()
-    database_engine = create_database_engine(settings)
-    session_factory = create_session_factory(database_engine)
+    settings = settings or get_settings()
+    database_engine = None
+    if session_factory is None:
+        database_engine = create_database_engine(settings)
+        session_factory = create_session_factory(database_engine)
 
     # Dry-run mode validates filenames and database identities without loading
     # the large face model or writing any face-profile data.
-    face_engine = None
-    if commit:
+    if commit and face_engine is None:
         face_engine = create_configured_insightface_engine(settings)
 
     try:
@@ -96,7 +107,7 @@ async def import_reference_photos(*, photos_directory: Path,commit: bool,) -> Im
             registration_number = registration_number_from_photo(photo_path)
 
             if registration_number.casefold() in (duplicate_registration_numbers):
-                print(f"[SKIPPED] {registration_number}: ""more than one photo has this registration number")
+                report(f"[SKIPPED] {registration_number}: ""more than one photo has this registration number")
                 summary.skipped += 1
                 continue
 
@@ -105,17 +116,17 @@ async def import_reference_photos(*, photos_directory: Path,commit: bool,) -> Im
                 student = await (student_repository.get_by_registration_number(registration_number))
 
                 if student is None:
-                    print(f"[FAILED] {registration_number}: ""student profile was not found")
+                    report(f"[FAILED] {registration_number}: ""student profile was not found")
                     summary.failed += 1
                     continue
 
                 if (student.profile_status or "").casefold() != "active":
-                    print(f"[SKIPPED] {registration_number}: ""student profile is not active")
+                    report(f"[SKIPPED] {registration_number}: ""student profile is not active")
                     summary.skipped += 1
                     continue
 
                 if not commit:
-                    print(f"[VALID] {registration_number}: ""active student profile found")
+                    report(f"[VALID] {registration_number}: ""active student profile found")
                     summary.validated += 1
                     continue
 
@@ -134,14 +145,14 @@ async def import_reference_photos(*, photos_directory: Path,commit: bool,) -> Im
                 except Exception as error:
                     # Keep processing other students, but do not reveal image,
                     # embedding, or database secret values in the output.
-                    print(f"[FAILED] {registration_number}: "f"{type(error).__name__}")
+                    report(f"[FAILED] {registration_number}: "f"{type(error).__name__}")
                     summary.failed += 1
                     continue
 
                 if result.status is ReferenceEnrollmentStatus.SUCCESS:
                     confidence = result.detection_confidence
                     confidence_text = (f"{confidence:.4f}" if confidence is not None else "unknown")
-                    print(
+                    report(
                         f"[ENROLLED] {registration_number}: "
                         f"model={result.model_name}, "
                         f"confidence={confidence_text}"
@@ -149,18 +160,19 @@ async def import_reference_photos(*, photos_directory: Path,commit: bool,) -> Im
                     summary.enrolled += 1
 
                 elif result.status is (ReferenceEnrollmentStatus.ALREADY_ENROLLED):
-                    print(f"[UNCHANGED] {registration_number}: already enrolled")
+                    report(f"[UNCHANGED] {registration_number}: already enrolled")
                     summary.already_enrolled += 1
 
                 elif result.status is (ReferenceEnrollmentStatus.PROFILE_REVOKED):
-                    print(f"[SKIPPED] {registration_number}: profile is revoked")
+                    report(f"[SKIPPED] {registration_number}: profile is revoked")
                     summary.skipped += 1
 
                 else:
-                    print(f"[FAILED] {registration_number}: "f"{result.status.value}")
+                    report(f"[FAILED] {registration_number}: "f"{result.status.value}")
                     summary.failed += 1
     finally:
-        await dispose_database_engine(database_engine)
+        if database_engine is not None:
+            await dispose_database_engine(database_engine)
 
     return summary
 

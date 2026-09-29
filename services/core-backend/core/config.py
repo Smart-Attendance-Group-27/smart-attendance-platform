@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     # Internal service URL for the separately deployed face-verification API.
     face_verification_service_url: str | None = "http://localhost:8001"
     face_verification_timeout_seconds: float = Field(default=30, gt=0)
+    face_enrollment_timeout_seconds: float = Field(default=900, gt=0)
     pilot_disable_face_attendance: bool = False
 
     # IANA timezone used where the backend must decide what "today" means for

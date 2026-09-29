@@ -226,6 +226,24 @@ After reviewing the summary, explicitly enable database writes:
 python -m scripts.enroll_reference_faces "C:\path\to\approved-reference-photos" --commit
 ```
 
+The administrator web dashboard can run the same committed batch enrolment
+without object storage or a server-mounted photo directory. Open **Admin →
+Users → Face enrolment**, select the approved folder on the administrator's
+computer, and submit it. For example:
+
+```text
+semester-1/
+    230734J.jpg
+    230735K.png
+```
+
+The browser uploads only the selected JPEG and PNG files. The face service
+writes them to an isolated temporary directory, runs enrolment, and removes the
+directory in guaranteed cleanup after success or failure. Each image is limited
+to 5 MB, a batch is limited to 500 images and 250 MB, and only one batch can run
+at a time. The request is authorized as an administrator by both the core API
+and face-verification service.
+
 ### Local burst verification
 
 The burst harness exercises the real InsightFace engine and concurrent HTTP verification

@@ -64,6 +64,7 @@ services:
       DYNAMIC_QR_HMAC_SECRET: ${DYNAMIC_QR_HMAC_SECRET:?Set DYNAMIC_QR_HMAC_SECRET in the root .env file}
       FACE_VERIFICATION_SERVICE_URL: ${FACE_VERIFICATION_SERVICE_URL:-http://face-verification:8001}
       FACE_VERIFICATION_TIMEOUT_SECONDS: ${FACE_VERIFICATION_TIMEOUT_SECONDS:-30}
+      FACE_ENROLLMENT_TIMEOUT_SECONDS: ${FACE_ENROLLMENT_TIMEOUT_SECONDS:-900}
       EXPO_PUSH_TIMEOUT_SECONDS: ${EXPO_PUSH_TIMEOUT_SECONDS:-10}
       EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
       # Enable only after the notification migrations are applied.
@@ -123,6 +124,8 @@ services:
       CORE_API_TIMEOUT_SECONDS: ${FACE_CORE_API_TIMEOUT_SECONDS:-5}
     ports:
       - "${FACE_VERIFICATION_PORT:-8001}:8001"
+    volumes:
+      - face_model_cache:/home/app/.insightface
     healthcheck:
       test:
         [
@@ -208,3 +211,4 @@ services:
 volumes:
   keycloak_db_data:
   redis_data:
+  face_model_cache:
