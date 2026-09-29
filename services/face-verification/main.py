@@ -11,6 +11,7 @@ from adapters.core_api_student_profile_client import (
 from adapters.insightface_engine import create_configured_insightface_engine
 from api.routes.attendance import router as attendance_router
 from api.routes.health import router as health_router
+from api.routes.enrollment import router as enrollment_router
 from api.routes.readiness import router as readiness_router
 from core.config import get_settings
 from db.engine import create_database_engine, dispose_database_engine
@@ -39,6 +40,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             create_configured_insightface_engine,
             settings,
         )
+        app.state.reference_enrollment_lock = asyncio.Lock()
         yield
 
     finally:
@@ -58,6 +60,7 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
     app.include_router(health_router)
     app.include_router(attendance_router)
     app.include_router(readiness_router)
+    app.include_router(enrollment_router)
 
     return app
 
