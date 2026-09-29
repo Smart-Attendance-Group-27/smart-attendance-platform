@@ -14,6 +14,7 @@ from conftest import (
 )
 from main import create_app
 from modules.academic.admin_reference_faces.repository import ReferenceFaceRecord
+from modules.academic.admin_reference_faces.client import ReferenceFaceEnrollmentResult
 from modules.academic.admin_reference_faces.route import get_admin_reference_face_service
 from modules.identity.auth.dependencies import get_authentication_service
 
@@ -52,6 +53,17 @@ class StubAdminReferenceFaceService:
                 latest_attempt_validated_at=None,
             ),
         ]
+
+    async def enroll_uploaded_reference_faces(self, *, photos, access_token: str):
+        assert access_token
+        assert [photo.filename for photo in photos] == ["230734J.jpg", "230735K.png"]
+        return ReferenceFaceEnrollmentResult(
+            discovered=2,
+            enrolled=2,
+            already_enrolled=0,
+            skipped=0,
+            failed=0,
+        )
 
 
 def build_client(jwks_document, service) -> TestClient:
@@ -104,3 +116,35 @@ def test_requires_bearer_token(client: TestClient) -> None:
     response = client.get(REFERENCE_FACES_URL)
 
     assert response.status_code == 401
+
+
+def test_admin_can_upload_reference_face_folder(client: TestClient, make_access_token) -> None:
+    response = client.post(
+        f"{REFERENCE_FACES_URL}/enrolments/upload",
+        headers=authorize(admin_token(make_access_token)),
+        files=[
+            ("images", ("230734J.jpg", b"jpeg", "image/jpeg")),
+            ("images", ("230735K.png", b"png", "image/png")),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "discovered": 2,
+        "enrolled": 2,
+        "alreadyEnrolled": 0,
+        "skipped": 0,
+        "failed": 0,
+    }
+
+
+def test_student_cannot_upload_reference_faces(client: TestClient, make_access_token) -> None:
+    response = client.post(
+        f"{REFERENCE_FACES_URL}/enrolments/upload",
+        headers=authorize(
+            make_access_token(subject=LINKED_STUDENT_SUBJECT, roles=("student",))
+        ),
+        files=[("images", ("230734J.jpg", b"jpeg", "image/jpeg"))],
+    )
+
+    assert response.status_code == 403

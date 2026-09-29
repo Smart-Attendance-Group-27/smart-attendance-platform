@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from modules.academic.admin_reference_faces.repository import ReferenceFaceRecord
+from modules.academic.admin_reference_faces.client import ReferenceFaceEnrollmentResult
 
 NOT_CHECKED_STATUS = "not_checked"
 
@@ -39,4 +40,24 @@ class ReferenceFaceResponse(BaseModel):
             readiness_status=derive_readiness_status(record),
             generated_at=record.generated_at,
             readiness_checked_at=record.latest_attempt_validated_at,
+        )
+
+
+class ReferenceFaceEnrollmentResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    discovered: int
+    enrolled: int
+    already_enrolled: int = Field(alias="alreadyEnrolled")
+    skipped: int
+    failed: int
+
+    @staticmethod
+    def from_result(result: ReferenceFaceEnrollmentResult) -> "ReferenceFaceEnrollmentResponse":
+        return ReferenceFaceEnrollmentResponse(
+            discovered=result.discovered,
+            enrolled=result.enrolled,
+            already_enrolled=result.already_enrolled,
+            skipped=result.skipped,
+            failed=result.failed,
         )
