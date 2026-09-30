@@ -4,6 +4,7 @@ import type {
   ApiLecturerSession,
   ApiLecturerTimetableEntry,
   ApiSessionStudent,
+  ApiSessionVerificationPolicy,
   ApiWeeklyTrendPoint,
 } from "@/lib/api/lecturer";
 import type { LecturerQrBatch } from "@/types/lecturer";
@@ -34,7 +35,8 @@ export const mockLecturerSessions: ApiLecturerSession[] = [
     requiresQr: false, enrolledCount: 4, presentCount: 2, lateCount: 1,
     absentCount: 1, checkedInCount: 2, lateCheckedInCount: 1,
     notCheckedInCount: 1, failedVerificationCount: 0,
-    pendingReviewCount: 0, manualCount: 0,
+    pendingReviewCount: 0, manualCount: 0, leftEarlyCount: 0,
+    closedAutomatically: true,
   },
   {
     ...activeSession, id: "mock-cancelled-session", courseCode: "CS4301",
@@ -50,7 +52,7 @@ export const mockLecturerSessions: ApiLecturerSession[] = [
 
 // C10 returns a summary only when finalization is bound; both outcomes are valid.
 export const mockFinalizationSummary: ApiFinalizationSummary = {
-  enrolledCount: 5, presentCount: 2, lateCount: 1, absentCount: 2,
+  enrolledCount: 5, presentCount: 2, lateCount: 1, leftEarlyCount: 0, absentCount: 2,
   keptManualCount: 1, reconciledCount: 1, deactivatedQrBatchCount: 2,
   finalizedAt: time(0),
 };
@@ -145,3 +147,30 @@ export const mockLecturerAttendanceTrend: ApiWeeklyTrendPoint[] = [
   { label: "Week 1", attendanceRate: 72 },
   { label: "Week 2", attendanceRate: 75 },
 ];
+
+const mockGeofenceHealth = {
+  attempted: 4, passed: 1, failed: 3, failureRatePercent: 75,
+  warning: false, warningMinimumAttempts: 10, warningFailureRatePercent: 70,
+};
+
+export const mockLecturerVerificationPolicies: Record<string, ApiSessionVerificationPolicy> = {
+  "mock-live-session": {
+    sessionId: "mock-live-session", geofence: "required", face: "required",
+    geofenceWaiver: null, geofenceHealth: mockGeofenceHealth,
+  },
+  "mock-closed-session": {
+    sessionId: "mock-closed-session", geofence: "waived", face: "required",
+    geofenceWaiver: {
+      id: "mock-waiver", verificationFactor: "geofence", scope: "session",
+      previousPolicy: "required", newPolicy: "waived", reasonCode: "GPS_INACCURATE",
+      reasonText: null, performedBy: "mock-lecturer", performedByName: "Demo lecturer",
+      performedAt: time(-170), affectedStudentCount: 3,
+    },
+    geofenceHealth: mockGeofenceHealth,
+  },
+  "mock-cancelled-session": {
+    sessionId: "mock-cancelled-session", geofence: "required", face: "required",
+    geofenceWaiver: null,
+    geofenceHealth: { ...mockGeofenceHealth, attempted: 0, passed: 0, failed: 0, failureRatePercent: 0 },
+  },
+};

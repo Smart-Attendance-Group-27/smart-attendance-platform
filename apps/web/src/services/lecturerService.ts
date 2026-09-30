@@ -12,16 +12,18 @@ import {
   getLecturerDashboardOverview,
   getLecturerSessionDetail,
   getLecturerSessionStudents,
+  getLecturerSessionVerificationPolicy,
   getLecturerQrBatches,
   getLecturerSessionCreationOptions,
   getLecturerSessions,
   getLecturerTimetable,
   getManualReviewQueue,
 } from "@/lib/api/lecturer";
-import { formatClockTime, formatDateLabel, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
+import { formatClockTime, formatDateLabel, formatDateTimeLabel, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
 import { isWebMockMode } from "@/lib/api/mode";
 import { isSameCalendarDay } from "@/lib/appTimezone";
 import { toCorrectionRequestRow } from "@/lib/api/correctionRequestRows";
+import { geofenceWaiverReasonLabel } from "@/lib/geofenceWaiver";
 import type { CorrectionRequestRow } from "@/lib/correctionRequests";
 import {
   AtRiskStudent,
@@ -33,6 +35,7 @@ import {
   LiveSessionDetail,
   LecturerQrBatch,
   SessionStatus,
+  SessionVerificationView,
   TimetableOption,
   TodayLecture,
 } from "@/types/lecturer";
@@ -213,7 +216,29 @@ function mapAttemptStatus(value: string | null): LiveSessionDetail["students"][n
 }
 
 function mapFinalStatus(value: string | null): LiveSessionDetail["students"][number]["finalStatus"] {
-  return value === "present" || value === "late" || value === "absent" ? value : null;
+  return value === "present" || value === "late" || value === "left_early" || value === "absent"
+    ? value : null;
+}
+
+// The dashboard still works without the policy panel, so a failed lookup
+// hides the panel instead of failing the whole page.
+async function getSessionVerification(sessionId: string): Promise<SessionVerificationView | null> {
+  try {
+    const policy = await getLecturerSessionVerificationPolicy(sessionId);
+    return {
+      geofence: policy.geofence,
+      waiver: policy.geofenceWaiver ? {
+        performedByName: policy.geofenceWaiver.performedByName ?? "Unknown lecturer",
+        performedAtLabel: formatDateTimeLabel(policy.geofenceWaiver.performedAt),
+        reasonLabel: geofenceWaiverReasonLabel(policy.geofenceWaiver.reasonCode),
+        reasonText: policy.geofenceWaiver.reasonText,
+        affectedStudentCount: policy.geofenceWaiver.affectedStudentCount,
+      } : null,
+      health: policy.geofenceHealth,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function getSessionQrBatches(sessionId: string): Promise<LecturerQrBatch[]> {
@@ -230,7 +255,10 @@ export async function getSessionDetail(sessionId: string): Promise<LiveSessionDe
     if (error instanceof CoreBackendError && error.status === 404) return null;
     throw error;
   }
-  const students = await getLecturerSessionStudents(sessionId);
+  const [students, verification] = await Promise.all([
+    getLecturerSessionStudents(sessionId),
+    getSessionVerification(sessionId),
+  ]);
 
   return {
     sessionId: session.id,
@@ -249,6 +277,9 @@ export async function getSessionDetail(sessionId: string): Promise<LiveSessionDe
     lecturerName: isWebMockMode() ? "Demo lecturer" : (await getCurrentUser())?.name ?? "",
     requiresFaceVerification: session.requiresFaceVerification,
     requiresQr: session.requiresQr,
+    autoClosedAtLabel: session.closedAutomatically && session.closedAt
+      ? formatClockTime(session.closedAt) : null,
+    verification,
     summary: {
       enrolledCount: session.enrolledCount,
       checkedInCount: session.checkedInCount,
@@ -257,6 +288,7 @@ export async function getSessionDetail(sessionId: string): Promise<LiveSessionDe
       failedVerificationCount: session.failedVerificationCount,
       presentCount: session.presentCount,
       lateCount: session.lateCount,
+      leftEarlyCount: session.leftEarlyCount ?? 0,
       absentCount: session.absentCount,
       pendingReviewCount: session.pendingReviewCount,
       manualCount: session.manualCount,

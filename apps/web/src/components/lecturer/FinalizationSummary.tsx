@@ -13,6 +13,7 @@ export function FinalizationSummary({ summary }: { summary: ApiFinalizationSumma
     { label: "Enrolled", value: summary.enrolledCount },
     { label: "Present", value: summary.presentCount },
     { label: "Late", value: summary.lateCount },
+    { label: "Left early", value: summary.leftEarlyCount ?? 0 },
     { label: "Absent", value: summary.absentCount },
     { label: "Manual records kept", value: summary.keptManualCount },
     { label: "Check-ins reconciled", value: summary.reconciledCount },

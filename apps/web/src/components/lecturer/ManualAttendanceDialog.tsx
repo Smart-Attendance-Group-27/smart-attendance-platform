@@ -20,7 +20,8 @@ export function ManualAttendanceDialog({ sessionId, student }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   function show() {
-    setStatus(student.finalStatus ?? "");
+    // Left early is only ever decided automatically, so it has no manual option.
+    setStatus(student.finalStatus === "left_early" ? "" : student.finalStatus ?? "");
     setReason(student.recordSource === "manual" ? student.manualReason ?? "" : "");
     setError(null);
     setOpen(true);

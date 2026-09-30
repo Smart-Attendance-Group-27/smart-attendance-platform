@@ -9,6 +9,7 @@ import { LinkButton } from "@/components/ui/LinkButton";
 import { SessionLifecycleControls } from "@/components/lecturer/SessionLifecycleControls";
 import { SessionLiveRefresh } from "@/components/lecturer/SessionLiveRefresh";
 import { ManualAttendanceDialog } from "@/components/lecturer/ManualAttendanceDialog";
+import { GeofenceVerificationPanel } from "@/components/lecturer/GeofenceVerificationPanel";
 import { getSessionDetail } from "@/services/lecturerService";
 import { formatDateTimeLabel } from "@/lib/api/format";
 import { initialCheckInDisplay, liveFinalStatusDisplay, qrProgressLabel, sessionStatusDisplay } from "@/lib/status";
@@ -45,6 +46,9 @@ export default async function SessionMonitorPage(props: PageProps<"/lecturer/ses
             <p className="text-lg font-semibold text-[#2d3d49]">{session.courseCode} {session.courseName}</p>
             <p className="mt-1 text-xs text-[var(--muted)]">{session.startedAtLabel}</p>
             <div className="mt-2"><StatusBadge tone={status.tone}>{status.label}</StatusBadge></div>
+            {session.autoClosedAtLabel ? (
+              <p className="mt-1 text-[10px] text-[var(--muted)]">Automatically closed at {session.autoClosedAtLabel}</p>
+            ) : null}
           </div>
           {[
             { label: "Check-in window", value: session.checkInWindow },
@@ -66,6 +70,14 @@ export default async function SessionMonitorPage(props: PageProps<"/lecturer/ses
           {isActive ? <SessionLiveRefresh /> : null}
         </div>
 
+        {session.verification && session.verification.geofence !== "not_required" ? (
+          <GeofenceVerificationPanel
+            sessionId={session.sessionId}
+            verification={session.verification}
+            canWaive={isActive && !isWebMockMode()}
+          />
+        ) : null}
+
         <SummaryStrip items={[
           { label: "Checked in", value: session.summary.checkedInCount, note: "On time", noteTone: "good" },
           { label: "Checked in late", value: session.summary.lateCheckedInCount, noteTone: "warn" },
@@ -75,6 +87,7 @@ export default async function SessionMonitorPage(props: PageProps<"/lecturer/ses
         <SummaryStrip items={[
           { label: "Final present", value: session.summary.presentCount },
           { label: "Final late", value: session.summary.lateCount },
+          { label: "Final left early", value: session.summary.leftEarlyCount },
           { label: "Final absent", value: session.summary.absentCount },
           { label: "Manual records", value: session.summary.manualCount },
           { label: "Pending review", value: session.summary.pendingReviewCount },

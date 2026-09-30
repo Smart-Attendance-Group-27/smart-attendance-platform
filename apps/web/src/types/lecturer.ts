@@ -4,6 +4,34 @@
 
 export type SessionStatus = "scheduled" | "in_progress" | "closed" | "cancelled";
 
+export type FinalAttendanceStatus = "present" | "late" | "left_early" | "absent";
+
+export type StepRequirement = "required" | "waived" | "not_required";
+
+export type GeofenceHealth = {
+  attempted: number;
+  passed: number;
+  failed: number;
+  failureRatePercent: number;
+  warning: boolean;
+  warningMinimumAttempts: number;
+  warningFailureRatePercent: number;
+};
+
+export type GeofenceWaiverSummary = {
+  performedByName: string;
+  performedAtLabel: string;
+  reasonLabel: string;
+  reasonText: string | null;
+  affectedStudentCount: number;
+};
+
+export type SessionVerificationView = {
+  geofence: StepRequirement;
+  waiver: GeofenceWaiverSummary | null;
+  health: GeofenceHealth;
+};
+
 export type TodayLecture = {
   sessionId: string;
   courseCode: string;
@@ -44,7 +72,7 @@ export type LiveSessionStudentRow = {
   checkedInAt: string | null;
   qrRequiredCount: number | null;
   qrPassedCount: number | null;
-  finalStatus: "present" | "late" | "absent" | null;
+  finalStatus: FinalAttendanceStatus | null;
   recordSource: "automatic" | "manual" | null;
   manualReason: string | null;
   recordUpdatedAt: string | null;
@@ -64,6 +92,10 @@ export type LiveSessionDetail = {
   lecturerName: string;
   requiresFaceVerification: boolean;
   requiresQr: boolean;
+  // Set when the server closed the session after its scheduled end.
+  autoClosedAtLabel: string | null;
+  // null when the verification policy could not be loaded.
+  verification: SessionVerificationView | null;
   summary: {
     enrolledCount: number;
     checkedInCount: number;
@@ -72,6 +104,7 @@ export type LiveSessionDetail = {
     failedVerificationCount: number;
     presentCount: number;
     lateCount: number;
+    leftEarlyCount: number;
     absentCount: number;
     pendingReviewCount: number;
     manualCount: number;
@@ -173,7 +206,7 @@ export type SessionStudentRow = {
   // no lecturer-triggered second/"additional" face check.
   initialFaceCheck: VerificationOutcome;
   qrVerification: VerificationOutcome;
-  finalStatus: "present" | "late" | "absent" | "pending_review";
+  finalStatus: FinalAttendanceStatus | "pending_review";
   time: string;
 };
 

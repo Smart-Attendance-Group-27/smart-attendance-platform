@@ -73,6 +73,10 @@ describe("finalStatusDisplay", () => {
     expect(finalStatusDisplay("absent").tone).toBe("danger");
     expect(finalStatusDisplay("pending_review").tone).toBe("warning");
   });
+
+  it("shows left early as its own partial status", () => {
+    expect(finalStatusDisplay("left_early")).toEqual({ label: "Left early", tone: "warning" });
+  });
 });
 
 describe("courseStatusDisplay", () => {
