@@ -107,8 +107,9 @@ export const MOCK_REFERENCE_FACES: ReferenceFaceRecord[] = [
 ];
 
 export const MOCK_AUDIT_LOG: AuditLogEntry[] = [
-  { id: "audit-1", occurredAtLabel: "16 Aug 2026, 10:12", actorName: "Prof. Dulani Meedeniya", actorRole: "lecturer", action: "Approved attendance override", entityType: "attendance_record", entityLabel: "Oshadha Wijayarathne · CS3203", outcome: "success" },
-  { id: "audit-2", occurredAtLabel: "16 Aug 2026, 10:00", actorName: "Prof. Dulani Meedeniya", actorRole: "lecturer", action: "Opened attendance session", entityType: "session", entityLabel: "CS3203 · 10:00 lecture", outcome: "success" },
-  { id: "audit-3", occurredAtLabel: "15 Aug 2026, 16:45", actorName: "Dr. Sunimal Rathnayake", actorRole: "administrator", action: "Updated classroom geofence", entityType: "classroom", entityLabel: "AI-Lab-02", outcome: "success" },
-  { id: "audit-4", occurredAtLabel: "15 Aug 2026, 09:30", actorName: "Dr. Sunimal Rathnayake", actorRole: "administrator", action: "Updated attendance policy", entityType: "policy", entityLabel: "Face confidence threshold → 75%", outcome: "success" },
+  { id: "audit-0", occurredAtLabel: "16 Aug 2026, 09:17", actorName: "Prof. Dulani Meedeniya", actorRole: "lecturer", action: "Session verification override", entityType: "attendance_session", entityLabel: "Session: CS3203 / 16 Aug 2026, 09:00", outcome: "success", details: ["Factor: Geofence", "Change: REQUIRED -> WAIVED", "Scope: Entire session", "Reason: GPS inaccurate", "Affected students: 38"] },
+  { id: "audit-1", occurredAtLabel: "16 Aug 2026, 10:12", actorName: "Prof. Dulani Meedeniya", actorRole: "lecturer", action: "Approved attendance override", entityType: "attendance_record", entityLabel: "Oshadha Wijayarathne · CS3203", outcome: "success", details: [] },
+  { id: "audit-2", occurredAtLabel: "16 Aug 2026, 10:00", actorName: "Prof. Dulani Meedeniya", actorRole: "lecturer", action: "Opened attendance session", entityType: "session", entityLabel: "CS3203 · 10:00 lecture", outcome: "success", details: [] },
+  { id: "audit-3", occurredAtLabel: "15 Aug 2026, 16:45", actorName: "Dr. Sunimal Rathnayake", actorRole: "administrator", action: "Updated classroom geofence", entityType: "classroom", entityLabel: "AI-Lab-02", outcome: "success", details: [] },
+  { id: "audit-4", occurredAtLabel: "15 Aug 2026, 09:30", actorName: "Dr. Sunimal Rathnayake", actorRole: "administrator", action: "Updated attendance policy", entityType: "policy", entityLabel: "Face confidence threshold → 75%", outcome: "success", details: [] },
 ];

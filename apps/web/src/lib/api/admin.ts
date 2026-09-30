@@ -239,6 +239,11 @@ export type ApiAuditLogEntry = {
   entityId: string | null;
   outcome: string;
   failureReason: string | null;
+  oldValues?: Record<string, unknown> | null;
+  newValues?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
+  sessionCourseCode?: string | null;
+  sessionScheduledStartAt?: string | null;
 };
 
 export function getAdminDashboardOverview(): Promise<ApiAdminOverview> {

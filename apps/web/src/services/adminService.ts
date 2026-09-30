@@ -14,6 +14,7 @@ import {
   getUserDirectory as fetchUserDirectory,
 } from "@/lib/api/admin";
 import { toCorrectionRequestRow } from "@/lib/api/correctionRequestRows";
+import { auditActionLabel, auditDetailLines, auditEntityLabel } from "@/lib/auditDetails";
 import type { CorrectionRequestRow } from "@/lib/correctionRequests";
 import { formatDateLabel, formatDateTimeLabel, formatDayOfWeek, formatTimeRange, roundToOneDecimal } from "@/lib/api/format";
 import {
@@ -255,16 +256,28 @@ export async function getInstitutionReports(): Promise<InstitutionReportsData> {
 export async function getAuditLog(): Promise<AuditLogEntry[]> {
   const entries = await fetchAuditLogs();
 
-  return entries.map((entry) => ({
-    id: entry.id,
-    occurredAtLabel: formatDateTimeLabel(entry.occurredAt),
-    actorName: entry.actorName,
-    actorRole: entry.actorType === "lecturer" || entry.actorType === "administrator" ? entry.actorType : "system",
-    action: entry.action,
-    entityType: entry.entityType,
-    entityLabel: entry.entityId ? `${entry.entityType} · ${entry.entityId.slice(0, 8)}` : entry.entityType,
-    outcome: entry.outcome === "failure" ? "failure" : "success",
-  }));
+  return entries.map((entry) => {
+    const detailInput = {
+      action: entry.action,
+      entityType: entry.entityType,
+      entityId: entry.entityId,
+      newValues: entry.newValues ?? null,
+      metadata: entry.metadata ?? null,
+      sessionCourseCode: entry.sessionCourseCode ?? null,
+      sessionScheduledStartAt: entry.sessionScheduledStartAt ?? null,
+    };
+    return {
+      id: entry.id,
+      occurredAtLabel: formatDateTimeLabel(entry.occurredAt),
+      actorName: entry.actorName,
+      actorRole: entry.actorType === "lecturer" || entry.actorType === "administrator" ? entry.actorType : "system",
+      action: auditActionLabel(entry.action),
+      entityType: entry.entityType,
+      entityLabel: auditEntityLabel(detailInput),
+      outcome: entry.outcome === "failure" ? "failure" : "success",
+      details: auditDetailLines(detailInput),
+    };
+  });
 }
 
 export async function getCorrectionRequests(): Promise<CorrectionRequestRow[]> {

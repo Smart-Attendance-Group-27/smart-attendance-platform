@@ -242,4 +242,6 @@ export type AuditLogEntry = {
   entityType: string;
   entityLabel: string;
   outcome: AuditOutcome;
+  // Readable lines for actions that record structured values; often empty.
+  details: string[];
 };

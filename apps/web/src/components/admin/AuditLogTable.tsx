@@ -18,7 +18,8 @@ export function AuditLogTable({ entries }: { entries: AuditLogEntry[] }) {
       (row) =>
         row.actorName.toLowerCase().includes(normalized) ||
         row.action.toLowerCase().includes(normalized) ||
-        row.entityLabel.toLowerCase().includes(normalized),
+        row.entityLabel.toLowerCase().includes(normalized) ||
+        row.details.some((line) => line.toLowerCase().includes(normalized)),
     );
   }, [entries, query]);
 
@@ -51,6 +52,15 @@ export function AuditLogTable({ entries }: { entries: AuditLogEntry[] }) {
             key: "entity",
             header: "Resource",
             render: (row) => <CellPrimary primary={row.entityLabel} secondary={row.entityType} />,
+          },
+          {
+            key: "details",
+            header: "Details",
+            render: (row) => row.details.length ? (
+              <ul className="space-y-0.5 text-[11px]">
+                {row.details.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            ) : "—",
           },
           {
             key: "outcome",

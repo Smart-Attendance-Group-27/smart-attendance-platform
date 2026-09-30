@@ -114,3 +114,36 @@ def test_requires_bearer_token(client: TestClient) -> None:
     response = client.get(AUDIT_LOGS_URL)
 
     assert response.status_code == 401
+
+
+def test_includes_structured_values_for_session_overrides(jwks_document, make_access_token) -> None:
+    class OverrideAuditService(StubAuditLogService):
+        async def list_audit_logs(self, pool, *, limit):
+            return [
+                AuditLogRecord(
+                    id=UUID("50000000-0000-0000-0000-000000000009"),
+                    occurred_at=CURRENT_TIME,
+                    actor_user_id=UUID("20000000-0000-0000-0000-000000000002"),
+                    actor_type="lecturer",
+                    actor_name="N. Perera",
+                    action="session.verification_override",
+                    entity_type="attendance_session",
+                    entity_id=UUID("40000000-0000-0000-0000-000000000001"),
+                    outcome="success",
+                    failure_reason=None,
+                    old_values={"geofence": "required"},
+                    new_values={"geofence": "waived"},
+                    metadata={"verificationFactor": "geofence", "affectedStudentCount": 238},
+                    session_course_code="CS3053",
+                    session_scheduled_start_at=CURRENT_TIME,
+                ),
+            ]
+
+    with build_client(jwks_document, OverrideAuditService()) as client:
+        response = client.get(AUDIT_LOGS_URL, headers=authorize(admin_token(make_access_token)))
+
+    [entry] = response.json()
+    assert entry["oldValues"] == {"geofence": "required"}
+    assert entry["newValues"] == {"geofence": "waived"}
+    assert entry["metadata"]["affectedStudentCount"] == 238
+    assert entry["sessionCourseCode"] == "CS3053"
