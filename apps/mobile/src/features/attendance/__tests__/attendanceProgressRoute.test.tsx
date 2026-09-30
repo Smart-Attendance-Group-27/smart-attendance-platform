@@ -41,28 +41,28 @@ describe('AttendanceProgressRoute', () => {
 
   test('opens frozen Progress route with a normalized session ID and returns home', async () => {
     const screen = await render(<AttendanceProgressRoute />);
-    expect(await screen.findByText('Initial check-in complete (on time)')).toBeTruthy();
+    expect(await screen.findByText('Checked in')).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: 'Return home' }));
     expect(mockReplace).toHaveBeenCalledWith('/(student)/(tabs)');
   });
 
   test('shows required QR counts and opens the active batch scanner', async () => {
     const screen = await render(<AttendanceProgressRoute />);
-    expect(await screen.findByText('0/2 required batches passed')).toBeTruthy();
+    expect(await screen.findByText('Scan the QR code now · 0 of 2 required checks completed')).toBeTruthy();
     fireEvent.press(screen.getByRole('button', { name: 'Scan QR' }));
     expect(mockPush).toHaveBeenCalledWith({
       pathname: '/(student)/attendance/[sessionId]/qr-scanner',
       params: { sessionId: 'attendance-session-checked-in',
         qrSessionId: mockQrSessionId('attendance-session-checked-in', 2) },
     });
-    expect(screen.getByText('Awaiting final attendance')).toBeTruthy();
+    expect(screen.getByText('Checked in · Final result when the session closes')).toBeTruthy();
   });
 
   test('shows not required for a student who checked in after the batch', async () => {
     mockSearchParams = { sessionId: 'attendance-session-late' };
     const screen = await render(<AttendanceProgressRoute />);
-    expect(await screen.findByText('0/0 required batches passed')).toBeTruthy();
-    expect(screen.getByText('Not required for you')).toBeTruthy();
+    expect(await screen.findByText('No QR checks yet. Waiting for your lecturer.')).toBeTruthy();
+    expect(screen.getAllByText('Not required').length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: 'Scan QR' })).toBeNull();
   });
 

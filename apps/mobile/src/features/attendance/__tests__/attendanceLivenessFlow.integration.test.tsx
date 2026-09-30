@@ -170,7 +170,7 @@ describe('attendance liveness workflow regression', () => {
 
     mockPush.mockClear();
     const progress = await render(<AttendanceProgressRoute />);
-    expect(await progress.findByText('Initial check-in complete (on time)'))
+    expect(await progress.findByText('Checked in'))
       .toBeTruthy();
     expect(mockPush).not.toHaveBeenCalled();
     expect(mockFaceRenderCount).toBe(1);
