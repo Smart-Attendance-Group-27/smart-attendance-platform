@@ -15,6 +15,7 @@ import { FaceVerificationGuidanceItem } from '../components/FaceVerificationGuid
 type FaceIntroductionScreenProps = {
   sessionId: string;
   livenessMode?: 'required' | 'off';
+  locationWaived?: boolean;
   onBack: () => void;
   onBeginVerification: (sessionId: string) => void;
 };
@@ -22,6 +23,7 @@ type FaceIntroductionScreenProps = {
 export function FaceIntroductionScreen({
   sessionId,
   livenessMode = 'required',
+  locationWaived = false,
   onBack,
   onBeginVerification,
 }: FaceIntroductionScreenProps) {
@@ -64,7 +66,7 @@ export function FaceIntroductionScreen({
         </Text>
       </View>
 
-      <AttendanceProgressSteps phase="face" />
+      <AttendanceProgressSteps locationWaived={locationWaived} phase="face" />
 
       <View style={styles.introduction}>
         <View style={styles.faceIcon}>

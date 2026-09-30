@@ -5,6 +5,7 @@ import { Text } from 'react-native';
 import { ScreenContainer } from '../../../../components/ui';
 import { AttendanceSessionDetailsScreen } from '../../../../features/attendance/screens/AttendanceSessionDetailsScreen';
 import { createAttendanceServices } from '../../../../features/attendance/services/createAttendanceServices';
+import { startWithoutLocation } from '../../../../features/attendance/utils/startWithoutLocation';
 import { useAuth } from '../../../../features/auth/context/AuthContext';
 import { CoreApiClient } from '../../../../services/api/coreApiClient';
 
@@ -54,13 +55,22 @@ export default function AttendanceSessionDetailsRoute() {
           params: { sessionId: completedSessionId },
         } as unknown as Href)
       }
-      onStartCheckIn={() =>
-        router.push({
-          pathname:
-            '/(student)/attendance/[sessionId]/location-check',
-          params: { sessionId },
-        })
-      }
+      onStartCheckIn={(geofenceWaived) => {
+        if (!geofenceWaived) {
+          router.push({
+            pathname: '/(student)/attendance/[sessionId]/location-check',
+            params: { sessionId },
+          });
+          return;
+        }
+        void startWithoutLocation(attendanceService, sessionId).then((destination) =>
+          router.push({
+            pathname: destination === 'face'
+              ? '/(student)/attendance/[sessionId]/face-introduction'
+              : '/(student)/attendance/[sessionId]/progress',
+            params: destination === 'face' ? { sessionId, locationWaived: '1' } : { sessionId },
+          } as unknown as Href));
+      }}
       sessionId={sessionId}
     />
   );

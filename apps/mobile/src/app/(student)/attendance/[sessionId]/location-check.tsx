@@ -5,6 +5,8 @@ import { Text } from 'react-native';
 import { ScreenContainer } from '../../../../components/ui';
 import { useAuth } from '../../../../features/auth/context/AuthContext';
 import { getMockAttendance, markMockFacePassed, markMockGeofencePassed } from '../../../../features/attendance/__fixtures__/mockAttendanceStore';
+import { createAttendanceServices } from '../../../../features/attendance/services/createAttendanceServices';
+import { startWithoutLocation } from '../../../../features/attendance/utils/startWithoutLocation';
 import { LocationCheckScreen } from '../../../../features/location/screens/LocationCheckScreen';
 import { CoreApiGeofenceValidationService } from '../../../../features/location/services/coreApiGeofenceValidationService';
 import { ExpoLocationProvider } from '../../../../features/location/services/expoLocationProvider';
@@ -45,6 +47,10 @@ export default function LocationCheckRoute() {
       new CoreApiGeofenceValidationService(coreApiClient),
     );
   }, [accessToken]);
+  const attendanceService = useMemo(
+    () => createAttendanceServices(new CoreApiClient({ getAccessToken: () => accessToken })),
+    [accessToken],
+  );
   const sessionIdValue = Array.isArray(sessionIdParam)
     ? sessionIdParam[0]
     : sessionIdParam;
@@ -69,6 +75,23 @@ export default function LocationCheckRoute() {
     <LocationCheckScreen
       locationService={locationService}
       onBack={() => router.back()}
+      onContinueWithoutLocation={(waivedSessionId) => {
+        void startWithoutLocation(attendanceService, waivedSessionId).then((destination) =>
+          router.replace({
+            pathname: destination === 'face'
+              ? '/(student)/attendance/[sessionId]/face-introduction'
+              : '/(student)/attendance/[sessionId]/progress',
+            params: destination === 'face'
+              ? { sessionId: waivedSessionId, locationWaived: '1' }
+              : { sessionId: waivedSessionId },
+          } as unknown as Href));
+      }}
+      onViewProgress={(stuckSessionId) =>
+        router.replace({
+          pathname: '/(student)/attendance/[sessionId]/progress',
+          params: { sessionId: stuckSessionId },
+        } as unknown as Href)
+      }
       onAlreadyCheckedIn={(completedSessionId) =>
         router.replace({
           pathname:

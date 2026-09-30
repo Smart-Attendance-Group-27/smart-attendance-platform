@@ -4,6 +4,8 @@ import { lightColors, radii, spacing, typography } from '../../../theme';
 
 type AttendanceProgressStepsProps = {
   phase?: 'not_started' | 'location' | 'face' | 'complete';
+  // Location was waived for the session: shown as waived, never as verified.
+  locationWaived?: boolean;
 };
 
 const stepLabels = ['Location', 'Face', 'Complete'] as const;
@@ -17,21 +19,23 @@ const stepStatuses = {
 
 export function AttendanceProgressSteps({
   phase = 'not_started',
+  locationWaived = false,
 }: AttendanceProgressStepsProps) {
   const statuses = stepStatuses[phase];
 
   return (
     <View
       accessible
-      accessibilityLabel="Attendance check-in progress: Location, Face, Complete"
+      accessibilityLabel={`Attendance check-in progress: Location${locationWaived ? " (waived)" : ""}, Face, Complete`}
       style={styles.container}
     >
       {stepLabels.map((label, index) => {
         const currentStepIndex =
           phase === 'location' ? 0 : phase === 'face' ? 1 : -1;
-        const isCurrent = index === currentStepIndex;
+        const isWaived = locationWaived && index === 0;
+        const isCurrent = index === currentStepIndex && !isWaived;
         const isVerified =
-          phase === 'complete' || (phase === 'face' && index === 0);
+          !isWaived && (phase === 'complete' || (phase === 'face' && index === 0));
 
         return (
           <View key={label} style={styles.step}>
@@ -48,6 +52,7 @@ export function AttendanceProgressSteps({
                 styles.dot,
                 isCurrent && styles.currentDot,
                 isVerified && styles.verifiedDot,
+                isWaived && styles.waivedDot,
               ]}
             >
               <Text
@@ -55,9 +60,10 @@ export function AttendanceProgressSteps({
                   styles.dotText,
                   isCurrent && styles.currentDotText,
                   isVerified && styles.verifiedDotText,
+                  isWaived && styles.waivedDotText,
                 ]}
               >
-                {isVerified ? '✓' : index + 1}
+                {isVerified ? '✓' : isWaived ? '–' : index + 1}
               </Text>
             </View>
             <Text style={styles.label}>{label}</Text>
@@ -66,9 +72,10 @@ export function AttendanceProgressSteps({
                 styles.status,
                 isCurrent && styles.currentStatus,
                 isVerified && styles.verifiedStatus,
+                isWaived && styles.waivedStatus,
               ]}
             >
-              {statuses[index]}
+              {isWaived ? 'Waived' : statuses[index]}
             </Text>
           </View>
         );
@@ -127,6 +134,13 @@ const styles = StyleSheet.create({
   verifiedDotText: {
     color: lightColors.surface,
   },
+  waivedDot: {
+    borderColor: lightColors.warning,
+    backgroundColor: lightColors.warningBackground,
+  },
+  waivedDotText: {
+    color: lightColors.warning,
+  },
   label: {
     ...typography.supporting,
     marginTop: spacing.xs,
@@ -147,5 +161,9 @@ const styles = StyleSheet.create({
   verifiedStatus: {
     fontWeight: '700',
     color: lightColors.success,
+  },
+  waivedStatus: {
+    fontWeight: '700',
+    color: lightColors.warning,
   },
 });

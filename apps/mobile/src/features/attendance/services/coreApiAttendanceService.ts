@@ -1,6 +1,14 @@
 import type { CoreApiClient } from '../../../services/api/coreApiClient';
 import type { AttendanceSession } from '../types/attendanceSession';
-import type { CheckInResult, InitialCheckIn, MyAttendance, MyAttendanceResult } from '../types/myAttendance';
+import type {
+  CheckInResult,
+  InitialCheckIn,
+  MyAttendance,
+  MyAttendanceResult,
+  StartVerificationResult,
+  StepRequirement,
+  VerificationPolicy,
+} from '../types/myAttendance';
 import type { AttendanceService, AttendanceSessionLookupResult } from './attendanceService';
 
 function attendancePath(sessionId: string): string {
@@ -10,6 +18,13 @@ function attendancePath(sessionId: string): string {
 function checkInPath(sessionId: string): string {
   return `/api/v1/attendance-sessions/${encodeURIComponent(sessionId)}/check-in`;
 }
+
+function verificationAttemptsPath(sessionId: string): string {
+  return `/api/v1/attendance-sessions/${encodeURIComponent(sessionId)}/verification-attempts`;
+}
+
+const FINAL_STATUSES = ['present', 'late', 'left_early', 'absent'];
+const STEP_REQUIREMENTS: readonly StepRequirement[] = ['required', 'waived', 'not_required'];
 
 export class CoreApiAttendanceService implements AttendanceService {
   constructor(private readonly coreApiClient: CoreApiClient) {}
@@ -42,6 +57,22 @@ export class CoreApiAttendanceService implements AttendanceService {
     };
   }
 
+  async startVerificationWithoutLocation(sessionId: string): Promise<StartVerificationResult> {
+    const result = await this.coreApiClient.post<unknown>(verificationAttemptsPath(sessionId), {});
+    if (result.status !== 'ok') {
+      if (result.status === 'conflict' && result.errorCode === 'ATTENDANCE_ALREADY_COMPLETED') {
+        return { status: 'already_checked_in' };
+      }
+      return result;
+    }
+    if (!isRecord(result.data) || typeof result.data.verificationAttemptId !== 'string') {
+      return { status: 'server-error' };
+    }
+    const initialCheckIn = result.data.initialCheckIn ?? null;
+    if (!isInitialCheckIn(initialCheckIn)) return { status: 'server-error' };
+    return { status: 'started', initialCheckIn };
+  }
+
   async getAttendanceSession(sessionId: string): Promise<AttendanceSessionLookupResult> {
     const result = await this.getMyAttendance(sessionId);
     if (result.status !== 'loaded') return { status: 'unavailable' };
@@ -69,6 +100,30 @@ function isInitialCheckIn(value: unknown): value is InitialCheckIn | null {
   );
 }
 
+function isStepRequirement(value: unknown): value is StepRequirement {
+  return STEP_REQUIREMENTS.includes(value as StepRequirement);
+}
+
+// An older server sends no policy; that means every configured step is required.
+function parseVerificationPolicy(
+  value: unknown,
+  requiresFaceVerification: boolean,
+): VerificationPolicy | null {
+  if (value === undefined || value === null) {
+    return {
+      geofence: 'required',
+      face: requiresFaceVerification ? 'required' : 'not_required',
+      geofenceWaivedAt: null,
+    };
+  }
+  if (!isRecord(value) || !isStepRequirement(value.geofence) || !isStepRequirement(value.face)) {
+    return null;
+  }
+  const waivedAt = value.geofenceWaivedAt ?? null;
+  if (!isNullableDate(waivedAt)) return null;
+  return { geofence: value.geofence, face: value.face, geofenceWaivedAt: waivedAt };
+}
+
 export function parseMyAttendance(value: unknown, sessionId: string): MyAttendance | null {
   if (!isRecord(value) || value.sessionId !== sessionId) return null;
   const verification = value.verification;
@@ -94,11 +149,16 @@ export function parseMyAttendance(value: unknown, sessionId: string): MyAttendan
     !(verification.livenessPassed === null || typeof verification.livenessPassed === 'boolean') ||
     !isInitialCheckIn(value.initialCheckIn) ||
     !(final === null || (isRecord(final) &&
-      ['present', 'late', 'absent'].includes(String(final.status)) &&
+      FINAL_STATUSES.includes(String(final.status)) &&
       ['automatic', 'manual'].includes(String(final.source)) &&
       isDate(final.decidedAt)))
   ) return null;
-  return value as MyAttendance;
+  const verificationPolicy = parseVerificationPolicy(
+    value.verificationPolicy,
+    value.requiresFaceVerification,
+  );
+  if (!verificationPolicy) return null;
+  return { ...(value as Omit<MyAttendance, 'verificationPolicy'>), verificationPolicy };
 }
 
 export function toAttendanceSession(state: MyAttendance): AttendanceSession {
@@ -123,6 +183,7 @@ export function toAttendanceSession(state: MyAttendance): AttendanceSession {
     lateThreshold: state.lateAfterAt ?? state.checkInClosesAt ?? state.scheduledEndAt,
     checkInStatus,
     requiresQr: state.qrEnabled,
+    geofenceWaived: state.verificationPolicy.geofence === 'waived',
     attemptStatus: state.verification.attemptStatus,
     finalAttendanceStatus: state.finalAttendance?.status ?? null,
   };

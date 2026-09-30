@@ -85,6 +85,7 @@ function isResponse(value: unknown): value is ActiveAttendanceSession {
     (response.finalAttendanceStatus === null ||
       response.finalAttendanceStatus === 'present' ||
       response.finalAttendanceStatus === 'late' ||
+      response.finalAttendanceStatus === 'left_early' ||
       response.finalAttendanceStatus === 'absent')
   );
 }

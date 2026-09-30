@@ -17,7 +17,7 @@ export interface AttendanceRecord {
   month: string; // "JUL"
   title: string; // "Lecture 05"
   recordedText: string; // "Recorded at 08:06" or "No record found"
-  status: 'Present' | 'Late' | 'Absent' | 'Cancelled' | 'Awaiting';
+  status: 'Present' | 'Late' | 'Left early' | 'Absent' | 'Cancelled' | 'Awaiting';
 }
 
 export interface Course {

@@ -39,6 +39,7 @@ type FaceVerificationScreenProps = {
    */
   livenessMode?: 'required' | 'off';
   mode?: 'attendance' | 'readiness';
+  locationWaived?: boolean;
   onBack: () => void;
   onFaceVerified: (sessionId: string) => void;
 };
@@ -553,6 +554,7 @@ export function FaceVerificationScreen({
   faceVerificationService,
   livenessMode = 'required',
   mode = 'attendance',
+  locationWaived = false,
   onBack,
   onFaceVerified,
 }: FaceVerificationScreenProps) {
@@ -859,7 +861,7 @@ export function FaceVerificationScreen({
 
       <View style={isReadinessCheck ? styles.readinessBody : undefined}>
         {isReadinessCheck ? null : (
-          <AttendanceProgressSteps phase="face" />
+          <AttendanceProgressSteps locationWaived={locationWaived} phase="face" />
         )}
 
         {livenessRequired ? (

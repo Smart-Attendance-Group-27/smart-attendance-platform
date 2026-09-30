@@ -13,9 +13,13 @@ export default function FaceIntroductionRoute() {
   const { session } = useAuth();
   const {
     sessionId: sessionIdParam,
+    locationWaived: locationWaivedParam,
   } = useLocalSearchParams<{
     sessionId?: string | string[];
+    locationWaived?: string | string[];
   }>();
+  const locationWaived = (Array.isArray(locationWaivedParam)
+    ? locationWaivedParam[0] : locationWaivedParam) === '1';
   const sessionIdValue = Array.isArray(sessionIdParam)
     ? sessionIdParam[0]
     : sessionIdParam;
@@ -96,9 +100,12 @@ export default function FaceIntroductionRoute() {
         router.push({
           pathname:
             '/(student)/attendance/[sessionId]/face-verification',
-          params: { sessionId: verifiedSessionId },
+          params: locationWaived
+            ? { sessionId: verifiedSessionId, locationWaived: '1' }
+            : { sessionId: verifiedSessionId },
         })
       }
+      locationWaived={locationWaived}
       sessionId={sessionId}
     />
   );

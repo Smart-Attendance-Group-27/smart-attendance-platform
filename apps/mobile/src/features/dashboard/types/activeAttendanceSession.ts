@@ -19,7 +19,7 @@ export type ActiveAttendanceSession = {
   readonly attemptStatus: 'in_progress' | 'checked_in' | 'failed' | null;
   readonly initialCheckInStatus: 'checked_in' | 'late_checked_in' | null;
   readonly checkedInAt: string | null;
-  readonly finalAttendanceStatus: 'present' | 'late' | 'absent' | null;
+  readonly finalAttendanceStatus: 'present' | 'late' | 'left_early' | 'absent' | null;
 };
 
 export type ActiveAttendanceSessionsResult =

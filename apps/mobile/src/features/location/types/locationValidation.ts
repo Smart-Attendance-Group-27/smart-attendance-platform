@@ -12,6 +12,7 @@ export type LocationValidationResult =
   | { status: 'mock_location_detected' }
   | { status: 'session_unavailable' }
   | { status: 'already_checked_in' }
+  | { status: 'geofence_waived' }
   | { status: 'attempt_limit_reached' }
   | { status: 'unauthenticated' }
   | { status: 'forbidden' }

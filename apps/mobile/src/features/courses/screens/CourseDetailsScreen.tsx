@@ -280,7 +280,8 @@ export function CourseDetailsScreen({
                       style={[
                         styles.recordStatusBadge,
                         record.status === 'Present' ? styles.recordStatusBadgePresent
-                          : record.status === 'Late' ? styles.recordStatusBadgeLate
+                          : record.status === 'Late' || record.status === 'Left early'
+                            ? styles.recordStatusBadgeLate
                             : record.status === 'Absent' ? styles.recordStatusBadgeAbsent
                               : styles.recordStatusBadgeNeutral,
                       ]}
@@ -302,7 +303,8 @@ export function CourseDetailsScreen({
                         size={14}
                         tintColor={
                           record.status === 'Present' ? lightColors.success
-                            : record.status === 'Late' ? lightColors.warning
+                            : record.status === 'Late' || record.status === 'Left early'
+                              ? lightColors.warning
                               : record.status === 'Absent' ? lightColors.error
                                 : lightColors.neutral
                         }
@@ -312,7 +314,8 @@ export function CourseDetailsScreen({
                         style={[
                           styles.recordStatusText,
                           record.status === 'Present' ? styles.recordStatusTextPresent
-                            : record.status === 'Late' ? styles.recordStatusTextLate
+                            : record.status === 'Late' || record.status === 'Left early'
+                              ? styles.recordStatusTextLate
                               : record.status === 'Absent' ? styles.recordStatusTextAbsent
                                 : styles.recordStatusTextNeutral,
                         ]}

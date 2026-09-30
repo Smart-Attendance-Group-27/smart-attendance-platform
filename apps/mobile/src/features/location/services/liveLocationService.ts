@@ -52,6 +52,9 @@ export class LiveLocationService implements LocationService {
       if (attemptResult.status === 'already-checked-in') {
         return { status: 'already_checked_in' };
       }
+      if (attemptResult.status === 'geofence-waived') {
+        return { status: 'geofence_waived' };
+      }
       return { status: apiFailureStates[attemptResult.status] };
     }
 
