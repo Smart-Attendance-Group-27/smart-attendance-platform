@@ -54,6 +54,7 @@ class CourseSessionReportResponse(BaseModel):
     enrolled_count: int = Field(alias="enrolledCount")
     present_count: int = Field(alias="presentCount")
     late_count: int = Field(alias="lateCount")
+    left_early_count: int = Field(default=0, alias="leftEarlyCount")
     absent_count: int = Field(alias="absentCount")
     pending_review_count: int = Field(alias="pendingReviewCount")
 
@@ -66,6 +67,7 @@ class CourseSessionReportResponse(BaseModel):
             enrolled_count=record.enrolled_count,
             present_count=record.present_count,
             late_count=record.late_count,
+            left_early_count=record.left_early_count,
             absent_count=record.absent_count,
             pending_review_count=record.pending_review_count,
         )

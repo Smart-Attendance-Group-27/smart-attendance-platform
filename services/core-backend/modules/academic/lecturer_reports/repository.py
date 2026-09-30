@@ -27,6 +27,7 @@ class CourseSessionReportRecord:
     late_count: int
     absent_count: int
     pending_review_count: int
+    left_early_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -113,7 +114,7 @@ class LecturerReportRepository:
                         CASE WHEN COUNT(*) = 0 THEN NULL
                         ELSE ROUND(
                             100.0 * COUNT(*) FILTER (
-                                WHERE record.attendance_status IN ('present', 'late')
+                                WHERE record.attendance_status IN ('present', 'late', 'left_early')
                             ) / COUNT(*),
                             1
                         )
@@ -183,6 +184,10 @@ class LecturerReportRepository:
                     WHERE ar.session_id = session.id AND ar.attendance_status = 'late'
                 ) AS late_count,
                 (
+                    SELECT COUNT(*) FROM attendance_verification.attendance_records ar
+                    WHERE ar.session_id = session.id AND ar.attendance_status = 'left_early'
+                ) AS left_early_count,
+                (
                     SELECT COUNT(*)
                     FROM attendance_session.session_students AS roster
                     LEFT JOIN attendance_verification.attendance_records AS record
@@ -221,6 +226,7 @@ class LecturerReportRepository:
                 late_count=row["late_count"],
                 absent_count=row["absent_count"],
                 pending_review_count=row["pending_review_count"],
+                left_early_count=row["left_early_count"],
             )
             for row in rows
         ]
@@ -237,7 +243,7 @@ class LecturerReportRepository:
             WITH weekly AS (
                 SELECT
                     DATE_TRUNC('week', session.scheduled_start_at) AS week_start,
-                    COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late')) AS present_count,
+                    COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late', 'left_early')) AS present_count,
                     COUNT(*) AS total_count
                 FROM attendance_session.sessions AS session
                 JOIN attendance_session.session_students AS roster
@@ -288,13 +294,13 @@ class LecturerReportRepository:
                 ) AS full_name,
                 course.course_code,
                 ROUND(
-                    100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late'))
+                    100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late', 'left_early'))
                     / COUNT(*),
                     1
                 ) AS attendance_rate_percent,
                 COUNT(*) FILTER (WHERE record.attendance_status = 'late') AS late_count,
                 MAX(session.scheduled_start_at) FILTER (
-                    WHERE record.attendance_status IN ('present', 'late')
+                    WHERE record.attendance_status IN ('present', 'late', 'left_early')
                 ) AS last_attended_at
             FROM attendance_session.sessions AS session
             JOIN attendance_session.session_students AS roster
@@ -317,7 +323,7 @@ class LecturerReportRepository:
             HAVING
                 COUNT(*) > 0
                 AND (
-                    100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late')) / COUNT(*)
+                    100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late', 'left_early')) / COUNT(*)
                 ) < COALESCE(offering.attendance_threshold, $2)
             ORDER BY attendance_rate_percent ASC
             """,

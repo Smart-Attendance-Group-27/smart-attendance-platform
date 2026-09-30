@@ -56,7 +56,7 @@ class LecturerCourseRepository:
                         CASE WHEN COUNT(*) = 0 THEN NULL
                         ELSE ROUND(
                             100.0 * COUNT(*) FILTER (
-                                WHERE record.attendance_status IN ('present', 'late')
+                                WHERE record.attendance_status IN ('present', 'late', 'left_early')
                             ) / COUNT(*),
                             1
                         )

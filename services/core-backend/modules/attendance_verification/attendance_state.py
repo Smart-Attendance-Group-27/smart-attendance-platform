@@ -53,11 +53,27 @@ class FinalAttendanceStatus(StrEnum):
     """The official attendance outcome.
 
     ``attendance_verification.attendance_records.attendance_status``.
+    ``LEFT_EARLY`` means the student checked in and passed some, but not all,
+    of the QR batches required of them.
     """
 
     PRESENT = "present"
     LATE = "late"
+    LEFT_EARLY = "left_early"
     ABSENT = "absent"
+
+    @property
+    def label(self) -> str:
+        return self.value.replace("_", " ").capitalize()
+
+
+# Statuses that count toward an attendance rate. A student who left early was
+# verified in the room, so they are counted as attended, not absent.
+ATTENDED_STATUSES: tuple[FinalAttendanceStatus, ...] = (
+    FinalAttendanceStatus.PRESENT,
+    FinalAttendanceStatus.LATE,
+    FinalAttendanceStatus.LEFT_EARLY,
+)
 
 
 class AttendanceRecordSource(StrEnum):
@@ -74,6 +90,7 @@ class AttendanceRecordSource(StrEnum):
 
 
 __all__ = [
+    "ATTENDED_STATUSES",
     "AttendanceRecordSource",
     "FinalAttendanceStatus",
     "InitialCheckInStatus",

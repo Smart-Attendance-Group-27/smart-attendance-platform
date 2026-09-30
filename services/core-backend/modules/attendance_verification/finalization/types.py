@@ -38,6 +38,7 @@ class FinalizationSummary:
     deactivated_qr_batch_ids: tuple[UUID, ...]
     results: tuple[FinalizationResult, ...]
     finalized_at: datetime
+    left_early: int = 0
 
 
 def decide_final_attendance(
@@ -47,20 +48,28 @@ def decide_final_attendance(
 ) -> FinalAttendanceStatus:
     """The one rule finalization applies to every non-manual student.
 
-    A student who never checked in, or whose verification failed outright, is
-    absent — there is no initial check-in to read. A student who checked in
-    but never satisfied a QR batch activated after they arrived is also
-    absent: QR evidence during the lecture is what confirms they stayed, and
-    ``qr_progress`` only reports on students who had something required of
-    them (see ``QrEvidenceProvider``), so ``None`` means nothing was required.
-    Otherwise the initial check-in's own on-time/late verdict stands.
+    The initial check-in is the base requirement. It only exists once every
+    step the session's effective policy required has passed (geofence may be
+    satisfied by a session waiver, see ``EffectiveVerificationPolicy``), so a
+    student without one is absent no matter what QR evidence they have.
+
+    QR counts only cover required, non-void batches (see
+    ``QrEvidenceProvider``). With a check-in in place:
+
+    * no required batches, or all of them passed -> the check-in's own
+      on-time/late verdict (present or late)
+    * at least one passed but not all -> left early
+    * none passed -> absent
     """
 
     if initial_check_in_status is None:
         return FinalAttendanceStatus.ABSENT
 
-    if qr_progress is not None and not qr_progress.is_satisfied:
-        return FinalAttendanceStatus.ABSENT
+    if qr_progress is not None and qr_progress.required_count > 0:
+        if qr_progress.passed_count <= 0:
+            return FinalAttendanceStatus.ABSENT
+        if qr_progress.passed_count < qr_progress.required_count:
+            return FinalAttendanceStatus.LEFT_EARLY
 
     if initial_check_in_status is InitialCheckInStatus.LATE_CHECKED_IN:
         return FinalAttendanceStatus.LATE

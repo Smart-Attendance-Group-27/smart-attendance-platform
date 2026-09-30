@@ -158,7 +158,7 @@ class NotificationProducer(NotificationProducerProtocol):
 
         created_ids: list[UUID] = []
         for status, recipient_user_ids in recipients_by_status.items():
-            status_str = status.value.capitalize()
+            status_str = status.label
             ids = await self.notify_users(
                 connection,
                 recipient_user_ids=recipient_user_ids,
@@ -183,7 +183,7 @@ class NotificationProducer(NotificationProducerProtocol):
     ) -> list[UUID]:
         """A lecturer set or changed one student's attendance by hand."""
         course_name, _ = await self._repository.fetch_session_course_info(connection, session_id)
-        status_str = status.value.capitalize()
+        status_str = status.label
 
         return await self.notify_users(
             connection,

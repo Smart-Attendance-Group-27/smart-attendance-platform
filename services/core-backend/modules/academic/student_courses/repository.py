@@ -70,7 +70,7 @@ class StudentCourseRepository:
                 COUNT(DISTINCT session.id) FILTER (
                     WHERE session.closed_at IS NOT NULL
                       AND session.cancelled_at IS NULL
-                      AND record.attendance_status IN ('present', 'late')
+                      AND record.attendance_status IN ('present', 'late', 'left_early')
                 ) AS attended_sessions,
                 COUNT(DISTINCT session.id) FILTER (
                     WHERE session.closed_at IS NOT NULL
@@ -85,7 +85,7 @@ class StudentCourseRepository:
                         100.0 * COUNT(DISTINCT session.id) FILTER (
                             WHERE session.closed_at IS NOT NULL
                               AND session.cancelled_at IS NULL
-                              AND record.attendance_status IN ('present', 'late')
+                              AND record.attendance_status IN ('present', 'late', 'left_early')
                         ) / COUNT(DISTINCT session.id) FILTER (
                             WHERE session.closed_at IS NOT NULL
                               AND session.cancelled_at IS NULL

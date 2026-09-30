@@ -40,7 +40,7 @@ class AttendanceFinalizationService:
         *,
         session_id: UUID,
         closed_at: datetime,
-        actor_user_id: UUID,  # noqa: ARG002 - part of the frozen I-07 signature
+        actor_user_id: UUID | None,  # noqa: ARG002 - None when the server closes the session
     ) -> FinalizationSummary:
         await self._repository.lock_session_attempts(connection, session_id)
 
@@ -91,6 +91,7 @@ class AttendanceFinalizationService:
             enrolled=len(roster),
             present=_count(results, FinalAttendanceStatus.PRESENT),
             late=_count(results, FinalAttendanceStatus.LATE),
+            left_early=_count(results, FinalAttendanceStatus.LEFT_EARLY),
             absent=_count(results, FinalAttendanceStatus.ABSENT),
             kept_manual=kept_manual,
             reconciled_student_ids=reconciled_student_ids,
