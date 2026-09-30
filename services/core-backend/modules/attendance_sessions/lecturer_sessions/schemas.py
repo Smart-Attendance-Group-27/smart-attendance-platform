@@ -59,6 +59,7 @@ class FinalizationResponse(BaseModel):
     enrolled_count: int = Field(alias="enrolledCount")
     present_count: int = Field(alias="presentCount")
     late_count: int = Field(alias="lateCount")
+    left_early_count: int = Field(alias="leftEarlyCount")
     absent_count: int = Field(alias="absentCount")
     kept_manual_count: int = Field(alias="keptManualCount")
     reconciled_count: int = Field(alias="reconciledCount")
@@ -71,6 +72,7 @@ class FinalizationResponse(BaseModel):
             enrolled_count=summary.enrolled,
             present_count=summary.present,
             late_count=summary.late,
+            left_early_count=summary.left_early,
             absent_count=summary.absent,
             kept_manual_count=summary.kept_manual,
             reconciled_count=len(summary.reconciled_student_ids),
@@ -110,6 +112,8 @@ class LecturerSessionResponse(BaseModel):
     failed_verification_count: int = Field(alias="failedVerificationCount")
     absent_count: int = Field(alias="absentCount")
     manual_count: int = Field(alias="manualCount")
+    left_early_count: int = Field(default=0, alias="leftEarlyCount")
+    closed_automatically: bool = Field(default=False, alias="closedAutomatically")
     finalization: FinalizationResponse | None = None
     # Populated only by the close endpoint, and only when finalization did
     # not run (see LecturerSessionService.FINALIZATION_UNAVAILABLE_REASON).
@@ -161,6 +165,8 @@ class LecturerSessionResponse(BaseModel):
             failed_verification_count=record.failed_verification_count,
             absent_count=record.absent_count,
             manual_count=record.manual_count,
+            left_early_count=record.left_early_count,
+            closed_automatically=record.closed_automatically,
             finalization=(
                 FinalizationResponse.from_summary(finalization)
                 if finalization is not None

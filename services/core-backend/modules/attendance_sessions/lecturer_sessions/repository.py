@@ -56,6 +56,14 @@ class LecturerSessionRecord:
     # Added for Phase 2 cancellation-reason exposure. Defaulted, same
     # reasoning as the fields immediately above.
     cancellation_reason: str | None = None
+    left_early_count: int = 0
+    closed_automatically: bool = False
+
+
+@dataclass(frozen=True)
+class AutoCloseCandidate:
+    id: UUID
+    scheduled_end_at: datetime
 
 
 @dataclass(frozen=True)
@@ -114,6 +122,7 @@ _SESSION_COLUMNS = f"""
     session.requires_face_verification,
     session.requires_geofence,
     session.requires_qr,
+    session.closed_automatically,
     (
         SELECT COUNT(*) FROM attendance_session.session_students ss
         WHERE ss.session_id = session.id
@@ -126,6 +135,10 @@ _SESSION_COLUMNS = f"""
         SELECT COUNT(*) FROM attendance_verification.attendance_records ar
         WHERE ar.session_id = session.id AND ar.attendance_status = 'late'
     ) AS late_count,
+    (
+        SELECT COUNT(*) FROM attendance_verification.attendance_records ar
+        WHERE ar.session_id = session.id AND ar.attendance_status = 'left_early'
+    ) AS left_early_count,
     (
         -- A failed attempt needs review until a manual_reviews row exists for it
         -- with a non-pending status, or a manual record was set some other way —
@@ -219,6 +232,8 @@ def _row_to_record(row: asyncpg.Record) -> LecturerSessionRecord:
         failed_verification_count=row["failed_verification_count"],
         absent_count=row["absent_count"],
         manual_count=row["manual_count"],
+        left_early_count=row["left_early_count"],
+        closed_automatically=bool(row["closed_automatically"]),
     )
 
 
@@ -296,16 +311,90 @@ class LecturerSessionRepository:
             SESSION_ACTIVE_STATUS,
         )
 
-    async def close(self, connection: asyncpg.Connection, session_id: UUID) -> None:
+    async def close(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+        *,
+        automatically: bool = False,
+    ) -> None:
         await connection.execute(
             """
             UPDATE attendance_session.sessions
-            SET closed_at = now(), status = $2, updated_at = now()
+            SET closed_at = now(), status = $2, closed_automatically = $3,
+                updated_at = now()
             WHERE id = $1
             """,
             session_id,
             SESSION_CLOSED_STATUS,
+            automatically,
         )
+
+    async def find_closed_at(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+    ) -> datetime | None:
+        return await connection.fetchval(
+            "SELECT closed_at FROM attendance_session.sessions WHERE id = $1",
+            session_id,
+        )
+
+    async def list_overdue_session_ids(
+        self,
+        connection: asyncpg.Connection,
+        *,
+        scheduled_end_before: datetime,
+        limit: int,
+    ) -> list[UUID]:
+        """Active sessions whose scheduled end is before the given instant.
+
+        Only a candidate list: each one is re-checked under its row lock
+        before it is closed.
+        """
+
+        rows = await connection.fetch(
+            """
+            SELECT id
+            FROM attendance_session.sessions
+            WHERE activated_at IS NOT NULL
+              AND closed_at IS NULL
+              AND cancelled_at IS NULL
+              AND scheduled_end_at < $1
+            ORDER BY scheduled_end_at
+            LIMIT $2
+            """,
+            scheduled_end_before,
+            limit,
+        )
+        return [row["id"] for row in rows]
+
+    async def lock_open_session_for_auto_close(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+    ) -> AutoCloseCandidate | None:
+        """Locks the session if it is still open and nobody else holds it.
+
+        ``SKIP LOCKED`` means a lecturer closing it right now, or another
+        worker auto-closing it, wins; this caller just moves on.
+        """
+
+        row = await connection.fetchrow(
+            """
+            SELECT id, scheduled_end_at
+            FROM attendance_session.sessions
+            WHERE id = $1
+              AND activated_at IS NOT NULL
+              AND closed_at IS NULL
+              AND cancelled_at IS NULL
+            FOR UPDATE SKIP LOCKED
+            """,
+            session_id,
+        )
+        if row is None:
+            return None
+        return AutoCloseCandidate(id=row["id"], scheduled_end_at=row["scheduled_end_at"])
 
     async def cancel(
         self,

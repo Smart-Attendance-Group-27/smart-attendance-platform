@@ -79,3 +79,21 @@ async def test_leaves_values_null_when_not_provided() -> None:
     assert connection.args[7] is None
     assert connection.args[8] is None
     assert connection.args[9] is None
+
+
+async def test_a_system_action_has_no_actor_user() -> None:
+    connection = FakeConnection()
+
+    await write_audit_log(
+        connection,
+        actor_user_id=None,
+        actor_type="system",
+        action="session.auto_close",
+        entity_type="attendance_session",
+        entity_id=ENTITY_ID,
+        new_values={"reason": "Scheduled end plus grace period exceeded"},
+    )
+
+    assert connection.args[0] is None
+    assert connection.args[1] == "system"
+    assert json.loads(connection.args[8]) == {"reason": "Scheduled end plus grace period exceeded"}

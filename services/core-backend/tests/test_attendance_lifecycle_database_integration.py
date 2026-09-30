@@ -19,6 +19,7 @@ from uuid import UUID, uuid4
 import asyncpg
 import pytest
 
+from modules.attendance_sessions.lecturer_sessions.auto_close import SessionAutoCloseScheduler
 from modules.attendance_sessions.lecturer_sessions.exception import SessionAlreadyClosedError
 from modules.attendance_sessions.lecturer_sessions.route import get_lecturer_session_service
 from modules.attendance_verification.attendance_state import FinalAttendanceStatus
@@ -26,6 +27,7 @@ from modules.attendance_verification.geofence.policy import GeofenceValidationPo
 from modules.attendance_verification.geofence.service import GeofenceValidationService
 from modules.attendance_verification.geofence.types import GeofenceReading
 from modules.attendance_verification.manual_attendance.service import ManualAttendanceService
+from modules.attendance_verification.session_overrides.service import SessionOverrideService
 
 TEST_DATABASE_ENV = "ATTENDANCE_LIFECYCLE_TEST_DATABASE_DSN"
 ALLOWED_TEST_DATABASE_HOSTS = frozenset(
@@ -164,6 +166,7 @@ async def remove_lecture(pool: asyncpg.Pool, session_id: UUID) -> None:
             "DELETE FROM attendance_session.session_students WHERE session_id = $1",
             "DELETE FROM attendance_session.session_geofences WHERE session_id = $1",
             "DELETE FROM audit.audit_logs WHERE entity_id = $1",
+            "DELETE FROM attendance_session.session_verification_overrides WHERE session_id = $1",
             "DELETE FROM attendance_session.sessions WHERE id = $1",
         ):
             await connection.execute(statement, session_id)
@@ -503,3 +506,138 @@ async def test_a_lecturers_change_after_closing_replaces_the_automatic_record(
     record = (await records_of(pool, lecture.session_id))[STUDENT_ON_TIME_MISSED_QR[0]]
     assert record["attendance_status"] == "present"
     assert record["record_source"] == "manual"
+
+
+async def fail_location_for(pool: asyncpg.Pool, session_id: UUID, student, at: datetime):
+    # About 11 km from the classroom with a tight accuracy: a clear FAILED.
+    return await geofence_service(at).validate_attempt(
+        pool,
+        student[1],
+        session_id,
+        GeofenceReading(
+            latitude=CENTRE_LATITUDE + 0.1,
+            longitude=CENTRE_LONGITUDE,
+            accuracy_m=5.0,
+            captured_at=at,
+        ),
+    )
+
+
+async def test_a_geofence_waiver_keeps_the_failed_reading_and_reopens_the_attempt(
+    pool: asyncpg.Pool,
+    lecture: Lecture,
+) -> None:
+    now = datetime.now(UTC).replace(microsecond=0)
+    await fail_location_for(pool, lecture.session_id, STUDENT_NEVER_ARRIVED, now)
+    attempt_id = await attempt_id_of(pool, lecture.session_id, STUDENT_NEVER_ARRIVED)
+    assert await pool.fetchval(
+        "SELECT status FROM attendance_verification.verification_attempts WHERE id = $1",
+        attempt_id,
+    ) == "failed"
+
+    result = await SessionOverrideService().waive_geofence_for_user(
+        pool,
+        LECTURER_USER_ID,
+        lecture.session_id,
+        reason_code="GPS_INACCURATE",
+        reason_text=None,
+    )
+
+    assert result.created is True
+    assert result.view.policy.geofence.value == "waived"
+    # Evidence untouched: the reading is still a failure, with its reason.
+    reading = await pool.fetchrow(
+        """
+        SELECT validation_status, failure_reason
+        FROM attendance_verification.geofence_validation_attempts
+        WHERE verification_attempt_id = $1
+        """,
+        attempt_id,
+    )
+    assert (reading["validation_status"], reading["failure_reason"]) == ("failed", "OUTSIDE_GEOFENCE")
+    # Process state reopened so the student can continue to face.
+    assert await pool.fetchval(
+        "SELECT status FROM attendance_verification.verification_attempts WHERE id = $1",
+        attempt_id,
+    ) == "in_progress"
+
+    # Roster students with no passing reading at waiver time: the one who just
+    # failed and the one marked by hand, who never started. Everyone else has
+    # a passing reading, including the one whose check-in is not yet written.
+    override = await pool.fetchrow(
+        """
+        SELECT affected_student_count, performed_by, reason_code
+        FROM attendance_session.session_verification_overrides
+        WHERE session_id = $1 AND verification_factor = 'geofence'
+        """,
+        lecture.session_id,
+    )
+    assert override["affected_student_count"] == 2
+    assert override["performed_by"] == LECTURER_USER_ID
+    assert override["reason_code"] == "GPS_INACCURATE"
+
+    audit = await pool.fetchrow(
+        """
+        SELECT actor_user_id, metadata FROM audit.audit_logs
+        WHERE entity_id = $1 AND action = 'session.verification_override'
+        """,
+        lecture.session_id,
+    )
+    assert audit is not None
+    assert audit["actor_user_id"] == LECTURER_USER_ID
+
+    again = await SessionOverrideService().waive_geofence_for_user(
+        pool,
+        LECTURER_USER_ID,
+        lecture.session_id,
+        reason_code="GPS_UNAVAILABLE",
+        reason_text=None,
+    )
+    assert again.created is False
+    assert await pool.fetchval(
+        "SELECT COUNT(*) FROM attendance_session.session_verification_overrides WHERE session_id = $1",
+        lecture.session_id,
+    ) == 1
+
+
+async def test_an_overdue_session_is_closed_once_by_the_scheduler(
+    pool: asyncpg.Pool,
+    lecture: Lecture,
+) -> None:
+    await pool.execute(
+        """
+        UPDATE attendance_session.sessions
+        SET scheduled_end_at = now() - interval '30 minutes'
+        WHERE id = $1
+        """,
+        lecture.session_id,
+    )
+    scheduler = SessionAutoCloseScheduler(
+        pool=pool,
+        service=lecturer_service(),
+        interval_seconds=60,
+        grace_minutes=15,
+    )
+
+    await scheduler.run_once()
+    await scheduler.run_once()
+
+    closed = await pool.fetchrow(
+        "SELECT closed_at, closed_automatically FROM attendance_session.sessions WHERE id = $1",
+        lecture.session_id,
+    )
+    assert closed["closed_at"] is not None
+    assert closed["closed_automatically"] is True
+    assert len(await records_of(pool, lecture.session_id)) == 6
+
+    audits = await pool.fetch(
+        """
+        SELECT actor_user_id, actor_type FROM audit.audit_logs
+        WHERE entity_id = $1 AND action = 'session.auto_close'
+        """,
+        lecture.session_id,
+    )
+    assert [(row["actor_user_id"], row["actor_type"]) for row in audits] == [(None, "system")]
+
+    with pytest.raises(SessionAlreadyClosedError):
+        await lecturer_service().close_for_user(pool, LECTURER_USER_ID, lecture.session_id)

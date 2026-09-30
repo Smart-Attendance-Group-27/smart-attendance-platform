@@ -27,6 +27,7 @@ from modules.attendance_sessions.lecturer_sessions.activation_timing import (
     resolve_check_in_window_on_activation,
 )
 from modules.attendance_sessions.lecturer_sessions.repository import (
+    AutoCloseCandidate,
     LecturerSessionRecord,
     LecturerSessionRepository,
     SessionStudentRecord,
@@ -49,7 +50,11 @@ from modules.contracts.qr_evidence import QrEvidenceProvider
 
 ACTIVE_PROFILE_STATUS = "active"
 ACTOR_TYPE_LECTURER = "lecturer"
+ACTOR_TYPE_SYSTEM = "system"
 AUDIT_ENTITY_TYPE = "attendance_session"
+AUDIT_ACTION_CLOSE = "session.close"
+AUDIT_ACTION_AUTO_CLOSE = "session.auto_close"
+AUTO_CLOSE_REASON = "Scheduled end plus grace period exceeded"
 
 # Same demo/seed defaults used for the one hand-seeded session
 # (database/smart_attendance_seed.sql) — no per-session UI for these yet.
@@ -349,68 +354,149 @@ class LecturerSessionService:
             closed_at = updated.closed_at
             assert closed_at is not None
 
-            deactivated_qr_batch_ids = (
-                await self._qr_session_repository.close_existing_active_qr_sessions(
-                    connection,
-                    session_id,
-                    closed_at,
-                )
-            )
-
-            summary: FinalizationSummary | None = None
-            if self._qr_evidence is not None:
-                finalization_service = AttendanceFinalizationService(
-                    self._qr_evidence,
-                    self._check_in_service,
-                    self._finalization_repository,
-                )
-                summary = await finalization_service.finalize(
-                    connection,
-                    session_id=session_id,
-                    closed_at=closed_at,
-                    actor_user_id=user_id,
-                )
-                summary = replace(
-                    summary,
-                    deactivated_qr_batch_ids=tuple(deactivated_qr_batch_ids),
-                )
-
-            if summary is not None:
-                await self._announce_finalization(connection, session_id, summary)
-
-            audit_new_values: dict[str, object] = {"closedAt": closed_at.isoformat()}
-            if summary is not None:
-                audit_new_values["finalization"] = {
-                    "present": summary.present,
-                    "late": summary.late,
-                    "absent": summary.absent,
-                    "keptManual": summary.kept_manual,
-                    "reconciled": len(summary.reconciled_student_ids),
-                    "deactivatedQrBatches": len(summary.deactivated_qr_batch_ids),
-                }
-            else:
-                # Explicit, not silent: a reviewer reading the audit trail
-                # sees why no attendance was decided, rather than a close
-                # entry that looks identical to a normal one.
-                audit_new_values["finalizationUnavailableReason"] = (
-                    self.FINALIZATION_UNAVAILABLE_REASON
-                )
-
-            await write_audit_log(
+            summary = await self._finalize_closed_session(
                 connection,
+                session_id,
+                closed_at,
                 actor_user_id=user_id,
                 actor_type=ACTOR_TYPE_LECTURER,
-                action="session.close",
-                entity_type=AUDIT_ENTITY_TYPE,
-                entity_id=session_id,
-                old_values={"closedAt": None},
-                new_values=audit_new_values,
+                audit_action=AUDIT_ACTION_CLOSE,
             )
 
         if summary is not None:
             await AttendanceFinalizationService.after_commit(summary, redis_client)
 
         return updated, summary
+
+    async def close_overdue_session(
+        self,
+        pool: asyncpg.Pool,
+        session_id: UUID,
+        *,
+        grace: timedelta,
+        redis_client=None,
+    ) -> bool:
+        """Closes one session the server found still open past its end.
+
+        Returns ``False`` without writing anything when the session is not
+        overdue after all, is already closed or cancelled, or is being closed
+        by someone else right now. That is what makes this safe to run from
+        several workers and to repeat after a restart.
+        """
+
+        now = self._as_utc(self._clock())
+        async with pool.acquire() as connection, connection.transaction():
+            candidate = await self._repository.lock_open_session_for_auto_close(
+                connection,
+                session_id,
+            )
+            if candidate is None or not self._is_overdue(candidate, now, grace):
+                return False
+
+            await self._repository.close(connection, session_id, automatically=True)
+            closed_at = await self._repository.find_closed_at(connection, session_id)
+            assert closed_at is not None
+
+            summary = await self._finalize_closed_session(
+                connection,
+                session_id,
+                closed_at,
+                actor_user_id=None,
+                actor_type=ACTOR_TYPE_SYSTEM,
+                audit_action=AUDIT_ACTION_AUTO_CLOSE,
+                audit_extra={
+                    "scheduledEndAt": candidate.scheduled_end_at.isoformat(),
+                    "graceMinutes": int(grace.total_seconds() // 60),
+                    "reason": AUTO_CLOSE_REASON,
+                },
+            )
+
+        if summary is not None:
+            await AttendanceFinalizationService.after_commit(summary, redis_client)
+        return True
+
+    @staticmethod
+    def _is_overdue(candidate: AutoCloseCandidate, now: datetime, grace: timedelta) -> bool:
+        return candidate.scheduled_end_at + grace < now
+
+    async def _finalize_closed_session(
+        self,
+        connection: asyncpg.Connection,
+        session_id: UUID,
+        closed_at: datetime,
+        *,
+        actor_user_id: UUID | None,
+        actor_type: str,
+        audit_action: str,
+        audit_extra: dict[str, object] | None = None,
+    ) -> FinalizationSummary | None:
+        """Everything that follows marking a session closed.
+
+        The one path shared by a lecturer's close and the automatic close, so
+        attendance is decided by the same rules either way.
+        """
+
+        deactivated_qr_batch_ids = (
+            await self._qr_session_repository.close_existing_active_qr_sessions(
+                connection,
+                session_id,
+                closed_at,
+            )
+        )
+
+        summary: FinalizationSummary | None = None
+        if self._qr_evidence is not None:
+            finalization_service = AttendanceFinalizationService(
+                self._qr_evidence,
+                self._check_in_service,
+                self._finalization_repository,
+            )
+            summary = await finalization_service.finalize(
+                connection,
+                session_id=session_id,
+                closed_at=closed_at,
+                actor_user_id=actor_user_id,
+            )
+            summary = replace(
+                summary,
+                deactivated_qr_batch_ids=tuple(deactivated_qr_batch_ids),
+            )
+
+        if summary is not None:
+            await self._announce_finalization(connection, session_id, summary)
+
+        audit_new_values: dict[str, object] = {"closedAt": closed_at.isoformat()}
+        if audit_extra:
+            audit_new_values.update(audit_extra)
+        if summary is not None:
+            audit_new_values["finalization"] = {
+                "present": summary.present,
+                "late": summary.late,
+                "leftEarly": summary.left_early,
+                "absent": summary.absent,
+                "keptManual": summary.kept_manual,
+                "reconciled": len(summary.reconciled_student_ids),
+                "deactivatedQrBatches": len(summary.deactivated_qr_batch_ids),
+            }
+        else:
+            # Explicit, not silent: a reviewer reading the audit trail
+            # sees why no attendance was decided, rather than a close
+            # entry that looks identical to a normal one.
+            audit_new_values["finalizationUnavailableReason"] = (
+                self.FINALIZATION_UNAVAILABLE_REASON
+            )
+
+        await write_audit_log(
+            connection,
+            actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            action=audit_action,
+            entity_type=AUDIT_ENTITY_TYPE,
+            entity_id=session_id,
+            old_values={"closedAt": None},
+            new_values=audit_new_values,
+        )
+        return summary
 
     async def cancel_for_user(
         self,

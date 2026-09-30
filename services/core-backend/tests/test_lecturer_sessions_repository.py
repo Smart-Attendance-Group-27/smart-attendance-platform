@@ -68,6 +68,8 @@ def build_session_row() -> dict[str, Any]:
         "failed_verification_count": 1,
         "absent_count": 0,
         "manual_count": 0,
+        "left_early_count": 3,
+        "closed_automatically": False,
     }
 
 
@@ -83,8 +85,12 @@ async def test_the_roster_query_asks_for_every_new_count() -> None:
     assert record.failed_verification_count == 1
     assert record.absent_count == 0
     assert record.manual_count == 0
+    assert record.left_early_count == 3
+    assert record.closed_automatically is False
 
     assert "AS checked_in_count" in connection.query
+    assert "AS left_early_count" in connection.query
+    assert "session.closed_automatically" in connection.query
     assert "AS late_checked_in_count" in connection.query
     assert "AS failed_verification_count" in connection.query
     assert "AS absent_count" in connection.query
@@ -188,7 +194,16 @@ async def test_close_records_when_and_the_closed_status() -> None:
     assert "status = $2" in connection.query
     assert "cancelled_at" not in connection.query
     assert "WHERE id = $1" in connection.query
-    assert connection.args == (SESSION_ID, "closed")
+    assert connection.args == (SESSION_ID, "closed", False)
+
+
+async def test_an_automatic_close_is_marked_on_the_session() -> None:
+    connection = FakeDatabaseConnection([])
+
+    await LecturerSessionRepository().close(connection, SESSION_ID, automatically=True)
+
+    assert "closed_automatically = $3" in connection.query
+    assert connection.args == (SESSION_ID, "closed", True)
 
 
 async def test_the_roster_query_no_longer_reads_the_latest_qr_attempt() -> None:
