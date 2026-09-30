@@ -116,4 +116,46 @@ describe('CoreApiAttendanceService', () => {
     }));
     await expect(service().checkIn(sessionId)).resolves.toEqual({ status: 'server-error' });
   });
+  test('reads the effective policy separately from the geofence evidence', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      response(200, myAttendanceFixtures['attendance-session-geofence-waived']),
+    );
+    const result = await service().getMyAttendance('attendance-session-geofence-waived');
+    expect(result.status).toBe('loaded');
+    if (result.status === 'loaded') {
+      expect(result.attendance.verificationPolicy.geofence).toBe('waived');
+      expect(result.attendance.verification.geofenceStatus).toBe('failed');
+    }
+  });
+
+  test('treats a missing policy from an older server as every step required', async () => {
+    const { verificationPolicy: _policy, ...legacy } = myAttendanceFixtures[sessionId];
+    jest.spyOn(global, 'fetch').mockResolvedValue(response(200, legacy));
+    const result = await service().getMyAttendance(sessionId);
+    expect(result.status === 'loaded' && result.attendance.verificationPolicy).toEqual({
+      geofence: 'required', face: 'required', geofenceWaivedAt: null,
+    });
+  });
+
+  test('accepts a left early final attendance', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      response(200, myAttendanceFixtures['attendance-session-left-early']),
+    );
+    const result = await service().getMyAttendance('attendance-session-left-early');
+    expect(result.status === 'loaded' && result.attendance.finalAttendance?.status).toBe('left_early');
+  });
+
+  test('starts verification without a location reading after a waiver', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(response(200, {
+      verificationAttemptId: 'attempt-1', geofenceRequirement: 'waived',
+      nextStep: 'FACE_VERIFICATION', initialCheckIn: null,
+    }));
+    await expect(service().startVerificationWithoutLocation(sessionId)).resolves.toEqual({
+      status: 'started', initialCheckIn: null,
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${baseUrl}/api/v1/attendance-sessions/${sessionId}/verification-attempts`,
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
 });

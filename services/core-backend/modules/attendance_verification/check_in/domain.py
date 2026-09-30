@@ -30,6 +30,62 @@ class RequiredStep(StrEnum):
     FACE = "face_verification"
 
 
+class StepRequirement(StrEnum):
+    """What the session currently asks of one verification step.
+
+    ``WAIVED`` is a policy decision, never evidence: a waived geofence keeps
+    whatever readings the student submitted, passed or failed.
+    """
+
+    REQUIRED = "required"
+    WAIVED = "waived"
+    NOT_REQUIRED = "not_required"
+
+
+@dataclass(frozen=True)
+class EffectiveVerificationPolicy:
+    """The session's configured requirements with its overrides applied.
+
+    Every place that asks "must this student still pass step X?" goes through
+    here, so a waiver means the same thing to check-in, reconciliation at
+    close, and the student-facing progress screen.
+    """
+
+    geofence: StepRequirement
+    face: StepRequirement
+
+    @staticmethod
+    def resolve(
+        *,
+        requires_geofence: bool | None,
+        requires_face_verification: bool | None,
+        waived_steps: frozenset[RequiredStep] = frozenset(),
+    ) -> "EffectiveVerificationPolicy":
+        def requirement(configured: bool | None, step: RequiredStep) -> StepRequirement:
+            if not configured:
+                return StepRequirement.NOT_REQUIRED
+            if step in waived_steps:
+                return StepRequirement.WAIVED
+            return StepRequirement.REQUIRED
+
+        return EffectiveVerificationPolicy(
+            geofence=requirement(requires_geofence, RequiredStep.GEOFENCE),
+            face=requirement(requires_face_verification, RequiredStep.FACE),
+        )
+
+    def requirement_for(self, step: RequiredStep) -> StepRequirement:
+        return self.geofence if step is RequiredStep.GEOFENCE else self.face
+
+    @property
+    def required_steps(self) -> tuple[RequiredStep, ...]:
+        """Steps that must genuinely pass, in the order students do them."""
+        return tuple(
+            step
+            for step in (RequiredStep.GEOFENCE, RequiredStep.FACE)
+            if self.requirement_for(step) is StepRequirement.REQUIRED
+        )
+
+
 @dataclass(frozen=True)
 class StepEvidence:
     """When a required step passed, or ``None`` if it has not passed yet."""
@@ -138,6 +194,8 @@ def resolve_initial_check_in_status(
 __all__ = [
     "CheckInOutcome",
     "CheckInResult",
+    "EffectiveVerificationPolicy",
+    "StepRequirement",
     "InitialCheckIn",
     "ReconciledCheckIn",
     "RequiredStep",

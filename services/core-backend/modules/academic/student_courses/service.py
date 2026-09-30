@@ -189,6 +189,7 @@ def _group_attendance_records_by_course(
                 status={
                     "marked": "Present",
                     "late": "Late",
+                    "left_early": "Left early",
                     "absent": "Absent",
                     "cancelled": "Cancelled",
                 }.get(status, "Awaiting"),
@@ -256,6 +257,8 @@ def _derive_session_status(
         return "marked"
     if row.attendance_status == "late":
         return "late"
+    if row.attendance_status == "left_early":
+        return "left_early"
     if row.attendance_status == "absent" or row.closed_at is not None:
         return "absent"
 

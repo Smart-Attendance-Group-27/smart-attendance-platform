@@ -27,6 +27,10 @@ export default function AttendanceProgressRoute() {
 
   return <AttendanceProgressScreen
     attendanceService={attendanceService}
+    onContinueToFaceVerification={(locationWaived) => router.push({
+      pathname: '/(student)/attendance/[sessionId]/face-introduction',
+      params: locationWaived ? { sessionId, locationWaived: '1' } : { sessionId },
+    } as unknown as Href)}
     onOpenQrScanner={(qrSessionId) => router.push({
       pathname: '/(student)/attendance/[sessionId]/qr-scanner', params: { sessionId, qrSessionId },
     } as Href)}

@@ -11,7 +11,7 @@ FAILURE_OUTCOME = "failure"
 async def write_audit_log(
     connection: asyncpg.Connection,
     *,
-    actor_user_id: UUID,
+    actor_user_id: UUID | None,
     actor_type: str,
     action: str,
     entity_type: str,
@@ -23,6 +23,9 @@ async def write_audit_log(
     failure_reason: str | None = None,
 ) -> None:
     """Writes one audit.audit_logs row.
+
+    ``actor_user_id`` is ``None`` only for actions the server takes on its
+    own (``actor_type = 'system'``).
 
     Callers pass already-redacted values — this function does not filter
     anything, so never pass tokens, passwords, or raw biometric data in

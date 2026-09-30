@@ -43,7 +43,7 @@ class AdminInstitutionReportRepository:
             SELECT
                 (
                     SELECT ROUND(
-                        100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late'))
+                        100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late', 'left_early'))
                         / NULLIF(COUNT(*), 0),
                         1
                     )
@@ -69,7 +69,7 @@ class AdminInstitutionReportRepository:
                         SELECT
                             roster.student_id,
                             offering.attendance_threshold,
-                            100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late'))
+                            100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late', 'left_early'))
                                 / NULLIF(COUNT(*), 0) AS rate
                         FROM attendance_session.sessions AS session
                         JOIN attendance_session.session_students AS roster
@@ -105,7 +105,7 @@ class AdminInstitutionReportRepository:
             WITH weekly AS (
                 SELECT
                     DATE_TRUNC('week', session.scheduled_start_at) AS week_start,
-                    COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late')) AS present_count,
+                    COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late', 'left_early')) AS present_count,
                     COUNT(*) AS total_count
                 FROM attendance_session.sessions AS session
                 JOIN attendance_session.session_students AS roster
@@ -142,7 +142,7 @@ class AdminInstitutionReportRepository:
             SELECT
                 faculty.faculty_name,
                 ROUND(
-                    100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late'))
+                    100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late', 'left_early'))
                     / NULLIF(COUNT(*), 0),
                     1
                 ) AS attendance_rate_percent
@@ -184,7 +184,7 @@ class AdminInstitutionReportRepository:
                 course.course_code,
                 course.course_name,
                 ROUND(
-                    100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late'))
+                    100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late', 'left_early'))
                     / NULLIF(COUNT(*), 0),
                     1
                 ) AS attendance_rate_percent
@@ -201,7 +201,7 @@ class AdminInstitutionReportRepository:
             GROUP BY offering.id, offering.attendance_threshold, course.id, course.course_code, course.course_name
             HAVING
                 COUNT(*) > 0
-                AND (100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late')) / COUNT(*))
+                AND (100.0 * COUNT(*) FILTER (WHERE record.attendance_status IN ('present', 'late', 'left_early')) / COUNT(*))
                     < COALESCE(offering.attendance_threshold, $1)
             ORDER BY attendance_rate_percent ASC
             """,

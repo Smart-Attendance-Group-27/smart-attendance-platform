@@ -28,6 +28,8 @@ export type AttendanceSession = {
   // (attendance_session.sessions.requires_qr) — controls whether the
   // check-in wizard routes through the QR scanner after face verification.
   requiresQr: boolean;
+  // The lecturer waived location verification for the whole session.
+  geofenceWaived?: boolean;
   attemptStatus?: 'in_progress' | 'checked_in' | 'failed' | null;
-  finalAttendanceStatus?: 'present' | 'late' | 'absent' | null;
+  finalAttendanceStatus?: 'present' | 'late' | 'left_early' | 'absent' | null;
 };

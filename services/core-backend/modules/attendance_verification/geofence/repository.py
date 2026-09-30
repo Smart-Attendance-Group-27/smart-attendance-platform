@@ -5,6 +5,7 @@ from uuid import UUID
 
 import asyncpg
 
+from modules.attendance_verification.check_in.repository import GEOFENCE_WAIVED_SQL
 from modules.attendance_verification.geofence.types import GeofenceValidationResult
 
 IN_PROGRESS_STATUS = "in_progress"
@@ -27,6 +28,7 @@ class AttendanceSessionRecord:
     requires_face_verification: bool | None
     closed_at: datetime | None
     cancelled_at: datetime | None
+    geofence_waived: bool = False
 
 
 @dataclass(frozen=True)
@@ -75,19 +77,20 @@ class GeofenceRepository:
         session_id: UUID,
     ) -> AttendanceSessionRecord | None:
         row = await connection.fetchrow(
-            """
+            f"""
             SELECT
-                id,
-                status,
-                check_in_opens_at,
-                check_in_closes_at,
-                requires_geofence,
-                requires_face_verification,
-                closed_at,
-                cancelled_at
-            FROM attendance_session.sessions
-            WHERE id = $1
-            FOR SHARE
+                session.id,
+                session.status,
+                session.check_in_opens_at,
+                session.check_in_closes_at,
+                session.requires_geofence,
+                session.requires_face_verification,
+                session.closed_at,
+                session.cancelled_at,
+                {GEOFENCE_WAIVED_SQL} AS geofence_waived
+            FROM attendance_session.sessions AS session
+            WHERE session.id = $1
+            FOR SHARE OF session
             """,
             session_id,
         )
@@ -104,6 +107,7 @@ class GeofenceRepository:
             requires_face_verification=row["requires_face_verification"],
             closed_at=row["closed_at"],
             cancelled_at=row["cancelled_at"],
+            geofence_waived=bool(row["geofence_waived"]),
         )
 
     async def lock_student_eligibility(

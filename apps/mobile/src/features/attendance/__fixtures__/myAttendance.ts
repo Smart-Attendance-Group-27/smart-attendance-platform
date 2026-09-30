@@ -25,6 +25,7 @@ const base: MyAttendance = {
     livenessPassed: null,
   },
   initialCheckIn: null,
+  verificationPolicy: { geofence: 'required', face: 'required', geofenceWaivedAt: null },
   finalAttendance: null,
 };
 
@@ -35,6 +36,24 @@ export const myAttendanceFixtures: Readonly<Record<string, MyAttendance>> = {
     sessionId: 'attendance-session-geofence-only',
     requiresFaceVerification: false,
     qrEnabled: false,
+    verificationPolicy: { geofence: 'required', face: 'not_required', geofenceWaivedAt: null },
+  },
+  'attendance-session-geofence-waived': {
+    ...base,
+    sessionId: 'attendance-session-geofence-waived',
+    verification: { ...base.verification, attemptStatus: 'in_progress', geofenceStatus: 'failed' },
+    verificationPolicy: {
+      geofence: 'waived', face: 'required', geofenceWaivedAt: '2026-07-20T10:05:00+05:30',
+    },
+  },
+  'attendance-session-left-early': {
+    ...base,
+    sessionId: 'attendance-session-left-early',
+    sessionState: 'closed',
+    canStartCheckIn: false,
+    verification: { ...base.verification, attemptStatus: 'checked_in', geofenceStatus: 'passed', faceStatus: 'passed' },
+    initialCheckIn: { status: 'checked_in', checkedInAt: '2026-07-20T10:02:00+05:30' },
+    finalAttendance: { status: 'left_early', source: 'automatic', decidedAt: '2026-07-20T12:00:00+05:30' },
   },
   'attendance-session-checked-in': {
     ...base,

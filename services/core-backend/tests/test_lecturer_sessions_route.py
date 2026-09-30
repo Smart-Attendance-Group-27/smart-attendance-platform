@@ -525,6 +525,7 @@ def test_close_session_reports_the_finalization_summary(
         "enrolledCount": 10,
         "presentCount": 6,
         "lateCount": 1,
+        "leftEarlyCount": 0,
         "absentCount": 2,
         "keptManualCount": 1,
         "reconciledCount": 1,

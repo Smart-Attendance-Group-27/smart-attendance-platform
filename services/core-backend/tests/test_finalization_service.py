@@ -168,6 +168,77 @@ async def test_a_checked_in_student_who_failed_a_required_qr_scan_is_absent() ->
     assert summary.results[0].status is FinalAttendanceStatus.ABSENT
 
 
+async def test_partial_required_qr_is_left_early_and_counted_separately() -> None:
+    partial = UUID("23000000-0000-0000-0000-000000000007")
+    partial_attempt = UUID("50000000-0000-0000-0000-000000000007")
+    roster = [
+        RosterStudentState(
+            student_id=STUDENT_ON_TIME,
+            verification_attempt_id=ATTEMPT_ON_TIME,
+            initial_check_in_status=InitialCheckInStatus.CHECKED_IN.value,
+            has_manual_record=False,
+        ),
+        RosterStudentState(
+            student_id=partial,
+            verification_attempt_id=partial_attempt,
+            initial_check_in_status=InitialCheckInStatus.CHECKED_IN.value,
+            has_manual_record=False,
+        ),
+        RosterStudentState(
+            student_id=STUDENT_QR_FAILED,
+            verification_attempt_id=ATTEMPT_QR_FAILED,
+            initial_check_in_status=InitialCheckInStatus.CHECKED_IN.value,
+            has_manual_record=False,
+        ),
+    ]
+    qr_evidence = FakeQrEvidenceProvider()
+    qr_evidence.set_progress(ATTEMPT_ON_TIME, required_count=2, passed_count=2)
+    qr_evidence.set_progress(partial_attempt, required_count=3, passed_count=1)
+    qr_evidence.set_progress(ATTEMPT_QR_FAILED, required_count=2, passed_count=0)
+    service = AttendanceFinalizationService(
+        qr_evidence,
+        check_in_service=FakeCheckInService(),
+        repository=FakeFinalizationRepository(roster),
+    )
+
+    summary = await service.finalize(
+        None,
+        session_id=SESSION_ID,
+        closed_at=CLOSED_AT,
+        actor_user_id=None,
+    )
+
+    decided = {result.student_id: result.status for result in summary.results}
+    assert decided[STUDENT_ON_TIME] is FinalAttendanceStatus.PRESENT
+    assert decided[partial] is FinalAttendanceStatus.LEFT_EARLY
+    assert decided[STUDENT_QR_FAILED] is FinalAttendanceStatus.ABSENT
+    assert (summary.present, summary.left_early, summary.absent) == (1, 1, 1)
+
+
+async def test_a_student_with_no_check_in_is_absent_even_with_qr_evidence() -> None:
+    roster = [
+        RosterStudentState(
+            student_id=STUDENT_ABSENT,
+            verification_attempt_id=ATTEMPT_QR_FAILED,
+            initial_check_in_status=None,
+            has_manual_record=False,
+        ),
+    ]
+    qr_evidence = FakeQrEvidenceProvider()
+    qr_evidence.set_progress(ATTEMPT_QR_FAILED, required_count=1, passed_count=1)
+    service = AttendanceFinalizationService(
+        qr_evidence,
+        check_in_service=FakeCheckInService(),
+        repository=FakeFinalizationRepository(roster),
+    )
+
+    summary = await service.finalize(
+        None, session_id=SESSION_ID, closed_at=CLOSED_AT, actor_user_id=ACTOR_ID,
+    )
+
+    assert summary.results[0].status is FinalAttendanceStatus.ABSENT
+
+
 async def test_reconciliation_runs_before_the_roster_is_read() -> None:
     """The race this whole module exists for: a student who finished their
     last step in the same instant the session closed must not end up absent

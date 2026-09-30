@@ -29,6 +29,11 @@ type LocationCheckScreenProps = {
   onBack: () => void;
   onAlreadyCheckedIn: (sessionId: string) => void;
   onLocationValidated: (sessionId: string, initialCheckIn: InitialCheckIn | null) => void;
+  // The lecturer waived location for the session: skip straight to face.
+  onContinueWithoutLocation?: (sessionId: string) => void;
+  // Lets a student who is stuck on a failed check see whether the lecturer
+  // has since waived location for the session.
+  onViewProgress?: (sessionId: string) => void;
 };
 
 type LocationCheckUiState =
@@ -83,6 +88,17 @@ const statusContent: Record<
     title: 'Inside classroom area',
     message: 'Your classroom location has been verified.',
     tone: 'success',
+  },
+  geofence_waived: {
+    icon: {
+      ios: 'location.slash',
+      android: 'location_off',
+      web: 'location_off',
+    },
+    title: 'Location verification waived',
+    message:
+      'Your lecturer waived location verification for this session. Continue to face verification.',
+    tone: 'info',
   },
   outside_geofence: {
     icon: {
@@ -297,12 +313,26 @@ function LocationStatusAction({
   state,
   onLocationValidated,
   onValidateLocation,
+  onContinueWithoutLocation,
+  onViewProgress,
 }: {
   sessionId: string;
   state: Exclude<LocationCheckUiState, { status: 'checking' }>;
   onLocationValidated: (sessionId: string, initialCheckIn: InitialCheckIn | null) => void;
   onValidateLocation: () => void;
+  onContinueWithoutLocation?: (sessionId: string) => void;
+  onViewProgress?: (sessionId: string) => void;
 }) {
+  if (state.status === 'geofence_waived') {
+    return onContinueWithoutLocation ? (
+      <AppButton
+        accessibilityLabel="Continue to face verification"
+        onPress={() => onContinueWithoutLocation(sessionId)}
+        title="Continue to Face Verification"
+      />
+    ) : null;
+  }
+
   if (state.status === 'permission_required') {
     return (
       <AppButton
@@ -326,9 +356,21 @@ function LocationStatusAction({
 
   if (
     state.status === 'outside_geofence' ||
+    state.status === 'attempt_limit_reached'
+  ) {
+    return onViewProgress ? (
+      <AppButton
+        accessibilityLabel="Check attendance status"
+        onPress={() => onViewProgress(sessionId)}
+        title="Check Attendance Status"
+        variant="secondary"
+      />
+    ) : null;
+  }
+
+  if (
     state.status === 'mock_location_detected' ||
     state.status === 'session_unavailable' ||
-    state.status === 'attempt_limit_reached' ||
     state.status === 'unauthenticated' ||
     state.status === 'forbidden'
   ) {
@@ -359,6 +401,8 @@ export function LocationCheckScreen({
   onBack,
   onAlreadyCheckedIn,
   onLocationValidated,
+  onContinueWithoutLocation,
+  onViewProgress,
 }: LocationCheckScreenProps) {
   const [state, setState] = useState<LocationCheckUiState>(
     permissionRequiredState,
@@ -433,7 +477,9 @@ export function LocationCheckScreen({
         action={
           state.status === 'checking' ? undefined : (
             <LocationStatusAction
+              onContinueWithoutLocation={onContinueWithoutLocation}
               onLocationValidated={onLocationValidated}
+              onViewProgress={onViewProgress}
               onValidateLocation={() => void validateLocation()}
               sessionId={sessionId}
               state={state}

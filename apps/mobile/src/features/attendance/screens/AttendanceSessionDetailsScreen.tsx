@@ -24,7 +24,7 @@ type AttendanceSessionDetailsScreenProps = {
   attendanceService: AttendanceService;
   onBack: () => void;
   onOpenProgress?: (sessionId: string) => void;
-  onStartCheckIn: () => void;
+  onStartCheckIn: (geofenceWaived?: boolean) => void;
 };
 
 type AttendanceSessionDetailsState =
@@ -211,7 +211,7 @@ function SessionContent({
   onStartCheckIn,
 }: {
   session: AttendanceSession;
-  onStartCheckIn: () => void;
+  onStartCheckIn: (geofenceWaived?: boolean) => void;
 }) {
   const formattedSession = formatAttendanceSession(session);
   const isOpen = session.checkInStatus === 'open';
@@ -223,7 +223,19 @@ function SessionContent({
         formattedSession={formattedSession}
         session={session}
       />
-      <AttendanceProgressSteps />
+      <AttendanceProgressSteps locationWaived={session.geofenceWaived} />
+      {session.geofenceWaived && isOpen ? (
+        <View style={styles.readOnlyNotice}>
+          <SymbolView
+            name={{ ios: 'location.slash', android: 'location_off', web: 'location_off' }}
+            size={20}
+            tintColor={lightColors.neutral}
+          />
+          <Text style={styles.readOnlyText}>
+            Your lecturer waived location verification for this session. You will go straight to face verification.
+          </Text>
+        </View>
+      ) : null}
       {session.attemptStatus === 'failed' ? (
         <Text style={styles.readOnlyText}>Verification failed. Ask your lecturer for help.</Text>
       ) : null}
@@ -251,7 +263,7 @@ function SessionContent({
         <View style={styles.action}>
           <AppButton
             accessibilityLabel="Start attendance check-in"
-            onPress={onStartCheckIn}
+            onPress={() => onStartCheckIn(session.geofenceWaived === true)}
             title="Start Check-In"
           />
         </View>

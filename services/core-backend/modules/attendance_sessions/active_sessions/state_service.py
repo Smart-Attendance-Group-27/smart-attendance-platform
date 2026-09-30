@@ -8,6 +8,10 @@ import asyncpg
 from modules.academic.student_profile.exception import StudentProfileNotFoundError
 from modules.academic.student_profile.repository import StudentProfileRepository
 from modules.attendance_verification.attendance_state import VerificationAttemptStatus
+from modules.attendance_verification.check_in.domain import (
+    EffectiveVerificationPolicy,
+    RequiredStep,
+)
 
 ACTIVE_PROFILE_STATUS = "active"
 GEOFENCE_PASSED_STATUS = "passed"
@@ -69,6 +73,10 @@ class StudentAttendanceState:
     verification: VerificationState
     initial_check_in: InitialCheckInState | None
     final_attendance: FinalAttendanceState | None
+    # What the session requires now, overrides applied. Kept apart from
+    # ``verification``, which is only ever the student's own evidence.
+    verification_policy: EffectiveVerificationPolicy | None = None
+    geofence_waived_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +98,8 @@ class StudentSessionRow:
     late_after_at: datetime | None
     requires_face_verification: bool
     requires_qr: bool
+    requires_geofence: bool = True
+    geofence_waived_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -177,7 +187,14 @@ class StudentAttendanceStateRepository:
                 session.check_in_closes_at,
                 session.late_after_at,
                 session.requires_face_verification,
-                session.requires_qr
+                session.requires_qr,
+                session.requires_geofence,
+                (
+                    SELECT override.performed_at
+                    FROM attendance_session.session_verification_overrides AS override
+                    WHERE override.session_id = session.id
+                      AND override.verification_factor = 'geofence'
+                ) AS geofence_waived_at
             FROM attendance_session.session_students AS eligible_student
             JOIN attendance_session.sessions AS session
                 ON session.id = eligible_student.session_id
@@ -218,6 +235,8 @@ class StudentAttendanceStateRepository:
             late_after_at=row["late_after_at"],
             requires_face_verification=bool(row["requires_face_verification"]),
             requires_qr=bool(row["requires_qr"]),
+            requires_geofence=bool(row["requires_geofence"]),
+            geofence_waived_at=row["geofence_waived_at"],
         )
 
     async def find_verification_attempt(
@@ -425,6 +444,16 @@ class StudentAttendanceStateService:
             ),
             initial_check_in=initial_check_in,
             final_attendance=final_attendance,
+            verification_policy=EffectiveVerificationPolicy.resolve(
+                requires_geofence=session_row.requires_geofence,
+                requires_face_verification=session_row.requires_face_verification,
+                waived_steps=(
+                    frozenset({RequiredStep.GEOFENCE})
+                    if session_row.geofence_waived_at is not None
+                    else frozenset()
+                ),
+            ),
+            geofence_waived_at=session_row.geofence_waived_at,
         )
 
     @staticmethod

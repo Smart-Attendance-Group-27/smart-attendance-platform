@@ -89,12 +89,16 @@ export function verificationOutcomeLabel(
   }
 }
 
-export function finalStatusDisplay(status: "present" | "late" | "absent" | "pending_review"): StatusDisplay {
+export function finalStatusDisplay(
+  status: "present" | "late" | "left_early" | "absent" | "pending_review",
+): StatusDisplay {
   switch (status) {
     case "present":
       return { label: "Present", tone: "success" };
     case "late":
       return { label: "Late", tone: "warning" };
+    case "left_early":
+      return { label: "Left early", tone: "warning" };
     case "absent":
       return { label: "Absent", tone: "danger" };
     case "pending_review":

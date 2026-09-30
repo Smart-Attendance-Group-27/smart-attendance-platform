@@ -134,6 +134,21 @@ describe('CoreApiGeofenceValidationService', () => {
     ).resolves.toEqual({ status: 'already-checked-in' });
   });
 
+  test('identifies a session-wide geofence waiver', async () => {
+    jest.spyOn(global, 'fetch').mockResolvedValue(
+      jsonResponse(409, {
+        detail: {
+          code: 'GEOFENCE_WAIVED',
+          message: 'Location verification was waived for this session.',
+        },
+      }),
+    );
+
+    await expect(
+      buildService().submitAttempt({ sessionId, reading }),
+    ).resolves.toEqual({ status: 'geofence-waived' });
+  });
+
   test('maps a network failure without returning mock success', async () => {
     jest
       .spyOn(global, 'fetch')

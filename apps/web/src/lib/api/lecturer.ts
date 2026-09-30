@@ -8,6 +8,7 @@ import {
   mockLecturerSessions,
   mockLecturerStudents,
   mockLecturerTimetable,
+  mockLecturerVerificationPolicies,
 } from "@/mocks/fixtures/lecturerLive";
 import type { LecturerQrBatch } from "@/types/lecturer";
 import type { CorrectionCategory, CorrectionRequestType } from "@/lib/correctionRequests";
@@ -40,6 +41,7 @@ export type ApiFinalizationSummary = {
   enrolledCount: number;
   presentCount: number;
   lateCount: number;
+  leftEarlyCount?: number;
   absentCount: number;
   keptManualCount: number;
   reconciledCount: number;
@@ -76,6 +78,54 @@ export type ApiLecturerSession = {
   failedVerificationCount: number;
   absentCount: number;
   manualCount: number;
+  leftEarlyCount?: number;
+  closedAutomatically?: boolean;
+};
+
+export type ApiStepRequirement = "required" | "waived" | "not_required";
+
+export type ApiGeofenceWaiverReason =
+  | "GPS_UNAVAILABLE"
+  | "GPS_INACCURATE"
+  | "WRONG_SESSION_LOCATION"
+  | "DEVICE_LOCATION_FAILURE"
+  | "OTHER";
+
+export type ApiSessionVerificationOverride = {
+  id: string;
+  verificationFactor: string;
+  scope: string;
+  previousPolicy: string;
+  newPolicy: string;
+  reasonCode: ApiGeofenceWaiverReason;
+  reasonText: string | null;
+  performedBy: string;
+  performedByName: string | null;
+  performedAt: string;
+  affectedStudentCount: number;
+};
+
+export type ApiGeofenceHealth = {
+  attempted: number;
+  passed: number;
+  failed: number;
+  failureRatePercent: number;
+  warning: boolean;
+  warningMinimumAttempts: number;
+  warningFailureRatePercent: number;
+};
+
+export type ApiSessionVerificationPolicy = {
+  sessionId: string;
+  geofence: ApiStepRequirement;
+  face: ApiStepRequirement;
+  geofenceWaiver: ApiSessionVerificationOverride | null;
+  geofenceHealth: ApiGeofenceHealth;
+};
+
+export type ApiGeofenceWaiverResponse = ApiSessionVerificationPolicy & {
+  created: boolean;
+  reopenedAttemptCount: number;
 };
 
 export type ApiSessionStudent = {
@@ -100,6 +150,8 @@ export type ApiSessionStudent = {
 };
 
 export type ApiManualAttendanceStatus = "present" | "late" | "absent";
+
+export type ApiFinalAttendanceStatus = "present" | "late" | "left_early" | "absent";
 
 export type ApiManualAttendanceResponse = {
   sessionId: string;
@@ -156,6 +208,7 @@ export type ApiCourseSessionReport = {
   enrolledCount: number;
   presentCount: number;
   lateCount: number;
+  leftEarlyCount?: number;
   absentCount: number;
   pendingReviewCount: number;
 };
@@ -226,6 +279,28 @@ export function getLecturerSessionDetail(sessionId: string): Promise<ApiLecturer
 export function getLecturerSessionStudents(sessionId: string): Promise<ApiSessionStudent[]> {
   if (isWebMockMode()) return Promise.resolve(mockLecturerStudents[sessionId] ?? []);
   return coreBackendFetch(`/api/v1/lecturers/me/attendance-sessions/${sessionId}/students`);
+}
+
+export function getLecturerSessionVerificationPolicy(
+  sessionId: string,
+): Promise<ApiSessionVerificationPolicy> {
+  if (isWebMockMode()) {
+    const policy = mockLecturerVerificationPolicies[sessionId];
+    return policy ? Promise.resolve(policy) : Promise.reject(new CoreBackendError("Session not found", 404, `/api/v1/lecturers/me/attendance-sessions/${sessionId}/verification-policy`));
+  }
+  return coreBackendFetch(
+    `/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/verification-policy`,
+  );
+}
+
+export function postGeofenceWaiver(
+  sessionId: string,
+  body: { reasonCode: ApiGeofenceWaiverReason; reasonText: string | null },
+): Promise<ApiGeofenceWaiverResponse> {
+  return coreBackendFetch(
+    `/api/v1/lecturers/me/attendance-sessions/${encodeURIComponent(sessionId)}/verification-overrides/geofence`,
+    { method: "POST", body },
+  );
 }
 
 export function putManualAttendance(

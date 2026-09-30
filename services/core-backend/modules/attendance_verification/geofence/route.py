@@ -16,6 +16,8 @@ from modules.attendance_verification.geofence.exception import (
     GeofenceNotConfiguredError,
     GeofenceNotRequiredError,
     GeofenceServiceError,
+    GeofenceStillRequiredError,
+    GeofenceWaivedError,
     StudentNotEligibleError,
     VerificationAttemptClosedError,
 )
@@ -24,15 +26,23 @@ from modules.attendance_verification.geofence.policy import GeofenceValidationPo
 from modules.attendance_verification.geofence.schemas import (
     CreateGeofenceAttemptRequest,
     CreateGeofenceAttemptResponse,
+    StartVerificationResponse,
 )
 from modules.attendance_verification.geofence.service import (
     GeofenceValidationService,
 )
-from modules.attendance_verification.geofence.types import GeofenceReading
+from modules.attendance_verification.check_in.domain import StepRequirement
+from modules.attendance_verification.geofence.types import GeofenceNextStep, GeofenceReading
 from modules.identity.auth.dependencies import CurrentStudent
 
 router = APIRouter(
     prefix="/attendance-sessions/{session_id}/geofence-attempts",
+    tags=["geofence-attempts"],
+)
+
+# Only usable once the lecturer has waived geofence for the session.
+verification_attempts_router = APIRouter(
+    prefix="/attendance-sessions/{session_id}/verification-attempts",
     tags=["geofence-attempts"],
 )
 
@@ -108,6 +118,7 @@ async def create_geofence_attempt(
         CheckInNotOpenError,
         CheckInClosedError,
         GeofenceNotRequiredError,
+        GeofenceWaivedError,
         GeofenceNotConfiguredError,
         GeofenceAttemptLimitReachedError,
         VerificationAttemptClosedError,
@@ -135,8 +146,83 @@ async def create_geofence_attempt(
 
 _FALLBACK_ERROR_CODES: dict[type, str] = {
     GeofenceNotRequiredError: "GEOFENCE_NOT_REQUIRED",
+    GeofenceWaivedError: "GEOFENCE_WAIVED",
+    GeofenceStillRequiredError: "GEOFENCE_REQUIRED",
     VerificationAttemptClosedError: "VERIFICATION_ATTEMPT_CLOSED",
 }
+
+
+@verification_attempts_router.post(
+    "",
+    response_model=StartVerificationResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def start_verification_without_location(
+    session_id: UUID,
+    http_request: Request,
+    current_student: CurrentStudent,
+    geofence_service: Annotated[
+        GeofenceValidationService,
+        Depends(get_geofence_validation_service),
+    ] = None,  # type: ignore[assignment]
+) -> StartVerificationResponse:
+    try:
+        started = await geofence_service.start_without_location(
+            http_request.app.state.db_pool,
+            current_student.user_id,
+            session_id,
+        )
+    except ActiveStudentProfileNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=error_detail("STUDENT_PROFILE_NOT_FOUND", error.message),
+        ) from error
+    except AttendanceSessionNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=error_detail("SESSION_NOT_FOUND", error.message),
+        ) from error
+    except StudentNotEligibleError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error_detail(_error_code(error), error.message),
+        ) from error
+    except AttendanceAlreadyCompletedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "ATTENDANCE_ALREADY_COMPLETED",
+                "message": error.message,
+                "state": error.state,
+            },
+        ) from error
+    except (
+        AttendanceSessionNotActiveError,
+        CheckInNotOpenError,
+        CheckInClosedError,
+        GeofenceNotRequiredError,
+        GeofenceStillRequiredError,
+        VerificationAttemptClosedError,
+    ) as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=error_detail(_error_code(error), error.message),
+        ) from error
+
+    return StartVerificationResponse(
+        verification_attempt_id=started.verification_attempt_id,
+        geofence_requirement=StepRequirement.WAIVED.value,
+        next_step=(
+            GeofenceNextStep.NONE
+            if started.initial_check_in is not None
+            else GeofenceNextStep.FACE_VERIFICATION
+        ),
+        initial_check_in=(
+            InitialCheckInPayload.from_domain(started.initial_check_in)
+            if started.initial_check_in is not None
+            else None
+        ),
+    )
 
 
 def _error_code(error: GeofenceServiceError) -> str:

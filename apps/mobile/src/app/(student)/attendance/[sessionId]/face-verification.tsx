@@ -15,9 +15,13 @@ export default function FaceVerificationRoute() {
   const { session } = useAuth();
   const {
     sessionId: sessionIdParam,
+    locationWaived: locationWaivedParam,
   } = useLocalSearchParams<{
     sessionId?: string | string[];
+    locationWaived?: string | string[];
   }>();
+  const locationWaived = (Array.isArray(locationWaivedParam)
+    ? locationWaivedParam[0] : locationWaivedParam) === '1';
   const sessionIdValue = Array.isArray(sessionIdParam)
     ? sessionIdParam[0]
     : sessionIdParam;
@@ -53,6 +57,7 @@ export default function FaceVerificationRoute() {
 
   return (
     <FaceVerificationScreen
+      locationWaived={locationWaived}
       faceVerificationService={faceVerificationService}
       key={sessionId}
       onBack={() => router.back()}

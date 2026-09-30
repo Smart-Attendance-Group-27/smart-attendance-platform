@@ -19,6 +19,8 @@ from modules.attendance_verification.geofence.exception import (
     GeofenceAttemptLimitReachedError,
     GeofenceNotConfiguredError,
     GeofenceNotRequiredError,
+    GeofenceStillRequiredError,
+    GeofenceWaivedError,
     StudentNotEligibleError,
     VerificationAttemptClosedError,
 )
@@ -47,6 +49,14 @@ class RecordedGeofenceAttempt:
     verification_attempt_id: UUID
     attempt_number: int
     result: GeofenceValidationResult
+    initial_check_in: InitialCheckIn | None = None
+
+
+@dataclass(frozen=True)
+class StartedVerification:
+    """An attempt opened without a location because geofence was waived."""
+
+    verification_attempt_id: UUID
     initial_check_in: InitialCheckIn | None = None
 
 
@@ -83,42 +93,13 @@ class GeofenceValidationService:
 
         async with pool.acquire() as connection:
             async with connection.transaction():
-                student = await self._repository.lock_student_profile_for_user(
+                student, session = await self._lock_eligible_student(
                     connection,
                     user_id,
-                )
-                self._validate_student_profile(student)
-                assert student is not None
-
-                session = await self._repository.lock_attendance_session(
-                    connection,
                     session_id,
+                    validated_at,
+                    location_waived=False,
                 )
-                if session is not None:
-                    attendance_status = (
-                        await self._check_in_repository.find_attendance_status(
-                            connection,
-                            session_id,
-                            student.id,
-                        )
-                    )
-                    if attendance_status is not None:
-                        raise AttendanceAlreadyCompletedError(
-                            "Attendance has already been recorded for this session.",
-                            state="attendance_recorded",
-                        )
-                self._validate_session(session, validated_at)
-                assert session is not None
-
-                is_eligible = await self._repository.lock_student_eligibility(
-                    connection,
-                    session_id,
-                    student.id,
-                )
-                if not is_eligible:
-                    raise StudentNotEligibleError(
-                        "The student is not eligible for this attendance session.",
-                    )
 
                 geofence = await self._repository.lock_session_geofence(
                     connection,
@@ -206,6 +187,106 @@ class GeofenceValidationService:
             initial_check_in=initial_check_in,
         )
 
+    async def start_without_location(
+        self,
+        pool: asyncpg.Pool,
+        user_id: UUID,
+        session_id: UUID,
+    ) -> StartedVerification:
+        """Open the student's attempt when the lecturer waived geofence.
+
+        Records no geofence reading at all, so nothing here can be mistaken
+        for location evidence. Safe to call again: an attempt that is already
+        in progress is returned as it is.
+        """
+
+        started_at = self._as_utc("clock", self._clock())
+
+        async with pool.acquire() as connection:
+            async with connection.transaction():
+                student, _session = await self._lock_eligible_student(
+                    connection,
+                    user_id,
+                    session_id,
+                    started_at,
+                    location_waived=True,
+                )
+                attempt = await self._repository.lock_or_create_verification_attempt(
+                    connection,
+                    self._uuid_factory(),
+                    session_id,
+                    student.id,
+                    started_at,
+                )
+                if attempt.status == VerificationAttemptStatus.CHECKED_IN:
+                    raise AttendanceAlreadyCompletedError(
+                        "The student is already checked in for this session.",
+                        state=VerificationAttemptStatus.CHECKED_IN.value,
+                    )
+                if attempt.status != IN_PROGRESS_STATUS:
+                    raise VerificationAttemptClosedError(
+                        "The verification attempt is already complete.",
+                    )
+
+                # Checks the student in straight away when nothing else is required.
+                check_in = await self._check_in_service.try_check_in(
+                    connection,
+                    session_id=session_id,
+                    student_id=student.id,
+                )
+
+        return StartedVerification(
+            verification_attempt_id=attempt.id,
+            initial_check_in=check_in.initial_check_in if check_in is not None else None,
+        )
+
+    async def _lock_eligible_student(
+        self,
+        connection: asyncpg.Connection,
+        user_id: UUID,
+        session_id: UUID,
+        at: datetime,
+        *,
+        location_waived: bool,
+    ) -> tuple[StudentProfileRecord, AttendanceSessionRecord]:
+        student = await self._repository.lock_student_profile_for_user(
+            connection,
+            user_id,
+        )
+        self._validate_student_profile(student)
+        assert student is not None
+
+        session = await self._repository.lock_attendance_session(
+            connection,
+            session_id,
+        )
+        if session is not None:
+            attendance_status = (
+                await self._check_in_repository.find_attendance_status(
+                    connection,
+                    session_id,
+                    student.id,
+                )
+            )
+            if attendance_status is not None:
+                raise AttendanceAlreadyCompletedError(
+                    "Attendance has already been recorded for this session.",
+                    state="attendance_recorded",
+                )
+        self._validate_session(session, at, location_waived=location_waived)
+        assert session is not None
+
+        is_eligible = await self._repository.lock_student_eligibility(
+            connection,
+            session_id,
+            student.id,
+        )
+        if not is_eligible:
+            raise StudentNotEligibleError(
+                "The student is not eligible for this attendance session.",
+            )
+        return student, session
+
     def _finalize_last_retry(
         self,
         result: GeofenceValidationResult,
@@ -236,6 +317,8 @@ class GeofenceValidationService:
     def _validate_session(
         session: AttendanceSessionRecord | None,
         validated_at: datetime,
+        *,
+        location_waived: bool = False,
     ) -> None:
         if session is None:
             raise AttendanceSessionNotFoundError(
@@ -274,6 +357,16 @@ class GeofenceValidationService:
         if session.requires_geofence is not True:
             raise GeofenceNotRequiredError(
                 "Geofence validation is not required for this session.",
+            )
+
+        if session.geofence_waived and not location_waived:
+            raise GeofenceWaivedError(
+                "Location verification was waived for this session.",
+            )
+
+        if location_waived and not session.geofence_waived:
+            raise GeofenceStillRequiredError(
+                "Location verification is still required for this session.",
             )
 
     @staticmethod

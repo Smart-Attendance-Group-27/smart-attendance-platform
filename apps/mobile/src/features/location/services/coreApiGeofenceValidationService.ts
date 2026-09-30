@@ -77,6 +77,9 @@ export class CoreApiGeofenceValidationService
       ) {
         return { status: 'already-checked-in' };
       }
+      if (result.status === 'conflict' && result.errorCode === 'GEOFENCE_WAIVED') {
+        return { status: 'geofence-waived' };
+      }
       return { status: result.status };
     }
 

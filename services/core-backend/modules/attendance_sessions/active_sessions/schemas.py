@@ -7,6 +7,10 @@ from modules.attendance_sessions.active_sessions.state_service import (
     SessionState,
     StudentAttendanceState,
 )
+from modules.attendance_verification.check_in.domain import (
+    EffectiveVerificationPolicy,
+    StepRequirement,
+)
 
 
 class ActiveAttendanceSessionResponse(BaseModel):
@@ -41,6 +45,27 @@ class VerificationStateResponse(BaseModel):
     geofence_status: str | None = Field(alias="geofenceStatus")
     face_status: str | None = Field(alias="faceStatus")
     liveness_passed: bool | None = Field(alias="livenessPassed")
+
+
+class VerificationPolicyResponse(BaseModel):
+    """The session's current requirements. ``waived`` is never a pass."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    geofence: StepRequirement
+    face: StepRequirement
+    geofence_waived_at: datetime | None = Field(default=None, alias="geofenceWaivedAt")
+
+    @staticmethod
+    def from_domain(
+        policy: EffectiveVerificationPolicy,
+        geofence_waived_at: datetime | None,
+    ) -> "VerificationPolicyResponse":
+        return VerificationPolicyResponse(
+            geofence=policy.geofence,
+            face=policy.face,
+            geofence_waived_at=geofence_waived_at,
+        )
 
 
 class InitialCheckInStateResponse(BaseModel):
@@ -81,6 +106,9 @@ class StudentAttendanceStateResponse(BaseModel):
     verification: VerificationStateResponse
     initial_check_in: InitialCheckInStateResponse | None = Field(alias="initialCheckIn")
     final_attendance: FinalAttendanceStateResponse | None = Field(alias="finalAttendance")
+    verification_policy: VerificationPolicyResponse | None = Field(
+        default=None, alias="verificationPolicy",
+    )
 
     @staticmethod
     def from_domain(state: StudentAttendanceState) -> "StudentAttendanceStateResponse":
@@ -124,6 +152,14 @@ class StudentAttendanceStateResponse(BaseModel):
                     decided_at=state.final_attendance.decided_at,
                 )
                 if state.final_attendance is not None
+                else None
+            ),
+            verification_policy=(
+                VerificationPolicyResponse.from_domain(
+                    state.verification_policy,
+                    state.geofence_waived_at,
+                )
+                if state.verification_policy is not None
                 else None
             ),
         )

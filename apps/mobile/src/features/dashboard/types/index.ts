@@ -18,7 +18,7 @@ export type AttendanceSession = {
   lateThreshold: string;
   checkInStatus: 'not_started' | 'open' | 'closed' | 'completed';
   initialCheckInStatus?: 'checked_in' | 'late_checked_in' | null;
-  finalAttendanceStatus?: 'present' | 'late' | 'absent' | null;
+  finalAttendanceStatus?: 'present' | 'late' | 'left_early' | 'absent' | null;
   attemptStatus?: 'in_progress' | 'checked_in' | 'failed' | null;
   // Optional UI-friendly fields used by the mobile app
   sessionTitle?: string;

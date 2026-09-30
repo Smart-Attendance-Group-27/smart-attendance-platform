@@ -33,17 +33,33 @@ from modules.academic.student_profile.route import router as student_profile_rou
 from modules.attendance_sessions.active_sessions.route import (
     router as active_session_router,
 )
+from modules.attendance_sessions.lecturer_sessions.auto_close import (
+    SessionAutoCloseScheduler,
+    auto_close_schema_ready,
+)
 from modules.attendance_sessions.lecturer_sessions.route import (
     router as lecturer_sessions_router,
 )
+from modules.attendance_sessions.lecturer_sessions.service import LecturerSessionService
 from modules.attendance_sessions.qr_session.route import router as qr_session_router
 from modules.attendance_verification.check_in.route import router as check_in_router
 from modules.attendance_verification.face.route import router as face_router
 from modules.attendance_verification.geofence.route import router as geofence_router
+from modules.attendance_verification.geofence.route import (
+    verification_attempts_router,
+)
 from modules.attendance_verification.manual_review.route import (
     router as manual_review_router,
 )
+from modules.attendance_verification.session_overrides.route import (
+    router as session_overrides_router,
+)
 from modules.audit.admin_log.route import router as admin_audit_log_router
+from modules.contracts.providers import (
+    get_attendance_policy_provider,
+    get_notification_producer,
+    get_qr_evidence_provider,
+)
 from modules.identity.admin_users.route import router as admin_users_router
 from modules.identity.auth.route import router as auth_router
 from modules.notification.device_tokens.route import router as device_tokens_router
@@ -141,6 +157,37 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.error(
             "Reminder scheduler not started: upcoming-class idempotency index is missing",
         )
+    auto_close_stop = asyncio.Event()
+    auto_close_task: asyncio.Task[None] | None = None
+    if settings.session_auto_close_enabled:
+        try:
+            auto_close_ready = await auto_close_schema_ready(app.state.db_pool)
+        except Exception as error:
+            auto_close_ready = False
+            logger.error(
+                "Session auto-close not started: schema preflight failed",
+                extra={"preflight_error_type": type(error).__name__},
+            )
+        if auto_close_ready:
+            app.state.session_auto_close_scheduler = SessionAutoCloseScheduler(
+                pool=app.state.db_pool,
+                service=LecturerSessionService(
+                    qr_evidence=get_qr_evidence_provider(),
+                    notification_producer=get_notification_producer(),
+                    attendance_policy=get_attendance_policy_provider(),
+                ),
+                interval_seconds=settings.session_auto_close_interval_seconds,
+                grace_minutes=settings.session_auto_close_grace_minutes,
+                redis_client=app.state.redis_client,
+            )
+            auto_close_task = asyncio.create_task(
+                app.state.session_auto_close_scheduler.run(auto_close_stop),
+                name="session-auto-close-scheduler",
+            )
+        else:
+            logger.error(
+                "Session auto-close not started: attendance_session.sessions.closed_automatically is missing",
+            )
     # Deliberately no connection details here: the URI, user and password must
     # never reach the logs.
     logger.info(
@@ -153,6 +200,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        if auto_close_task is not None:
+            auto_close_stop.set()
+            try:
+                await asyncio.wait_for(
+                    auto_close_task,
+                    timeout=settings.push_worker_shutdown_timeout_seconds,
+                )
+            except TimeoutError:
+                auto_close_task.cancel()
+                await asyncio.gather(auto_close_task, return_exceptions=True)
+                logger.warning("Session auto-close scheduler cancelled during shutdown")
         if reminder_task is not None:
             reminder_stop.set()
             try:
@@ -200,11 +258,13 @@ def create_app(*, enable_database: bool = True) -> FastAPI:
     app.include_router(active_session_router, prefix="/api/v1")
     app.include_router(qr_session_router, prefix="/api/v1")
     app.include_router(geofence_router, prefix="/api/v1")
+    app.include_router(verification_attempts_router, prefix="/api/v1")
     app.include_router(face_router, prefix="/api/v1")
     app.include_router(check_in_router, prefix="/api/v1")
     app.include_router(lecturer_courses_router, prefix="/api/v1")
     app.include_router(lecturer_correction_requests_router, prefix="/api/v1")
     app.include_router(lecturer_sessions_router, prefix="/api/v1")
+    app.include_router(session_overrides_router, prefix="/api/v1")
     app.include_router(manual_review_router, prefix="/api/v1")
     app.include_router(lecturer_reports_router, prefix="/api/v1")
     app.include_router(admin_classrooms_router, prefix="/api/v1")

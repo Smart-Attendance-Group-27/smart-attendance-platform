@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -19,6 +20,13 @@ class AuditLogEntryResponse(BaseModel):
     entity_id: UUID | None = Field(alias="entityId")
     outcome: str = Field(alias="outcome")
     failure_reason: str | None = Field(alias="failureReason")
+    old_values: dict[str, Any] | None = Field(default=None, alias="oldValues")
+    new_values: dict[str, Any] | None = Field(default=None, alias="newValues")
+    metadata: dict[str, Any] | None = None
+    session_course_code: str | None = Field(default=None, alias="sessionCourseCode")
+    session_scheduled_start_at: datetime | None = Field(
+        default=None, alias="sessionScheduledStartAt",
+    )
 
     @staticmethod
     def from_record(record: AuditLogRecord) -> "AuditLogEntryResponse":
@@ -33,4 +41,9 @@ class AuditLogEntryResponse(BaseModel):
             entity_id=record.entity_id,
             outcome=record.outcome or "success",
             failure_reason=record.failure_reason,
+            old_values=record.old_values,
+            new_values=record.new_values,
+            metadata=record.metadata,
+            session_course_code=record.session_course_code,
+            session_scheduled_start_at=record.session_scheduled_start_at,
         )

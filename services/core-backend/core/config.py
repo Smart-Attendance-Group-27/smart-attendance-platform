@@ -118,6 +118,19 @@ class Settings(BaseSettings):
     geofence_max_future_skew_seconds: float = Field(default=5, ge=0)
     geofence_max_attempts: int = Field(default=3, ge=1)
 
+    # The lecturer dashboard warns about a possible session-wide location
+    # problem once this many students have tried and at least this share of
+    # them could not pass. It only warns; waiving stays the lecturer's call.
+    geofence_health_warning_min_attempts: int = Field(default=10, ge=1)
+    geofence_health_warning_failure_rate: float = Field(default=0.7, gt=0, le=1)
+
+    # Active sessions still open this long after their scheduled end are
+    # closed by the server, through the same close and finalization path a
+    # lecturer uses.
+    session_auto_close_enabled: bool = True
+    session_auto_close_grace_minutes: int = Field(default=15, ge=0, le=1440)
+    session_auto_close_interval_seconds: float = Field(default=60.0, gt=0)
+
     model_config = SettingsConfigDict(
         env_file=ENV_FILE_PATH,
         env_file_encoding="utf-8",

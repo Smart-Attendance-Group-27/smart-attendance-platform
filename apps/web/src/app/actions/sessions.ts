@@ -7,8 +7,10 @@ import {
   cancelLecturerSession,
   closeLecturerSession,
   createLecturerSession,
+  postGeofenceWaiver,
   type ApiFinalizationSummary,
 } from "@/lib/api/lecturer";
+import { isGeofenceWaiverReasonCode } from "@/lib/geofenceWaiver";
 
 export type CreateSessionInput = {
   timetableEntryId: string;
@@ -106,5 +108,35 @@ export async function cancelSession(sessionId: string, reason: string): Promise<
       return { ok: false, error: error.message };
     }
     return { ok: false, error: "Couldn't cancel the session. Please try again." };
+  }
+}
+
+export type WaiveGeofenceResult = { ok: true; created: boolean } | { ok: false; error: string };
+
+export async function waiveSessionGeofence(
+  sessionId: string,
+  reasonCode: string,
+  reasonText: string,
+): Promise<WaiveGeofenceResult> {
+  if (!isGeofenceWaiverReasonCode(reasonCode)) {
+    return { ok: false, error: "Choose a reason." };
+  }
+  const note = typeof reasonText === "string" ? reasonText.trim() : "";
+  if (reasonCode === "OTHER" && !note) {
+    return { ok: false, error: "Describe the reason when choosing Other." };
+  }
+  if (note.length > 500) {
+    return { ok: false, error: "The note must be 500 characters or fewer." };
+  }
+
+  try {
+    const result = await postGeofenceWaiver(sessionId, { reasonCode, reasonText: note || null });
+    revalidatePath(`/lecturer/sessions/${sessionId}`);
+    return { ok: true, created: result.created };
+  } catch (error) {
+    if (error instanceof CoreBackendError && error.status < 500) {
+      return { ok: false, error: error.message };
+    }
+    return { ok: false, error: "Couldn't waive the geofence requirement. Please try again." };
   }
 }

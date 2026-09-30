@@ -31,6 +31,7 @@ def test_final_attendance_status_values_are_frozen():
     assert [status.value for status in FinalAttendanceStatus] == [
         "present",
         "late",
+        "left_early",
         "absent",
     ]
 

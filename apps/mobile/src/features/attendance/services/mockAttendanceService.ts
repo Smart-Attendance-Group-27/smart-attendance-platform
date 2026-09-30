@@ -1,6 +1,10 @@
 import { getMockAttendance, markMockFacePassed } from '../__fixtures__/mockAttendanceStore';
 import type { AttendanceSession } from '../types/attendanceSession';
-import type { CheckInResult, MyAttendanceResult } from '../types/myAttendance';
+import type {
+  CheckInResult,
+  MyAttendanceResult,
+  StartVerificationResult,
+} from '../types/myAttendance';
 import { toAttendanceSession } from './coreApiAttendanceService';
 import type { AttendanceService, AttendanceSessionLookupResult } from './attendanceService';
 
@@ -27,12 +31,13 @@ export class MockAttendanceService implements AttendanceService {
       initialCheckIn: state.initialCheckIn, missingRequirements: [],
     };
     if (state.sessionState !== 'active') return { status: 'conflict', errorCode: 'SESSION_NOT_ACTIVE' };
-    if (state.verification.geofenceStatus !== 'passed' ||
+    const geofenceSatisfied = state.verification.geofenceStatus === 'passed' ||
+      state.verificationPolicy.geofence === 'waived';
+    if (!geofenceSatisfied ||
         (state.requiresFaceVerification && state.verification.faceStatus !== 'passed')) {
       return {
         status: 'loaded', outcome: 'incomplete', initialCheckIn: null,
-        missingRequirements: state.verification.geofenceStatus !== 'passed'
-          ? ['geofence'] : ['face_verification'],
+        missingRequirements: !geofenceSatisfied ? ['geofence'] : ['face_verification'],
       };
     }
     const initialCheckIn = {
@@ -41,5 +46,15 @@ export class MockAttendanceService implements AttendanceService {
     };
     markMockFacePassed(sessionId);
     return { status: 'loaded', outcome: 'checked_in', initialCheckIn, missingRequirements: [] };
+  }
+
+  async startVerificationWithoutLocation(sessionId: string): Promise<StartVerificationResult> {
+    const state = getMockAttendance(sessionId);
+    if (!state) return { status: 'not-found' };
+    if (state.initialCheckIn) return { status: 'already_checked_in' };
+    if (state.verificationPolicy.geofence !== 'waived') {
+      return { status: 'conflict', errorCode: 'GEOFENCE_REQUIRED' };
+    }
+    return { status: 'started', initialCheckIn: null };
   }
 }

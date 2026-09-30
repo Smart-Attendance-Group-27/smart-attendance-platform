@@ -279,6 +279,46 @@ describe('LocationCheckScreen', () => {
     );
   });
 
+  test('lets the student continue without location once the lecturer waived it', async () => {
+    const { service } = createService({ status: 'geofence_waived' });
+    const onContinueWithoutLocation = jest.fn();
+    const { findByRole, findByText, getByRole } = await render(
+      <LocationCheckScreen
+        {...createScreenProps(service)}
+        onContinueWithoutLocation={onContinueWithoutLocation}
+      />,
+    );
+
+    await fireEvent.press(
+      getByRole('button', {
+        name: 'Allow location access and check classroom location',
+      }),
+    );
+
+    expect(await findByText('Location verification waived')).toBeTruthy();
+    await fireEvent.press(
+      await findByRole('button', { name: 'Continue to face verification' }),
+    );
+    expect(onContinueWithoutLocation).toHaveBeenCalledWith('attendance-session-active');
+  });
+
+  test('lets a student who failed location check the session status again', async () => {
+    const { service } = createService({ status: 'attempt_limit_reached' });
+    const onViewProgress = jest.fn();
+    const { findByRole, getByRole } = await render(
+      <LocationCheckScreen {...createScreenProps(service)} onViewProgress={onViewProgress} />,
+    );
+
+    await fireEvent.press(
+      getByRole('button', {
+        name: 'Allow location access and check classroom location',
+      }),
+    );
+
+    await fireEvent.press(await findByRole('button', { name: 'Check attendance status' }));
+    expect(onViewProgress).toHaveBeenCalledWith('attendance-session-active');
+  });
+
   test('redirects an already-completed student without showing an error', async () => {
     const { service } = createService({ status: 'already_checked_in' });
     const props = createScreenProps(service);

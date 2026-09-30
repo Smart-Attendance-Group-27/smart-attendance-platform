@@ -20,6 +20,18 @@ from modules.attendance_verification.attendance_state import (
 
 GEOFENCE_PASSED_STATUS = "passed"
 FACE_PASSED_STATUS = "passed"
+GEOFENCE_FACTOR = "geofence"
+
+# True when the session has a geofence waiver. Shared by every session read
+# that needs the effective policy, so they cannot disagree about it.
+GEOFENCE_WAIVED_SQL = f"""
+    EXISTS (
+        SELECT 1
+        FROM attendance_session.session_verification_overrides AS override
+        WHERE override.session_id = session.id
+          AND override.verification_factor = '{GEOFENCE_FACTOR}'
+    )
+"""
 
 
 @dataclass(frozen=True)
@@ -38,6 +50,7 @@ class AttendanceSessionRecord:
     requires_geofence: bool | None
     requires_face_verification: bool | None
     requires_qr: bool | None
+    geofence_waived: bool = False
 
 
 @dataclass(frozen=True)
@@ -86,13 +99,15 @@ class CheckInRepository:
         session_id: UUID,
     ) -> AttendanceSessionRecord | None:
         row = await connection.fetchrow(
-            """
+            f"""
             SELECT
-                id, status, closed_at, cancelled_at, late_after_at,
-                requires_geofence, requires_face_verification, requires_qr
-            FROM attendance_session.sessions
-            WHERE id = $1
-            FOR SHARE
+                session.id, session.status, session.closed_at, session.cancelled_at,
+                session.late_after_at, session.requires_geofence,
+                session.requires_face_verification, session.requires_qr,
+                {GEOFENCE_WAIVED_SQL} AS geofence_waived
+            FROM attendance_session.sessions AS session
+            WHERE session.id = $1
+            FOR SHARE OF session
             """,
             session_id,
         )
@@ -107,6 +122,7 @@ class CheckInRepository:
             requires_geofence=row["requires_geofence"],
             requires_face_verification=row["requires_face_verification"],
             requires_qr=row["requires_qr"],
+            geofence_waived=bool(row["geofence_waived"]),
         )
 
     async def lock_verification_attempt(
