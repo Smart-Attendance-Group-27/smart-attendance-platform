@@ -16,10 +16,12 @@ bug this module replaces.
 from modules.attendance_verification.check_in.domain import (
     CheckInOutcome,
     CheckInResult,
+    EffectiveVerificationPolicy,
     InitialCheckIn,
     ReconciledCheckIn,
     RequiredStep,
     StepEvidence,
+    StepRequirement,
     evaluate_initial_evidence,
     resolve_initial_check_in_status,
 )
@@ -31,10 +33,12 @@ __all__ = [
     "CheckInRepository",
     "CheckInResult",
     "CheckInService",
+    "EffectiveVerificationPolicy",
     "InitialCheckIn",
     "ReconciledCheckIn",
     "RequiredStep",
     "StepEvidence",
+    "StepRequirement",
     "evaluate_initial_evidence",
     "resolve_initial_check_in_status",
 ]

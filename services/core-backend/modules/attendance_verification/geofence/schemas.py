@@ -47,3 +47,17 @@ class CreateGeofenceAttemptResponse(BaseModel):
         alias="initialCheckIn",
         default=None,
     )
+
+
+class StartVerificationResponse(BaseModel):
+    """An attempt opened without a location reading (geofence waived)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    verification_attempt_id: UUID = Field(alias="verificationAttemptId")
+    geofence_requirement: str = Field(alias="geofenceRequirement")
+    next_step: GeofenceNextStep = Field(alias="nextStep")
+    initial_check_in: InitialCheckInPayload | None = Field(
+        alias="initialCheckIn",
+        default=None,
+    )

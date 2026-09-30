@@ -76,6 +76,7 @@ async def test_maps_session_state_and_check_in_window() -> None:
             "requires_face_verification": True,
             "closed_at": None,
             "cancelled_at": None,
+            "geofence_waived": True,
         },
     )
 
@@ -88,8 +89,10 @@ async def test_maps_session_state_and_check_in_window() -> None:
     assert record.id == SESSION_ID
     assert record.requires_geofence is True
     assert record.requires_face_verification is True
+    assert record.geofence_waived is True
     _, query, _ = connection.calls[0]
     assert "attendance_session.sessions" in query
+    assert "session_verification_overrides" in query
     assert "FOR SHARE" in query
 
 

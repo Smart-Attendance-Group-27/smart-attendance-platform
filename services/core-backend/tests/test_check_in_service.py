@@ -425,6 +425,74 @@ async def test_reconciliation_marks_a_last_second_check_in_late_when_it_was_late
     assert reconciled[0].initial_check_in.status is InitialCheckInStatus.LATE_CHECKED_IN
 
 
+async def test_without_a_waiver_a_failed_geofence_keeps_the_student_pending() -> None:
+    repository = FakeCheckInRepository(
+        session=build_session(requires_face_verification=True),
+        attempt=build_attempt(),
+        face_passes=(LECTURE_START + timedelta(minutes=5),),
+    )
+
+    result = await build_service(repository).check_in_for_user(FakePool(), USER_ID, SESSION_ID)
+
+    assert result.outcome is CheckInOutcome.PENDING
+    assert result.missing_steps == (RequiredStep.GEOFENCE,)
+    assert repository.persisted == []
+
+
+async def test_a_geofence_waiver_checks_in_on_face_alone() -> None:
+    face_at = LECTURE_START + timedelta(minutes=5)
+    repository = FakeCheckInRepository(
+        session=build_session(requires_face_verification=True, geofence_waived=True),
+        attempt=build_attempt(),
+        face_passes=(face_at,),
+    )
+
+    result = await build_service(repository).check_in_for_user(FakePool(), USER_ID, SESSION_ID)
+
+    assert result.outcome is CheckInOutcome.CHECKED_IN
+    assert result.initial_check_in.checked_in_at == face_at
+    assert [entry.checked_in_at for entry in repository.persisted] == [face_at]
+
+
+async def test_a_geofence_waiver_does_not_waive_face() -> None:
+    repository = FakeCheckInRepository(
+        session=build_session(requires_face_verification=True, geofence_waived=True),
+        attempt=build_attempt(),
+    )
+
+    result = await build_service(repository).check_in_for_user(FakePool(), USER_ID, SESSION_ID)
+
+    assert result.outcome is CheckInOutcome.PENDING
+    assert result.missing_steps == (RequiredStep.FACE,)
+
+
+async def test_reconciliation_honours_a_geofence_waiver() -> None:
+    closed_at = LECTURE_START + timedelta(hours=1)
+    face_at = LECTURE_START + timedelta(minutes=5)
+    repository = FakeCheckInRepository(
+        session=build_session(
+            status="closed", closed_at=closed_at,
+            requires_face_verification=True, geofence_waived=True,
+        ),
+        session_attempts=(
+            AttemptEvidenceRecord(
+                attempt_id=ATTEMPT_ID,
+                student_id=STUDENT_ID,
+                status=VerificationAttemptStatus.IN_PROGRESS.value,
+                started_at=LECTURE_START,
+                geofence_passed_at=None,
+                face_passed_at=face_at,
+            ),
+        ),
+    )
+
+    reconciled = await build_service(repository).reconcile_before_close(
+        FakeConnection(), SESSION_ID, closed_at,
+    )
+
+    assert [entry.initial_check_in.checked_in_at for entry in reconciled] == [face_at]
+
+
 def test_the_check_in_repository_never_writes_an_attendance_record() -> None:
     """Check-in decides nothing about attendance; the session close does.
 

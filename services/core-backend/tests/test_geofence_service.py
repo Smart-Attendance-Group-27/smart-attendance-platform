@@ -21,6 +21,8 @@ from modules.attendance_verification.geofence.exception import (
     GeofenceAttemptLimitReachedError,
     GeofenceNotConfiguredError,
     GeofenceNotRequiredError,
+    GeofenceStillRequiredError,
+    GeofenceWaivedError,
     StudentNotEligibleError,
     VerificationAttemptClosedError,
 )
@@ -617,6 +619,81 @@ async def test_session_that_does_not_require_geofence_is_rejected() -> None:
             SESSION_ID,
             build_reading(),
         )
+
+
+async def test_a_waived_session_records_no_new_location_reading() -> None:
+    repository = FakeRepository(session=build_session(geofence_waived=True))
+
+    with pytest.raises(GeofenceWaivedError):
+        await build_service(repository).validate_attempt(
+            FakePool(),
+            USER_ID,
+            SESSION_ID,
+            build_reading(),
+        )
+
+    assert "insert" not in repository.calls
+    assert "mark_failed" not in repository.calls
+
+
+async def test_after_a_waiver_a_student_starts_without_a_location() -> None:
+    repository = FakeRepository(session=build_session(geofence_waived=True))
+    check_in_service = FakeCheckInService()
+
+    started = await build_service(repository, check_in_service=check_in_service).start_without_location(
+        FakePool(),
+        USER_ID,
+        SESSION_ID,
+    )
+
+    assert started.verification_attempt_id == VERIFICATION_ATTEMPT_ID
+    assert started.initial_check_in is None
+    assert "verification" in repository.calls
+    # No geofence evidence of any kind is written.
+    assert "insert" not in repository.calls
+    assert "geofence" not in repository.calls
+    assert check_in_service.calls == [(SESSION_ID, STUDENT_ID)]
+
+
+async def test_a_student_reopened_by_the_waiver_can_start_again() -> None:
+    repository = FakeRepository(
+        session=build_session(geofence_waived=True),
+        verification_status=IN_PROGRESS_STATUS,
+    )
+
+    started = await build_service(repository).start_without_location(FakePool(), USER_ID, SESSION_ID)
+
+    assert started.verification_attempt_id == VERIFICATION_ATTEMPT_ID
+
+
+async def test_starting_without_a_location_is_refused_when_geofence_was_not_waived() -> None:
+    repository = FakeRepository()
+
+    with pytest.raises(GeofenceStillRequiredError):
+        await build_service(repository).start_without_location(FakePool(), USER_ID, SESSION_ID)
+
+    assert "verification" not in repository.calls
+
+
+async def test_starting_without_a_location_respects_a_failed_attempt() -> None:
+    repository = FakeRepository(
+        session=build_session(geofence_waived=True),
+        verification_status="failed",
+        verification_failure_reason="MOCK_LOCATION_DETECTED",
+    )
+
+    with pytest.raises(VerificationAttemptClosedError):
+        await build_service(repository).start_without_location(FakePool(), USER_ID, SESSION_ID)
+
+
+async def test_starting_without_a_location_reports_an_existing_check_in() -> None:
+    repository = FakeRepository(
+        session=build_session(geofence_waived=True),
+        verification_status="checked_in",
+    )
+
+    with pytest.raises(AttendanceAlreadyCompletedError):
+        await build_service(repository).start_without_location(FakePool(), USER_ID, SESSION_ID)
 
 
 async def test_checked_in_verification_redirects_to_existing_attendance() -> None:

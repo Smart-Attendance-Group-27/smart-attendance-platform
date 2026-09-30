@@ -11,6 +11,7 @@ from modules.attendance_verification.attendance_state import (
 from modules.attendance_verification.check_in.domain import (
     CheckInOutcome,
     CheckInResult,
+    EffectiveVerificationPolicy,
     InitialCheckIn,
     ReconciledCheckIn,
     RequiredStep,
@@ -231,13 +232,19 @@ class CheckInService:
         return reconciled
 
     @staticmethod
-    def required_steps(session: AttendanceSessionRecord) -> tuple[RequiredStep, ...]:
-        steps: list[RequiredStep] = []
-        if session.requires_geofence:
-            steps.append(RequiredStep.GEOFENCE)
-        if session.requires_face_verification:
-            steps.append(RequiredStep.FACE)
-        return tuple(steps)
+    def effective_policy(session: AttendanceSessionRecord) -> EffectiveVerificationPolicy:
+        return EffectiveVerificationPolicy.resolve(
+            requires_geofence=session.requires_geofence,
+            requires_face_verification=session.requires_face_verification,
+            waived_steps=(
+                frozenset({RequiredStep.GEOFENCE}) if session.geofence_waived else frozenset()
+            ),
+        )
+
+    @classmethod
+    def required_steps(cls, session: AttendanceSessionRecord) -> tuple[RequiredStep, ...]:
+        """Steps that must genuinely pass. A waived step is not one of them."""
+        return cls.effective_policy(session).required_steps
 
     @staticmethod
     def _existing_check_in(attempt: VerificationAttemptRecord) -> InitialCheckIn | None:

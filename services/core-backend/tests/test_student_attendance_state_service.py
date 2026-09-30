@@ -262,3 +262,36 @@ async def test_qr_enabled_mirrors_requires_qr() -> None:
     state = await service.get_for_user(FakePool(), USER_ID, SESSION_ID)
 
     assert state.qr_enabled is True
+
+
+async def test_the_policy_is_reported_as_required_without_a_waiver() -> None:
+    state = await build_service(session=build_session_row()).get_for_user(
+        FakePool(), USER_ID, SESSION_ID,
+    )
+
+    assert state.verification_policy.geofence.value == "required"
+    assert state.verification_policy.face.value == "required"
+    assert state.geofence_waived_at is None
+
+
+async def test_a_waiver_is_reported_as_policy_while_the_failed_reading_stays_failed() -> None:
+    waived_at = CURRENT_TIME - timedelta(minutes=2)
+    service = build_service(
+        session=build_session_row(geofence_waived_at=waived_at),
+        attempt=StudentAttemptRow(
+            id=UUID("50000000-0000-0000-0000-000000000001"),
+            status="in_progress",
+            failure_reason=None,
+            checked_in_at=None,
+            initial_check_in_status=None,
+        ),
+        geofence_status="failed",
+    )
+
+    state = await service.get_for_user(FakePool(), USER_ID, SESSION_ID)
+
+    assert state.verification.geofence_status == "failed"
+    assert state.verification_policy.geofence.value == "waived"
+    assert state.verification_policy.face.value == "required"
+    assert state.geofence_waived_at == waived_at
+    assert state.can_start_check_in is True

@@ -41,6 +41,14 @@ class GeofenceNotRequiredError(GeofenceServiceError):
     """Raised when geofence validation is disabled for the session."""
 
 
+class GeofenceWaivedError(GeofenceServiceError):
+    """Raised when the lecturer waived geofence for the whole session."""
+
+
+class GeofenceStillRequiredError(GeofenceServiceError):
+    """Raised when a student tries to skip geofence that was not waived."""
+
+
 class StudentNotEligibleError(GeofenceServiceError):
     """Raised when the student is not in the session eligibility snapshot."""
 
