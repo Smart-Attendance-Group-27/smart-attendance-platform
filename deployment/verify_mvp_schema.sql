@@ -15,6 +15,7 @@ BEGIN
         ('attendance_session', 'sessions', 'check_in_opens_at_explicit'),
         ('attendance_session', 'sessions', 'check_in_closes_at_explicit'),
         ('attendance_session', 'sessions', 'late_after_at_explicit'),
+        ('attendance_session', 'sessions', 'closed_automatically'),
         ('attendance_session', 'session_geofences', 'centre_latitude'),
         ('attendance_session', 'session_geofences', 'centre_longitude'),
         ('attendance_session', 'session_geofences', 'radius_m'),
@@ -48,6 +49,9 @@ BEGIN
     INTO missing_relations
     FROM (VALUES
         ('academic.attendance_policies'),
+        ('attendance_session.session_verification_overrides'),
+        ('attendance_session.uq_session_verification_overrides_session_factor'),
+        ('attendance_session.idx_sessions_open_by_scheduled_end'),
         ('face_verification.face_profiles'),
         ('face_verification.verification_configs'),
         ('face_verification.face_validation_attempts'),
