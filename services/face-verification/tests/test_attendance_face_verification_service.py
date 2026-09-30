@@ -16,6 +16,7 @@ from services.attendance_face_verification_service import (
     AttendanceFaceVerificationService,
     AttendanceFaceVerificationStatus,
     VerificationClosedError,
+    VerificationNotStartedError,
 )
 from services.face_comparison_service import (
     FaceComparisonResult,
@@ -551,3 +552,30 @@ def test_concurrent_attempt_limit_discards_inference_result() -> None:
     comparison_service.compare.assert_awaited_once()
     repository.record_face_attempt.assert_not_awaited()
     session.rollback.assert_awaited_once()
+
+
+def test_failed_geofence_blocks_face_when_it_was_not_waived() -> None:
+    context = replace(build_context(), latest_geofence_status="failed")
+
+    with pytest.raises(VerificationNotStartedError):
+        AttendanceFaceVerificationService._validate_context(context, NOW)
+
+
+def test_a_session_geofence_waiver_lets_face_run_after_a_failed_reading() -> None:
+    context = replace(
+        build_context(),
+        latest_geofence_status="failed",
+        geofence_waived=True,
+    )
+
+    AttendanceFaceVerificationService._validate_context(context, NOW)
+
+
+def test_a_waiver_does_not_need_any_geofence_reading() -> None:
+    context = replace(
+        build_context(),
+        latest_geofence_status=None,
+        geofence_waived=True,
+    )
+
+    AttendanceFaceVerificationService._validate_context(context, NOW)

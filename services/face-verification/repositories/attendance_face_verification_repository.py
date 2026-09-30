@@ -21,6 +21,9 @@ class AttendanceVerificationContext:
     check_in_closes_at: datetime | None
     closed_at: datetime | None
     cancelled_at: datetime | None
+    # The lecturer waived geofence for the whole session. The student's
+    # geofence readings are unchanged; the step just no longer has to pass.
+    geofence_waived: bool = False
 
 
 class AttendanceFaceVerificationRepository:
@@ -76,6 +79,13 @@ class AttendanceFaceVerificationRepository:
                         ORDER BY geofence.attempt_number DESC
                         LIMIT 1
                     ) AS latest_geofence_status,
+                    EXISTS (
+                        SELECT 1
+                        FROM attendance_session.session_verification_overrides
+                            AS override
+                        WHERE override.session_id = attendance_session.id
+                          AND override.verification_factor = 'geofence'
+                    ) AS geofence_waived,
                     attendance_session.check_in_opens_at,
                     attendance_session.check_in_closes_at,
                     attendance_session.closed_at,
@@ -105,6 +115,7 @@ class AttendanceFaceVerificationRepository:
             check_in_closes_at=row["check_in_closes_at"],
             closed_at=row["closed_at"],
             cancelled_at=row["cancelled_at"],
+            geofence_waived=bool(row["geofence_waived"]),
         )
 
     async def get_latest_face_attempt(

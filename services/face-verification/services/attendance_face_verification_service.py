@@ -268,6 +268,7 @@ class AttendanceFaceVerificationService:
             )
         if (
             context.requires_geofence
+            and not context.geofence_waived
             and context.latest_geofence_status != "passed"
         ):
             raise VerificationNotStartedError(
