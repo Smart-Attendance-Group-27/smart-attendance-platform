@@ -7,19 +7,19 @@ the application README is the entry point for setup and evaluation.
 
 ## Documents
 
-| Document | Planned file | Status |
+| Document | File | Status |
 | --- | --- | --- |
-| Project Proposal | `reports/project-proposal.pdf` | To fill — owner will supply |
-| Software Requirements Specification | `reports/software-requirements-specification.pdf` | To fill — owner will supply |
-| Software Architecture Document | `reports/software-architecture-document.pdf` | To fill — owner will supply |
-| Feasibility Report | `reports/feasibility-report.pdf` | To fill — owner will supply |
-| Test Report | `reports/test-report.pdf` | To fill — owner will supply |
+| Project Proposal | [View PDF](reports/project-proposal.pdf) | Attached |
+| Software Requirements Specification | [View PDF](reports/software-requirements-specification.pdf) | Attached |
+| Software Architecture Document | [View PDF](reports/software-architecture-document.pdf) | Attached |
+| Feasibility Report | [View PDF](reports/feasibility-report.pdf) | Attached |
+| Test Report | [View PDF](reports/test-report.pdf) | Attached |
 | Final Report | `reports/final-report.pdf` | To fill — owner will supply |
 | Complete User Guide | `guides/user-guide.pdf` | To fill — owner will supply |
 
-No PDFs have been attached yet. Planned paths above are attachment slots, not
-download links. Replace each path with a relative link after adding that file,
-then add the corresponding GitHub link to the application README.
+The five attached PDFs are the original owner-supplied documents; their contents
+have not been edited. Final Report and User Guide remain attachment slots until
+their files are supplied.
 
 ## Maintaining this branch
 
