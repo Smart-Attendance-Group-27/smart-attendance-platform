@@ -12,9 +12,20 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Next.js-16.3-111827?logo=nextdotjs" alt="Next.js 16.3">
-  <img src="https://img.shields.io/badge/Expo-57-111827?logo=expo" alt="Expo SDK 57">
-  <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/Next.js-16.3-0070F3?logo=nextdotjs&amp;logoColor=0070F3&amp;labelColor=F1F5F9" alt="Next.js 16.3">
+  <img src="https://img.shields.io/badge/Expo-57-7C3AED?logo=expo&amp;logoColor=7C3AED&amp;labelColor=F1F5F9" alt="Expo SDK 57">
+  <img src="https://img.shields.io/badge/React_Native-0.86-087EA4?logo=react&amp;logoColor=087EA4&amp;labelColor=F1F5F9" alt="React Native 0.86">
+  <img src="https://img.shields.io/badge/TypeScript-typed-3178C6?logo=typescript&amp;logoColor=3178C6&amp;labelColor=F1F5F9" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&amp;logoColor=3776AB&amp;labelColor=F1F5F9" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&amp;logoColor=009688&amp;labelColor=F1F5F9" alt="FastAPI">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&amp;logoColor=2496ED&amp;labelColor=F1F5F9" alt="Docker Compose">
+  <img src="https://img.shields.io/badge/Keycloak-26.7-008AAA?logo=keycloak&amp;logoColor=008AAA&amp;labelColor=F1F5F9" alt="Keycloak 26.7">
+  <img src="https://img.shields.io/badge/PostgreSQL-17_%2F_16-4169E1?logo=postgresql&amp;logoColor=4169E1&amp;labelColor=F1F5F9" alt="PostgreSQL 17 for application data and 16 for Keycloak">
+  <img src="https://img.shields.io/badge/Redis-7.4-DC382D?logo=redis&amp;logoColor=DC382D&amp;labelColor=F1F5F9" alt="Redis 7.4">
+  <img src="https://img.shields.io/badge/ONNX_Runtime-CPU-0077CC?logo=onnx&amp;logoColor=0077CC&amp;labelColor=F1F5F9" alt="ONNX Runtime on CPU">
 </p>
 
 <p align="center">
@@ -287,11 +298,11 @@ for an emulator or a phone over Wi-Fi.
 
 ## Evaluator demo guide
 
-<!-- OWNER TODO: insert the public YouTube walkthrough and user-guide PDF links. -->
+<!-- OWNER TODO: attach the complete user-guide PDF on the documentation branch. -->
 
 | Evaluation material | Attachment |
 | --- | --- |
-| Video walkthrough | **To fill:** YouTube URL |
+| Video walkthrough | [Watch the UniAttend demo on YouTube](https://www.youtube.com/watch?v=8w_8qMUBY68) |
 | Complete user guide | **To fill:** PDF on the documentation branch |
 
 Use owner-provided demo credentials shared outside Git. A repeatable demo requires
@@ -358,12 +369,10 @@ CI publishes commit-tagged images to GHCR after the deployment build job passes
 on `main`. Release scripts perform the server rollout; **automatic rollout after
 every merge is not configured**. Mobile changes need a separate EAS artifact.
 
-<!-- OWNER TODO: replace the pending entries with approved public links. -->
-
 | Pilot access | Link |
 | --- | --- |
-| Live web dashboard | **To fill:** public HTTPS URL |
-| Android APK | **To fill:** EAS build / APK download URL |
+| Live web dashboard | [Open UniAttend](https://app.152-53-33-198.sslip.io) |
+| Android APK | [Download from the EAS build page](https://expo.dev/accounts/manushanhasanka/projects/uniattend/builds/3b387185-1304-4c57-a96f-869eef7eb554) |
 
 See the [VPS release runbook](deployment/first-vps-runbook.md) for operations.
 The `preview` EAS profile produces an APK; review its bundled public environment
@@ -389,7 +398,18 @@ npx eas-cli build --platform android --profile preview
 | Evaluation PDFs and user guide | [Documentation branch](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/tree/docs/evaluation-reports) |
 
 The `docs/evaluation-reports` branch holds evaluation documents separately from
-application code. **To fill:** Project Proposal, SRS, SAD, Feasibility Report,
-Test Report, Final Report, and User Guide. Their download links will be added
-when the files are supplied. Some detailed guides describe earlier development
-stages; the current source and Compose configuration determine implemented behavior.
+application code:
+
+| Evaluation document | PDF |
+| --- | --- |
+| Project Proposal | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/reports/project-proposal.pdf) |
+| Software Requirements Specification (SRS) | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/reports/software-requirements-specification.pdf) |
+| Software Architecture Document (SAD) | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/reports/software-architecture-document.pdf) |
+| Feasibility Report | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/reports/feasibility-report.pdf) |
+| Test Report | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/reports/test-report.pdf) |
+| Final Report | **To fill:** PDF |
+| Complete User Guide | **To fill:** PDF |
+
+The attached PDFs preserve the owner-supplied reports. Proposal and design
+documents may describe earlier plans; current source and Compose configuration
+determine implemented behavior.
