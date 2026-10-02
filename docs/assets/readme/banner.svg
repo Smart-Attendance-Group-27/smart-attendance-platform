@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 260" role="img" aria-labelledby="title desc">
+  <title id="title">UniAttend</title>
+  <desc id="desc">Smart Attendance and Classroom Access Platform. A university project by Group 27.</desc>
+  <rect width="1200" height="260" rx="16" fill="#0d1b2a"/>
+  <path d="M0 232H1200M868 0V260M1100 0V260" stroke="#203247" stroke-width="1"/>
+  <rect x="52" y="46" width="4" height="165" rx="2" fill="#38a3ff"/>
+  <g fill="#fff" font-family="Arial, Helvetica, sans-serif">
+    <text x="82" y="79" fill="#87c8ff" font-size="14" font-weight="700" letter-spacing="2">UNIVERSITY PROJECT · GROUP 27</text>
+    <text x="78" y="146" font-size="60" font-weight="700" letter-spacing="-1.5">UniAttend</text>
+    <text x="82" y="186" fill="#c1d0df" font-size="22">Smart Attendance and Classroom Access Platform</text>
+    <text x="82" y="216" fill="#8398ad" font-size="15">Student mobile app  /  Lecturer and administrator web dashboards</text>
+  </g>
+  <g transform="translate(1028 127)" fill="none">
+    <circle r="73" stroke="#203a53" stroke-width="2"/>
+    <circle r="54" stroke="#285272" stroke-width="1"/>
+    <path d="M-32-16v-13h13M19-29h13v13M32 16v13H19M-19 29h-13V16" stroke="#65bbff" stroke-width="3" stroke-linecap="round"/>
+    <path d="m-18 2 12 12 25-26" stroke="#65bbff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
