@@ -302,7 +302,7 @@ for an emulator or a phone over Wi-Fi.
 
 | Evaluation material | Attachment |
 | --- | --- |
-| Video walkthrough | [Watch the UniAttend demo on YouTube](https://www.youtube.com/watch?v=8w_8qMUBY68) |
+| Video walkthrough | [Watch the UniAttend demo on YouTube](https://youtu.be/UxIqQVPHDfM) |
 | Complete user guide | **To fill:** PDF on the documentation branch |
 
 Use owner-provided demo credentials shared outside Git. A repeatable demo requires
