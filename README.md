@@ -1,6 +1,6 @@
 # UniAttend evaluation documents
 
-This branch stores evaluation PDFs and the user guide separately from the
+This branch stores evaluation PDFs and role-specific user guides separately from the
 application source. The current implementation is maintained on
 [main](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/tree/main);
 the application README is the entry point for setup and evaluation.
@@ -14,12 +14,13 @@ the application README is the entry point for setup and evaluation.
 | Software Architecture Document | [View PDF](reports/software-architecture-document.pdf) | Attached |
 | Feasibility Report | [View PDF](reports/feasibility-report.pdf) | Attached |
 | Test Report | [View PDF](reports/test-report.pdf) | Attached |
-| Final Report | `reports/final-report.pdf` | To fill — owner will supply |
-| Complete User Guide | `guides/user-guide.pdf` | To fill — owner will supply |
+| Final Report | [View PDF](reports/final-report.pdf) | Attached |
+| Administrator User Guide | [View PDF](guides/administrator-user-guide.pdf) | Attached |
+| Lecturer User Guide | [View PDF](guides/lecturer-user-guide.pdf) | Attached |
+| Student User Guide | [View PDF](guides/student-user-guide.pdf) | Attached |
 
-The five attached PDFs are the original owner-supplied documents; their contents
-have not been edited. Final Report and User Guide remain attachment slots until
-their files are supplied.
+The attached PDFs are the original owner-supplied documents; their contents
+have not been edited.
 
 ## Maintaining this branch
 
