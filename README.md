@@ -298,12 +298,12 @@ for an emulator or a phone over Wi-Fi.
 
 ## Evaluator demo guide
 
-<!-- OWNER TODO: attach the complete user-guide PDF on the documentation branch. -->
-
 | Evaluation material | Attachment |
 | --- | --- |
 | Video walkthrough | [Watch the UniAttend demo on YouTube](https://youtu.be/UxIqQVPHDfM) |
-| Complete user guide | **To fill:** PDF on the documentation branch |
+| Administrator user guide | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/guides/administrator-user-guide.pdf) |
+| Lecturer user guide | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/guides/lecturer-user-guide.pdf) |
+| Student user guide | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/guides/student-user-guide.pdf) |
 
 Use owner-provided demo credentials shared outside Git. A repeatable demo requires
 an enrolled student, an assigned lecturer, and a timetable slot at the device's
@@ -395,7 +395,7 @@ npx eas-cli build --platform android --profile preview
 | Production operations and backups | [Deployment runbook](deployment/first-vps-runbook.md) |
 | Load scripts and recorded evidence | [Testing](testing/) |
 | Contribution process | [Contributing](CONTRIBUTING.md) |
-| Evaluation PDFs and user guide | [Documentation branch](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/tree/docs/evaluation-reports) |
+| Evaluation PDFs and user guides | [Documentation branch](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/tree/docs/evaluation-reports) |
 
 The `docs/evaluation-reports` branch holds evaluation documents separately from
 application code:
@@ -407,8 +407,10 @@ application code:
 | Software Architecture Document (SAD) | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/reports/software-architecture-document.pdf) |
 | Feasibility Report | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/reports/feasibility-report.pdf) |
 | Test Report | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/reports/test-report.pdf) |
-| Final Report | **To fill:** PDF |
-| Complete User Guide | **To fill:** PDF |
+| Final Report | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/reports/final-report.pdf) |
+| Administrator User Guide | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/guides/administrator-user-guide.pdf) |
+| Lecturer User Guide | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/guides/lecturer-user-guide.pdf) |
+| Student User Guide | [View PDF](https://github.com/Smart-Attendance-Group-27/smart-attendance-platform/blob/docs/evaluation-reports/guides/student-user-guide.pdf) |
 
 The attached PDFs preserve the owner-supplied reports. Proposal and design
 documents may describe earlier plans; current source and Compose configuration
