@@ -33,6 +33,13 @@ Thumbs.db
 .idea/
 .vscode/settings.json
 
+# Local AI assistant metadata
+**/AGENTS.md
+**/CLAUDE.md
+**/.claude/
+**/.codex/
+**/.cursor/
+
 # Temporary files
 *.tmp
 *.temp
