@@ -152,12 +152,12 @@ class QrSessionService:
     ) -> StudentQrProgress:
         async with pool.acquire() as connection:
             state = await self._evidence_repository.student_state(
-                connection, session_id, student_user_id,
+                connection, session_id, student_user_id, # type: ignore
             )
             if state is None:
                 raise AttendanceSessionNotFoundError()
             batches = await self._evidence_repository.student_batches(
-                connection, session_id, state.checked_in_at, state.attempt_id,
+                connection, session_id, state.checked_in_at, state.attempt_id, # type: ignore
             )
 
         now = self._ensure_utc(self._clock())
@@ -380,12 +380,16 @@ class QrSessionService:
                 self._validate_attendance_session(attendance_session, current_time)
 
                 assert attendance_session is not None
+                ## Decide actual validity seconds based on the provided valid_for_seconds or the default policy. This ensures that the QR session does not exceed the scheduled end time of the attendance session.
                 validity_seconds = await self._resolve_validity_seconds(connection, valid_for_seconds)
                 requested_expires_at = current_time + timedelta(seconds=validity_seconds)
                 scheduled_end_at = self._ensure_utc(attendance_session.scheduled_end_at)
+                ## The actual expiration time of the QR session is the minimum of the requested expiration time and the scheduled end time of the attendance session. This ensures that the QR session does not remain active beyond the attendance session's scheduled end.
                 actual_expires_at = min(requested_expires_at, scheduled_end_at)
+
                 qr_session_id = self._uuid_factory()
 
+                ## Before creating a new dynamic QR session, check if there are any existing active QR sessions for the same attendance session. If there are, raise an error to prevent overlapping QR sessions. This ensures that only one active QR session can exist at a time for a given attendance session.
                 deactivated_qr_session_ids = (
                     await self._repository.close_existing_active_qr_sessions(
                         connection,
@@ -427,6 +431,7 @@ class QrSessionService:
                 )
 
         await self._delete_cached_qr_batches(deactivated_qr_session_ids)
+        ## Cache the metadata of the newly created dynamic QR session 
         await self._set_cached_qr_batch_metadata(
             QrBatchMetadata(
                 id=qr_session_id,
@@ -450,6 +455,8 @@ class QrSessionService:
             qr_session_id=qr_session_id,
             attendance_session_id=attendance_session_id,
             mode=DYNAMIC_QR_MODE,
+            ## The QR value is not generated for dynamic QR sessions at creation time. Instead, it is generated on-the-fly when requested, based on the current sequence and the HMAC secret. This ensures that the QR value changes dynamically over time, enhancing security.
+            ## Using qr_session_id frontend and open SSE connection for dynamic QR
             qr_value=None,
             refresh_interval_seconds=refresh_interval_seconds,
             status=ACTIVE_STATUS,
@@ -533,11 +540,12 @@ class QrSessionService:
         submitted_token_hash = self._hash_qr_value(qr_value)
 
         async with pool.acquire() as connection:
+            
             verification_record = await self._repository.fetch_qr_verification_record(
                 connection,
                 qr_session_id,
             )
-
+            ## Fetch the student's profile and check if it is active.
             if verification_record is None or verification_record.attendance_session_id is None:
                 raise QrSessionNotFoundError()
 
@@ -551,7 +559,7 @@ class QrSessionService:
                 )
 
             is_eligible = await self._verification_repository.lock_student_eligibility(
-                connection,
+                connection, # type: ignore
                 verification_record.attendance_session_id,
                 student.id,
             )
@@ -572,6 +580,7 @@ class QrSessionService:
                 self._ensure_utc(verification_record.batch_activated_at)
                 > self._ensure_utc(attempt.checked_in_at)
             )
+            ## IF verified student scans again, return accepted QR result without re verification.
             if (
                 not self._verification_record_is_closed(verification_record, current_time)
                 and await self._repository.has_accepted_qr_attempt(
@@ -586,7 +595,7 @@ class QrSessionService:
                     already_passed=True,
                     required_for_student=required_for_student,
                 )
-
+        ## verify the QR value based on the QR mode.
         if verification_record.qr_mode == DYNAMIC_QR_MODE:
             verification_status = await self._classify_dynamic_qr_verification(
                 pool,
@@ -613,6 +622,7 @@ class QrSessionService:
                     connection, qr_session_id
                 )
                 write_time = self._ensure_utc(self._clock())
+                ## Check if the session is closed, cancelled, or expired, or if the verification record is closed. If any of these conditions are true, set the verification status to "closed". Otherwise, classify the QR verification based on the QR mode.
                 if (
                     session is None
                     or session.status != ACTIVE_STATUS
@@ -627,7 +637,7 @@ class QrSessionService:
                     verification_status = self._classify_qr_verification(
                         current_record, submitted_token_hash, write_time
                     )
-
+                ## Lock the student's attempt record for update to prevent concurrent modifications. This ensures that the check-in status and QR verification attempts are consistent and prevents race conditions.
                 locked_attempt = await self._repository.find_student_attempt(
                     connection,
                     verification_record.attendance_session_id,
@@ -663,6 +673,7 @@ class QrSessionService:
                     connection,
                     locked_attempt.id,
                 )
+                ## Insert the new QR validation attempt into the database.
                 await self._repository.insert_qr_validation_attempt(
                     connection,
                     self._uuid_factory(),
@@ -699,6 +710,7 @@ class QrSessionService:
     ) -> CurrentDynamicQrSession:
         current_time = self._ensure_utc(self._clock())
         secret = self._require_dynamic_qr_hmac_secret()
+        ## Fetch meta data. First try redis cache, if not found then fetch from database and cache it.
         metadata = await self.get_qr_batch_metadata(pool, qr_session_id)
 
         if metadata is None:
@@ -712,16 +724,19 @@ class QrSessionService:
             metadata.refresh_interval_seconds,
             current_time,
         )
+
         valid_from, expires_at = get_dynamic_qr_window(
             metadata.activated_at,
             metadata.refresh_interval_seconds,
             sequence,
         )
 
+        ## Ensure that the expires_at does not exceed the batch's own expiration time.
         batch_expires_at = self._ensure_utc(metadata.expires_at)
         if expires_at > batch_expires_at:
             expires_at = batch_expires_at
 
+        ## Generate the dynamic QR value using the session ID, sequence number, and HMAC secret. This ensures that the QR value changes over time and is unique to the session and sequence.
         qr_value = generate_dynamic_qr_value(qr_session_id, sequence, secret)
 
         return CurrentDynamicQrSession(
@@ -741,6 +756,7 @@ class QrSessionService:
         is_disconnected: Callable[[], Awaitable[bool]] | None = None,
         sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
     ) -> AsyncIterator[CurrentDynamicQrSession]:
+        ## initial QR session Details containing first qr_value
         current_qr_session = initial_qr_session
 
         while True:
@@ -755,7 +771,7 @@ class QrSessionService:
                     )
                 except (QrSessionNotFoundError, DynamicQrSessionUnavailableError):
                     break
-
+                
             yield current_qr_session
 
             if await self._client_is_disconnected(is_disconnected):

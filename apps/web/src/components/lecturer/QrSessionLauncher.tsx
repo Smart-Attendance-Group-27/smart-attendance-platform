@@ -77,31 +77,45 @@ export function QrSessionLauncher({
   const [validForSeconds, setValidForSeconds] = useState("");
   const [refreshIntervalSeconds, setRefreshIntervalSeconds] = useState("15");
   const [qrSession, setQrSession] = useState<QrSessionResponse | null>(null);
-  const [dynamicQr, setDynamicQr] = useState<DynamicQrStreamPayload | null>(null);
+  const [dynamicQr, setDynamicQr] = useState<DynamicQrStreamPayload | null>(
+    null,
+  );
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
   const [isLoading, setIsLoading] = useState(false);
   const [isDeactivating, setIsDeactivating] = useState(false);
   const [error, setError] = useState("");
-  const [projectionRoot, setProjectionRoot] = useState<HTMLElement | null>(null);
-  const [hasExistingActiveBatch, setHasExistingActiveBatch] = useState(
-    () => Boolean(activeBatchExpiresAt && new Date(activeBatchExpiresAt).getTime() > Date.now()),
+  const [projectionRoot, setProjectionRoot] = useState<HTMLElement | null>(
+    null,
+  );
+  const [hasExistingActiveBatch, setHasExistingActiveBatch] = useState(() =>
+    Boolean(
+      activeBatchExpiresAt &&
+      new Date(activeBatchExpiresAt).getTime() > Date.now(),
+    ),
   );
   const projectionWindowRef = useRef<Window | null>(null);
-  const projectionBeforeUnloadRef = useRef<((event: BeforeUnloadEvent) => void) | null>(null);
+  const projectionBeforeUnloadRef = useRef<
+    ((event: BeforeUnloadEvent) => void) | null
+  >(null);
 
   const validityNumber = Number(validForSeconds);
   const refreshIntervalNumber = Number(refreshIntervalSeconds);
+
+  // Check whether QR can be launched
   const canSubmit =
     isLaunchEnabled &&
     !hasExistingActiveBatch &&
     !qrSession &&
-    (validForSeconds === "" || (Number.isInteger(validityNumber) &&
-      validityNumber >= 30 && validityNumber <= 86400)) &&
+    (validForSeconds === "" ||
+      (Number.isInteger(validityNumber) &&
+        validityNumber >= 30 &&
+        validityNumber <= 86400)) &&
     (mode === "static" ||
       (Number.isInteger(refreshIntervalNumber) &&
         refreshIntervalNumber >= 1 &&
         refreshIntervalNumber <= 300));
 
+  // Reset QR session state when mode changes. if static -> qrValue , if dynamic -> dynamicQr
   const displayedQrValue =
     qrSession?.mode === "dynamic" ? dynamicQr?.qrValue : qrSession?.qrValue;
 
@@ -111,6 +125,7 @@ export function QrSessionLauncher({
   const displayedExpiresAt =
     qrSession?.mode === "dynamic" ? dynamicQr?.expiresAt : qrSession?.expiresAt;
 
+  // Prepare the QR code payload for display
   const qrCodePayload = useMemo(() => {
     if (!qrSession || !displayedQrValue) return "";
 
@@ -120,13 +135,17 @@ export function QrSessionLauncher({
     });
   }, [displayedQrValue, qrSession]);
 
+  // Set up the dynamic QR stream
   useEffect(() => {
     if (!qrSession || qrSession.mode !== "dynamic") return;
 
-    const source = new EventSource(`/api/qr-sessions/${qrSession.qrSessionId}/stream`);
+    const source = new EventSource(
+      `/api/qr-sessions/${qrSession.qrSessionId}/stream`,
+    );
 
     source.addEventListener("qr.rotate", (event) => {
       try {
+        // Update the dynamic QR state with the new payload from the stream
         setDynamicQr(JSON.parse(event.data) as DynamicQrStreamPayload);
         setStreamStatus("connected");
         setError("");
@@ -136,14 +155,16 @@ export function QrSessionLauncher({
         source.close();
       }
     });
-
+    // Handle stream errors
     source.onerror = () => {
       setStreamStatus((currentStatus) =>
         currentStatus === "connected" ? "connected" : "closed",
       );
-      setError((currentError) => currentError || "Dynamic QR stream is unavailable.");
+      setError(
+        (currentError) => currentError || "Dynamic QR stream is unavailable.",
+      );
     };
-
+    // Clean up the EventSource when the component unmounts or qrSession changes
     return () => {
       source.close();
     };
@@ -151,13 +172,25 @@ export function QrSessionLauncher({
 
   useEffect(() => {
     if (!activeBatchExpiresAt) {
-      const timeout = window.setTimeout(() => setHasExistingActiveBatch(false), 0);
+      const timeout = window.setTimeout(
+        () => setHasExistingActiveBatch(false),
+        0,
+      );
       return () => window.clearTimeout(timeout);
     }
 
-    const delay = Math.max(0, new Date(activeBatchExpiresAt).getTime() - Date.now());
-    const syncTimeout = window.setTimeout(() => setHasExistingActiveBatch(delay > 0), 0);
-    const expiryTimeout = window.setTimeout(() => setHasExistingActiveBatch(false), delay);
+    const delay = Math.max(
+      0,
+      new Date(activeBatchExpiresAt).getTime() - Date.now(),
+    );
+    const syncTimeout = window.setTimeout(
+      () => setHasExistingActiveBatch(delay > 0),
+      0,
+    );
+    const expiryTimeout = window.setTimeout(
+      () => setHasExistingActiveBatch(false),
+      delay,
+    );
     return () => {
       window.clearTimeout(syncTimeout);
       window.clearTimeout(expiryTimeout);
@@ -186,14 +219,17 @@ export function QrSessionLauncher({
     return () => window.clearTimeout(timeout);
   }, [qrSession]);
 
-  useEffect(() => () => {
-    const projectionWindow = projectionWindowRef.current;
-    const beforeUnload = projectionBeforeUnloadRef.current;
-    if (projectionWindow && beforeUnload) {
-      projectionWindow.removeEventListener("beforeunload", beforeUnload);
-    }
-    projectionWindow?.close();
-  }, []);
+  useEffect(
+    () => () => {
+      const projectionWindow = projectionWindowRef.current;
+      const beforeUnload = projectionBeforeUnloadRef.current;
+      if (projectionWindow && beforeUnload) {
+        projectionWindow.removeEventListener("beforeunload", beforeUnload);
+      }
+      projectionWindow?.close();
+    },
+    [],
+  );
 
   function openProjectionWindow(): Window | null {
     const projectionWindow = window.open(
@@ -240,12 +276,15 @@ export function QrSessionLauncher({
     setError("");
   }
 
+  // Launch a new QR session
   async function launchQrSession() {
     if (!canSubmit) return;
 
     const projectionWindow = openProjectionWindow();
     if (!projectionWindow) {
-      setError("The QR display window was blocked. Allow pop-ups for this site and try again.");
+      setError(
+        "The QR display window was blocked. Allow pop-ups for this site and try again.",
+      );
       return;
     }
 
@@ -255,20 +294,26 @@ export function QrSessionLauncher({
     setDynamicQr(null);
     setStreamStatus("idle");
 
+    // Launch QR session via API
     try {
-      const response = await fetch(`/api/attendance-sessions/${sessionId}/qr-sessions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        `/api/attendance-sessions/${sessionId}/qr-sessions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            mode,
+            ...(validForSeconds === ""
+              ? {}
+              : { validForSeconds: validityNumber }),
+            ...(mode === "dynamic"
+              ? { refreshIntervalSeconds: refreshIntervalNumber }
+              : {}),
+          }),
         },
-        body: JSON.stringify({
-          mode,
-          ...(validForSeconds === "" ? {} : { validForSeconds: validityNumber }),
-          ...(mode === "dynamic"
-            ? { refreshIntervalSeconds: refreshIntervalNumber }
-            : {}),
-        }),
-      });
+      );
 
       const data = await response.json();
 
@@ -280,8 +325,9 @@ export function QrSessionLauncher({
       if (createdSession.mode === "static" && !createdSession.qrValue) {
         throw new Error("The backend did not return a static QR value.");
       }
-
+      // Set the new QR session state and prepare the projection window
       setQrSession(createdSession);
+
       const preventClose = (event: BeforeUnloadEvent) => {
         if (Date.now() < new Date(createdSession.expiresAt).getTime()) {
           event.preventDefault();
@@ -290,17 +336,24 @@ export function QrSessionLauncher({
       };
       projectionBeforeUnloadRef.current = preventClose;
       projectionWindow.addEventListener("beforeunload", preventClose);
-      setStreamStatus(createdSession.mode === "dynamic" ? "connecting" : "idle");
+      setStreamStatus(
+        createdSession.mode === "dynamic" ? "connecting" : "idle",
+      );
     } catch (caughtError) {
       projectionWindow.close();
       projectionWindowRef.current = null;
       setProjectionRoot(null);
-      setError(caughtError instanceof Error ? caughtError.message : "Unexpected QR launch error.");
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unexpected QR launch error.",
+      );
     } finally {
       setIsLoading(false);
     }
   }
 
+  // Deactivate the current QR session
   async function deactivateQrSession() {
     const qrSessionId = qrSession?.qrSessionId ?? activeBatchId;
     if (!qrSessionId || isDeactivating) return;
@@ -314,7 +367,11 @@ export function QrSessionLauncher({
       );
       const data = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(data?.detail?.message ?? data?.detail ?? "QR batch could not be deactivated.");
+        throw new Error(
+          data?.detail?.message ??
+            data?.detail ??
+            "QR batch could not be deactivated.",
+        );
       }
 
       const projectionWindow = projectionWindowRef.current;
@@ -332,7 +389,11 @@ export function QrSessionLauncher({
       setStreamStatus("idle");
       window.focus();
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : "Unexpected QR deactivation error.");
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unexpected QR deactivation error.",
+      );
     } finally {
       setIsDeactivating(false);
     }
@@ -344,15 +405,19 @@ export function QrSessionLauncher({
           <section className="qr-projector__panel">
             {qrSession && qrCodePayload ? (
               <>
-                <p className="qr-projector__course">{courseCode} · {courseName} · {room}</p>
-                <QRCodeSVG
+                <p className="qr-projector__course">
+                  {courseCode} · {courseName} · {room}
+                </p>
+                <QRCodeSVG // Render the QR code in the projection window
                   className="qr-projector__code"
                   value={qrCodePayload}
                   size={620}
                   level="M"
                   marginSize={4}
                 />
-                <p className="qr-projector__instruction">Scan QR to complete check-in</p>
+                <p className="qr-projector__instruction">
+                  Scan QR to complete check-in
+                </p>
                 <p className="qr-projector__meta">
                   Scan before {formatDateTime(qrSession.expiresAt)}
                 </p>
@@ -370,179 +435,224 @@ export function QrSessionLauncher({
     <>
       {projection}
       <div className="grid gap-4 lg:grid-cols-[380px_minmax(0,1fr)]">
-        <Card className="h-full" title="QR launch settings" subtitle={`${courseCode} · ${room}`}>
-        <div className="space-y-4">
-          {!isLaunchEnabled ? (
-            <Notice variant="warning" title="QR launch unavailable">
-              {mockReadOnly
-                ? "Mock mode shows sample QR batches. Connect the backend to launch a real batch."
-                : "This session is not currently active or QR verification is disabled."}
-            </Notice>
-          ) : null}
+        <Card
+          className="h-full"
+          title="QR launch settings"
+          subtitle={`${courseCode} · ${room}`}
+        >
+          <div className="space-y-4">
+            {!isLaunchEnabled ? (
+              <Notice variant="warning" title="QR launch unavailable">
+                {mockReadOnly
+                  ? "Mock mode shows sample QR batches. Connect the backend to launch a real batch."
+                  : "This session is not currently active or QR verification is disabled."}
+              </Notice>
+            ) : null}
 
-          <fieldset>
-            <legend className="mb-2 text-[11px] font-semibold">QR mode</legend>
-            <div className="grid grid-cols-2 gap-2">
-              {(["static", "dynamic"] as const).map((option) => (
-                <label
-                  key={option}
-                  className={`cursor-pointer border px-3 py-2 text-xs ${
-                    mode === option
-                      ? "border-[var(--uom-blue)] bg-[var(--uom-blue-soft)] text-[var(--uom-blue)]"
-                      : "border-[var(--line)] bg-white text-[#455662]"
-                  }`}
-                >
-                  <input
-                    checked={mode === option}
-                    className="sr-only"
-                    name="qrMode"
-                    onChange={() => selectMode(option)}
-                    type="radio"
-                    value={option}
-                  />
-                  <span className="block font-semibold capitalize">{option}</span>
-                  <span className="mt-1 block text-[10px] text-[var(--muted)]">
-                    {option === "static" ? "One QR value" : "Auto-rotating QR"}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
+            <fieldset>
+              <legend className="mb-2 text-[11px] font-semibold">
+                QR mode
+              </legend>
+              <div className="grid grid-cols-2 gap-2">
+                {(["static", "dynamic"] as const).map((option) => (
+                  <label
+                    key={option}
+                    className={`cursor-pointer border px-3 py-2 text-xs ${
+                      mode === option
+                        ? "border-[var(--uom-blue)] bg-[var(--uom-blue-soft)] text-[var(--uom-blue)]"
+                        : "border-[var(--line)] bg-white text-[#455662]"
+                    }`}
+                  >
+                    <input
+                      checked={mode === option}
+                      className="sr-only"
+                      name="qrMode"
+                      onChange={() => selectMode(option)}
+                      type="radio"
+                      value={option}
+                    />
+                    <span className="block font-semibold capitalize">
+                      {option}
+                    </span>
+                    <span className="mt-1 block text-[10px] text-[var(--muted)]">
+                      {option === "static"
+                        ? "One QR value"
+                        : "Auto-rotating QR"}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
 
-          <FormField
-            htmlFor="validForSeconds"
-            label="QR session duration"
-            help="Leave blank to use the institution default. An explicit duration can be 30 to 86,400 seconds; expiry is capped by the attendance session end time."
-          >
-            <input
-              className={fieldInputClassName()}
-              id="validForSeconds"
-              inputMode="numeric"
-              max={86400}
-              min={30}
-              placeholder="Institution default"
-              onChange={(event) => setValidForSeconds(event.target.value)}
-              type="number"
-              value={validForSeconds}
-            />
-          </FormField>
-
-          {mode === "dynamic" ? (
             <FormField
-              htmlFor="refreshIntervalSeconds"
-              label="Dynamic refresh interval"
-              help="How often the displayed QR should rotate. Backend accepts 1 to 300 seconds."
+              htmlFor="validForSeconds"
+              label="QR session duration"
+              help="Leave blank to use the institution default. An explicit duration can be 30 to 86,400 seconds; expiry is capped by the attendance session end time."
             >
               <input
                 className={fieldInputClassName()}
-                id="refreshIntervalSeconds"
+                id="validForSeconds"
                 inputMode="numeric"
-                max={300}
-                min={1}
-                onChange={(event) => setRefreshIntervalSeconds(event.target.value)}
+                max={86400}
+                min={30}
+                placeholder="Institution default"
+                onChange={(event) => setValidForSeconds(event.target.value)}
                 type="number"
-                value={refreshIntervalSeconds}
+                value={validForSeconds}
               />
             </FormField>
-          ) : null}
 
-          <Button
-            className="w-full justify-center"
-            disabled={!canSubmit || isLoading}
-            onClick={launchQrSession}
-            variant="primary"
-          >
-            {isLoading ? "Launching QR..." : "Launch QR"}
-          </Button>
+            {mode === "dynamic" ? (
+              <FormField
+                htmlFor="refreshIntervalSeconds"
+                label="Dynamic refresh interval"
+                help="How often the displayed QR should rotate. Backend accepts 1 to 300 seconds."
+              >
+                <input
+                  className={fieldInputClassName()}
+                  id="refreshIntervalSeconds"
+                  inputMode="numeric"
+                  max={300}
+                  min={1}
+                  onChange={(event) =>
+                    setRefreshIntervalSeconds(event.target.value)
+                  }
+                  type="number"
+                  value={refreshIntervalSeconds}
+                />
+              </FormField>
+            ) : null}
 
-          {(qrSession || (hasExistingActiveBatch && activeBatchId)) ? (
             <Button
               className="w-full justify-center"
-              disabled={isDeactivating}
-              onClick={deactivateQrSession}
-              variant="danger"
+              disabled={!canSubmit || isLoading}
+              onClick={launchQrSession}
+              variant="primary"
             >
-              {isDeactivating ? "Deactivating QR..." : "Deactivate QR"}
+              {isLoading ? "Launching QR..." : "Launch QR"}
             </Button>
-          ) : null}
 
-          {hasExistingActiveBatch && !qrSession ? (
-            <p className="text-xs text-[var(--muted)]">
-              Wait for the active QR batch to finish before launching another one.
-            </p>
-          ) : null}
+            {qrSession || (hasExistingActiveBatch && activeBatchId) ? (
+              <Button
+                className="w-full justify-center"
+                disabled={isDeactivating}
+                onClick={deactivateQrSession}
+                variant="danger"
+              >
+                {isDeactivating ? "Deactivating QR..." : "Deactivate QR"}
+              </Button>
+            ) : null}
 
-          {error ? (
-            <p className="border border-[#e5bcbc] bg-[var(--danger-bg)] px-3 py-2 text-xs text-[var(--danger)]">
-              {error}
-            </p>
-          ) : null}
+            {hasExistingActiveBatch && !qrSession ? (
+              <p className="text-xs text-[var(--muted)]">
+                Wait for the active QR batch to finish before launching another
+                one.
+              </p>
+            ) : null}
+
+            {error ? (
+              <p className="border border-[#e5bcbc] bg-[var(--danger-bg)] px-3 py-2 text-xs text-[var(--danger)]">
+                {error}
+              </p>
+            ) : null}
           </div>
         </Card>
 
         <Card className="h-full" title="Student display" subtitle={courseName}>
-        <div className="grid h-full gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
-          <div className="flex h-full min-h-[240px] items-center justify-center border border-dashed border-[#cbd4dc] bg-[#f7fafc] p-6">
-            {qrSession && qrCodePayload ? (
-              <div className="flex flex-col items-center text-center">
-                <QRCodeSVG value={qrCodePayload} size={340} level="M" marginSize={4} />
-                <div className="mt-4 flex flex-wrap justify-center gap-2">
-                  <StatusBadge tone={qrSession.mode === "dynamic" ? "warning" : "success"}>
-                    {qrSession.mode === "dynamic" ? `Dynamic · ${streamStatus}` : "Static · active"}
-                  </StatusBadge>
-                  <StatusBadge tone="info">{formatDuration(validityNumber)}</StatusBadge>
-                </div>
-                <p className="mt-4 text-sm font-semibold text-[#2d3d49]">
-                  Scan QR to complete check-in
-                </p>
-              </div>
-            ) : (
-              <div className="text-center">
-                <p className="text-base font-semibold text-[#33434f]">No QR session launched</p>
-                <p className="mt-2 max-w-md text-xs leading-relaxed text-[var(--muted)]">
-                  Choose static or dynamic mode, set the timing, then launch the QR session for this active attendance session.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <aside className="space-y-3 text-xs">
-            <div className="border border-[var(--line)] bg-[#fafbfc] p-3">
-              <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Session</p>
-              <p className="mt-1 font-semibold text-[#2d3d49]">{courseCode}</p>
-              <p className="mt-1 text-[var(--muted)]">{courseName}</p>
-            </div>
-            <div className="border border-[var(--line)] bg-[#fafbfc] p-3">
-              <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Check-in window</p>
-              <p className="mt-1 font-semibold text-[#2d3d49]">{checkInWindow}</p>
-            </div>
-            <div className="border border-[var(--line)] bg-[#fafbfc] p-3">
-              <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">QR session ID</p>
-              <p className="mt-1 break-all font-mono text-[11px] text-[#2d3d49]">
-                {qrSession?.qrSessionId ?? "—"}
-              </p>
-            </div>
-            <div className="border border-[var(--line)] bg-[#fafbfc] p-3">
-              <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Current value window</p>
-              <dl className="mt-1 space-y-1">
-                <div className="flex justify-between gap-3">
-                  <dt className="text-[var(--muted)]">Valid from</dt>
-                  <dd className="text-right font-semibold">{formatDateTime(displayedValidFrom)}</dd>
-                </div>
-                <div className="flex justify-between gap-3">
-                  <dt className="text-[var(--muted)]">Expires</dt>
-                  <dd className="text-right font-semibold">{formatDateTime(displayedExpiresAt)}</dd>
-                </div>
-                {dynamicQr ? (
-                  <div className="flex justify-between gap-3">
-                    <dt className="text-[var(--muted)]">Sequence</dt>
-                    <dd className="font-semibold">{dynamicQr.sequence}</dd>
+          <div className="grid h-full gap-4 xl:grid-cols-[minmax(0,1fr)_260px]">
+            <div className="flex h-full min-h-[240px] items-center justify-center border border-dashed border-[#cbd4dc] bg-[#f7fafc] p-6">
+              {qrSession && qrCodePayload ? (
+                <div className="flex flex-col items-center text-center">
+                  <QRCodeSVG // Render the QR code in the dashboard display panel
+                    value={qrCodePayload}
+                    size={340}
+                    level="M"
+                    marginSize={4}
+                  />
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    <StatusBadge
+                      tone={
+                        qrSession.mode === "dynamic" ? "warning" : "success"
+                      }
+                    >
+                      {qrSession.mode === "dynamic"
+                        ? `Dynamic · ${streamStatus}`
+                        : "Static · active"}
+                    </StatusBadge>
+                    <StatusBadge tone="info">
+                      {formatDuration(validityNumber)}
+                    </StatusBadge>
                   </div>
-                ) : null}
-              </dl>
+                  <p className="mt-4 text-sm font-semibold text-[#2d3d49]">
+                    Scan QR to complete check-in
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <p className="text-base font-semibold text-[#33434f]">
+                    No QR session launched
+                  </p>
+                  <p className="mt-2 max-w-md text-xs leading-relaxed text-[var(--muted)]">
+                    Choose static or dynamic mode, set the timing, then launch
+                    the QR session for this active attendance session.
+                  </p>
+                </div>
+              )}
             </div>
-          </aside>
-        </div>
+
+            <aside className="space-y-3 text-xs">
+              <div className="border border-[var(--line)] bg-[#fafbfc] p-3">
+                <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                  Session
+                </p>
+                <p className="mt-1 font-semibold text-[#2d3d49]">
+                  {courseCode}
+                </p>
+                <p className="mt-1 text-[var(--muted)]">{courseName}</p>
+              </div>
+              <div className="border border-[var(--line)] bg-[#fafbfc] p-3">
+                <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                  Check-in window
+                </p>
+                <p className="mt-1 font-semibold text-[#2d3d49]">
+                  {checkInWindow}
+                </p>
+              </div>
+              <div className="border border-[var(--line)] bg-[#fafbfc] p-3">
+                <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                  QR session ID
+                </p>
+                <p className="mt-1 break-all font-mono text-[11px] text-[#2d3d49]">
+                  {qrSession?.qrSessionId ?? "—"}
+                </p>
+              </div>
+              <div className="border border-[var(--line)] bg-[#fafbfc] p-3">
+                <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
+                  Current value window
+                </p>
+                <dl className="mt-1 space-y-1">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-[var(--muted)]">Valid from</dt>
+                    <dd className="text-right font-semibold">
+                      {formatDateTime(displayedValidFrom)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-[var(--muted)]">Expires</dt>
+                    <dd className="text-right font-semibold">
+                      {formatDateTime(displayedExpiresAt)}
+                    </dd>
+                  </div>
+                  {dynamicQr ? (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-[var(--muted)]">Sequence</dt>
+                      <dd className="font-semibold">{dynamicQr.sequence}</dd>
+                    </div>
+                  ) : null}
+                </dl>
+              </div>
+            </aside>
+          </div>
         </Card>
       </div>
     </>

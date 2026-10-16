@@ -4,6 +4,7 @@ import { getValidAccessToken } from "@/lib/auth/dal";
 const CORE_BACKEND_URL =
   process.env.CORE_BACKEND_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
 
+// This route is used to deactivate a QR session for a given attendance session. It requires the sessionId and qrSessionId as parameters in the URL. The route will make a POST request to the backend API to deactivate the specified QR session.
 export async function POST(
   _request: Request,
   context: RouteContext<"/api/attendance-sessions/[sessionId]/qr-sessions/[qrSessionId]/deactivate">,
@@ -19,8 +20,7 @@ export async function POST(
     },
   );
   const responseText = await backendResponse.text();
-  return NextResponse.json(
-    responseText ? JSON.parse(responseText) : null,
-    { status: backendResponse.status },
-  );
+  return NextResponse.json(responseText ? JSON.parse(responseText) : null, {
+    status: backendResponse.status,
+  });
 }

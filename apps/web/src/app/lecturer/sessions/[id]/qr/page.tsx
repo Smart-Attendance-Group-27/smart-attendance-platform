@@ -9,7 +9,9 @@ import { QrBatchParticipationTable } from "@/components/lecturer/QrBatchParticip
 import { SessionLiveRefresh } from "@/components/lecturer/SessionLiveRefresh";
 import { isWebMockMode } from "@/lib/api/mode";
 
-export default async function LecturerSessionQrPage(props: PageProps<"/lecturer/sessions/[id]/qr">) {
+export default async function LecturerSessionQrPage(
+  props: PageProps<"/lecturer/sessions/[id]/qr">,
+) {
   const { id } = await props.params;
   const session = await getSessionDetail(id);
 
@@ -17,13 +19,15 @@ export default async function LecturerSessionQrPage(props: PageProps<"/lecturer/
     notFound();
   }
   const batches = session.requiresQr ? await getSessionQrBatches(id) : [];
-  const activeBatch = batches.find((batch) =>
-    batch.status === "active" &&
-    !batch.voided &&
-    batch.deactivatedAt === null
+  const activeBatch = batches.find(
+    (batch) =>
+      batch.status === "active" &&
+      !batch.voided &&
+      batch.deactivatedAt === null,
   );
 
-  const isLaunchEnabled = session.status === "in_progress" && session.requiresQr === true;
+  const isLaunchEnabled =
+    session.status === "in_progress" && session.requiresQr === true;
 
   return (
     <div className="space-y-4">
@@ -35,7 +39,9 @@ export default async function LecturerSessionQrPage(props: PageProps<"/lecturer/
             <StatusBadge tone={isLaunchEnabled ? "success" : "neutral"}>
               {isLaunchEnabled ? "Ready to launch" : "Unavailable"}
             </StatusBadge>
-            <LinkButton href={`/lecturer/sessions/${session.sessionId}`}>Back to monitor</LinkButton>
+            <LinkButton href={`/lecturer/sessions/${session.sessionId}`}>
+              Back to monitor
+            </LinkButton>
           </>
         }
       />
@@ -44,8 +50,7 @@ export default async function LecturerSessionQrPage(props: PageProps<"/lecturer/
         checkInWindow={session.checkInWindow}
         courseCode={session.courseCode}
         courseName={session.courseName}
-        isLaunchEnabled={isLaunchEnabled && !isWebMockMode()}
-        mockReadOnly={isWebMockMode()}
+        isLaunchEnabled={isLaunchEnabled}
         room={session.room}
         sessionId={session.sessionId}
         activeBatchId={activeBatch?.qrSessionId ?? null}
@@ -53,8 +58,9 @@ export default async function LecturerSessionQrPage(props: PageProps<"/lecturer/
       />
       {session.status === "in_progress" ? <SessionLiveRefresh /> : null}
       <QrBatchParticipationTable
-        batches={batches} sessionId={id}
-        canVoid={session.status === "in_progress" && !isWebMockMode()}
+        batches={batches}
+        sessionId={id}
+        canVoid={session.status === "in_progress"}
       />
     </div>
   );

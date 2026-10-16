@@ -113,7 +113,7 @@ async def get_initial_dynamic_qr_session(
             detail={"code": "DYNAMIC_QR_CONFIGURATION_ERROR", "message": error.message},
         ) from error
 
-
+## Create QR Session 
 @create_qr_session_router.post(
     "",
     response_model=CreateQrSessionResponse,
@@ -123,6 +123,7 @@ async def create_qr_session(
     session_id: UUID,
     http_request: Request,
     current_lecturer: CurrentLecturer,
+    ## The payload is optional, if not provided, a default CreateQrSessionRequest will be used.
     payload: Annotated[CreateQrSessionRequest | None, Body()] = None,
     qr_session_service: QrSessionService = Depends(get_qr_session_service),
 ) -> CreateQrSessionResponse:
@@ -352,7 +353,7 @@ async def get_current_dynamic_qr_session(
         expires_at=current_qr_session.expires_at,
     )
 
-
+## Stream the current dynamic QR session using given qr_session_id.
 @verify_qr_session_router.get(
     "/stream",
     response_class=EventSourceResponse,
@@ -361,11 +362,13 @@ async def get_current_dynamic_qr_session(
 async def stream_current_dynamic_qr_session(
     qr_session_id: UUID,
     http_request: Request,
+    ## Stream the current dynamic QR session for the given qr_session_id.(Initial QR value)
     current_qr_session: CurrentDynamicQrSession = Depends(
         get_initial_dynamic_qr_session,
     ),
     qr_session_service: QrSessionService = Depends(get_qr_session_service),
 ) -> AsyncIterator[ServerSentEvent]:
+    ## streame the current dynamic QR session for the given qr_session_id
     async for streamed_qr_session in qr_session_service.stream_current_dynamic_qr_sessions(
         http_request.app.state.db_pool,
         qr_session_id,

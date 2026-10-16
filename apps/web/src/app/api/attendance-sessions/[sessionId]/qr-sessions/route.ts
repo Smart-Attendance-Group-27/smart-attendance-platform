@@ -26,21 +26,21 @@ function isQrSessionRequestBody(value: unknown): value is QrSessionRequestBody {
       typeof candidate.refreshIntervalSeconds === "number")
   );
 }
-
+// Create a new QR session POST route handler for the attendance session with the given sessionId. This route will forward the request to the core backend and return the response.
 export async function POST(
   request: NextRequest,
   context: RouteContext<"/api/attendance-sessions/[sessionId]/qr-sessions">,
 ) {
   const { sessionId } = await context.params;
   const requestBody = await request.json().catch(() => ({}));
-
+  // Validate request body to ensure it contains valid QR session fields. If not, return a 400 Bad Request response with an error message.
   if (!isQrSessionRequestBody(requestBody)) {
     return NextResponse.json(
       { detail: "Request body contains invalid QR session fields." },
       { status: 400 },
     );
   }
-
+  // Forward the request to the core backend
   const accessToken = await getValidAccessToken();
   const backendResponse = await fetch(
     `${CORE_BACKEND_URL}/api/v1/attendance-sessions/${sessionId}/qr-sessions`,
