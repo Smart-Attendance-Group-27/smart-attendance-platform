@@ -48,6 +48,8 @@ class VerificationAttemptRecord:
 
 
 class GeofenceRepository:
+    # Every method uses the caller's connection, keeping locks and writes inside
+    # the service transaction. SQL placeholders bind values separately from SQL.
     async def lock_student_profile_for_user(
         self,
         connection: asyncpg.Connection,
@@ -76,6 +78,8 @@ class GeofenceRepository:
         connection: asyncpg.Connection,
         session_id: UUID,
     ) -> AttendanceSessionRecord | None:
+        # FOR SHARE coordinates validation with concurrent session changes/closure.
+        # Reuse the same waiver lookup as initial check-in to keep policy consistent.
         row = await connection.fetchrow(
             f"""
             SELECT
@@ -116,6 +120,7 @@ class GeofenceRepository:
         session_id: UUID,
         student_id: UUID,
     ) -> bool:
+        # Eligibility comes from the session roster copied from course enrolments.
         row = await connection.fetchrow(
             """
             SELECT id
@@ -134,6 +139,7 @@ class GeofenceRepository:
         connection: asyncpg.Connection,
         session_id: UUID,
     ) -> SessionGeofenceRecord | None:
+        # Read the session snapshot rather than the mutable academic classroom row.
         row = await connection.fetchrow(
             """
             SELECT
@@ -168,6 +174,9 @@ class GeofenceRepository:
         student_id: UUID,
         started_at: datetime,
     ) -> VerificationAttemptRecord:
+        # The unique (session_id, student_id) key provides one parent attempt.
+        # The conflict update locks/returns the existing row without resetting its
+        # status or start time, so retries cannot erase earlier verification state.
         row = await connection.fetchrow(
             """
             INSERT INTO attendance_verification.verification_attempts (
@@ -236,6 +245,8 @@ class GeofenceRepository:
         connection: asyncpg.Connection,
         verification_attempt_id: UUID,
     ) -> int:
+        # Called while the parent attempt is locked, preventing duplicate numbering
+        # when two requests for the same student arrive together.
         value = await connection.fetchval(
             """
             SELECT COALESCE(MAX(attempt_number), 0) + 1
@@ -257,6 +268,8 @@ class GeofenceRepository:
         captured_at: datetime,
         validated_at: datetime,
     ) -> None:
+        # Store derived distance, accuracy and decision rather than raw coordinates.
+        # Public decisions are uppercase enums; database statuses use lowercase.
         await connection.execute(
             """
             INSERT INTO attendance_verification.geofence_validation_attempts (
@@ -290,6 +303,7 @@ class GeofenceRepository:
         failure_reason: str,
         completed_at: datetime,
     ) -> None:
+        # This is a terminal verification-process failure, not a final Absent record.
         await connection.execute(
             """
             UPDATE attendance_verification.verification_attempts

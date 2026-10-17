@@ -35,6 +35,8 @@ from modules.attendance_verification.check_in.domain import StepRequirement
 from modules.attendance_verification.geofence.types import GeofenceNextStep, GeofenceReading
 from modules.identity.auth.dependencies import CurrentStudent
 
+# main.py mounts these routers under /api/v1. The regular endpoint accepts
+# location evidence; the second endpoint starts an attempt under a saved waiver.
 router = APIRouter(
     prefix="/attendance-sessions/{session_id}/geofence-attempts",
     tags=["geofence-attempts"],
@@ -48,6 +50,7 @@ verification_attempts_router = APIRouter(
 
 
 def get_geofence_validation_service(request: Request) -> GeofenceValidationService:
+    # Freshness, future-clock tolerance and retry budget come from server settings.
     settings = getattr(request.app.state, "settings", None)
     if not isinstance(settings, Settings):
         settings = get_settings()
@@ -76,6 +79,8 @@ async def create_geofence_attempt(
         Depends(get_geofence_validation_service),
     ] = None,  # type: ignore[assignment]
 ) -> CreateGeofenceAttemptResponse:
+    # CurrentStudent supplies the authenticated identity. The request supplies
+    # only the reading; the service obtains the authoritative classroom snapshot.
     try:
         recorded_attempt = await geofence_service.validate_attempt(
             http_request.app.state.db_pool,
@@ -89,6 +94,8 @@ async def create_geofence_attempt(
                 mocked=payload.mocked,
             ),
         )
+    # Eligibility/lifecycle errors are HTTP errors. A processed PASSED, FAILED
+    # or RETRY_REQUIRED location decision is instead returned in the HTTP 200 body.
     except ActiveStudentProfileNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -128,6 +135,8 @@ async def create_geofence_attempt(
             detail=error_detail(_error_code(error), error.message),
         ) from error
 
+    # initialCheckIn is populated only when all required initial evidence is done.
+    # A geofence pass alone may still leave face verification outstanding.
     return CreateGeofenceAttemptResponse(
         verification_attempt_id=recorded_attempt.verification_attempt_id,
         attempt_number=recorded_attempt.attempt_number,
@@ -166,6 +175,8 @@ async def start_verification_without_location(
         Depends(get_geofence_validation_service),
     ] = None,  # type: ignore[assignment]
 ) -> StartVerificationResponse:
+    # No coordinates are submitted or fabricated here. The service requires
+    # an existing lecturer waiver and still checks account, roster and time window.
     try:
         started = await geofence_service.start_without_location(
             http_request.app.state.db_pool,
@@ -226,6 +237,7 @@ async def start_verification_without_location(
 
 
 def _error_code(error: GeofenceServiceError) -> str:
+    # Keep stable machine-readable codes for the mobile app, alongside messages.
     if error.reason is not None:
         return error.reason.value
     return _FALLBACK_ERROR_CODES[type(error)]

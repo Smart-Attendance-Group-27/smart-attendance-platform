@@ -61,6 +61,8 @@ class StartedVerification:
 
 
 class GeofenceValidationService:
+    # Coordinates one location submission: eligibility -> snapshot -> attempt
+    # -> pure policy decision -> evidence write -> optional initial check-in.
     def __init__(
         self,
         policy: GeofenceValidationPolicy,
@@ -89,9 +91,11 @@ class GeofenceValidationService:
         session_id: UUID,
         reading: GeofenceReading,
     ) -> RecordedGeofenceAttempt:
+        # Use one server timestamp for this submission's timing checks and record.
         validated_at = self._as_utc("clock", self._clock())
 
         async with pool.acquire() as connection:
+            # The evidence and any resulting check-in commit or roll back together.
             async with connection.transaction():
                 student, session = await self._lock_eligible_student(
                     connection,
@@ -101,12 +105,16 @@ class GeofenceValidationService:
                     location_waived=False,
                 )
 
+                # Use the boundary copied when the session was created, so later
+                # edits to the classroom do not move this session's geofence.
                 geofence = await self._repository.lock_session_geofence(
                     connection,
                     session_id,
                 )
                 boundary = self._build_boundary(geofence)
 
+                # Reuse the student's session attempt across location retries and
+                # face verification; each submitted reading gets its own child row.
                 verification_attempt = (
                     await self._repository.lock_or_create_verification_attempt(
                         connection,
@@ -123,6 +131,7 @@ class GeofenceValidationService:
                         state=VerificationAttemptStatus.CHECKED_IN.value,
                     )
 
+                # A terminal attempt cannot be restarted by submitting a new reading.
                 if verification_attempt.status != IN_PROGRESS_STATUS:
                     if (
                         verification_attempt.failure_reason
@@ -133,6 +142,7 @@ class GeofenceValidationService:
                         "The verification attempt is already complete.",
                     )
 
+                # The locked parent attempt serializes retries before numbering them.
                 attempt_number = (
                     await self._repository.next_geofence_attempt_number(
                         connection,
@@ -142,6 +152,8 @@ class GeofenceValidationService:
                 if attempt_number > self._max_attempts:
                     raise GeofenceAttemptLimitReachedError(self._max_attempts)
 
+                # Geometry/freshness rules decide first. A retry on the final
+                # allowed submission becomes a terminal attempt-limit failure.
                 result = self._policy.evaluate(
                     reading,
                     boundary,
@@ -149,6 +161,7 @@ class GeofenceValidationService:
                 )
                 result = self._finalize_last_retry(result, attempt_number)
 
+                # Record pass, retry and failure decisions, including their reason.
                 await self._repository.insert_geofence_attempt(
                     connection,
                     self._uuid_factory(),
@@ -162,6 +175,9 @@ class GeofenceValidationService:
 
                 initial_check_in: InitialCheckIn | None = None
 
+                # RETRY_REQUIRED leaves the parent in_progress for another reading.
+                # FAILED closes it; PASSED asks the shared check-in orchestrator
+                # whether all required initial steps (including face) are complete.
                 if result.decision is GeofenceDecision.FAILED:
                     assert result.reason is not None
                     await self._repository.mark_verification_attempt_failed(
@@ -204,6 +220,8 @@ class GeofenceValidationService:
 
         async with pool.acquire() as connection:
             async with connection.transaction():
+                # The server verifies a stored waiver; this path cannot bypass
+                # location merely because the client asks to skip it.
                 student, _session = await self._lock_eligible_student(
                     connection,
                     user_id,
@@ -249,6 +267,8 @@ class GeofenceValidationService:
         *,
         location_waived: bool,
     ) -> tuple[StudentProfileRecord, AttendanceSessionRecord]:
+        # Derive the student from the authenticated user and check the session's
+        # eligibility snapshot before accepting any new verification evidence.
         student = await self._repository.lock_student_profile_for_user(
             connection,
             user_id,
@@ -268,6 +288,7 @@ class GeofenceValidationService:
                     student.id,
                 )
             )
+            # An existing attendance decision, including a manual one, blocks restart.
             if attendance_status is not None:
                 raise AttendanceAlreadyCompletedError(
                     "Attendance has already been recorded for this session.",
@@ -292,6 +313,8 @@ class GeofenceValidationService:
         result: GeofenceValidationResult,
         attempt_number: int,
     ) -> GeofenceValidationResult:
+        # A valid pass on the last attempt still passes. Only RETRY_REQUIRED
+        # becomes FAILED here, because no retry remains in the configured budget.
         if (
             attempt_number != self._max_attempts
             or result.decision is not GeofenceDecision.RETRY_REQUIRED
@@ -348,6 +371,7 @@ class GeofenceValidationService:
             session.check_in_closes_at,
         )
 
+        # The window includes its opening instant and excludes its closing instant.
         if validated_at < check_in_opens_at:
             raise CheckInNotOpenError("Check-in has not opened yet.")
 
@@ -359,6 +383,7 @@ class GeofenceValidationService:
                 "Geofence validation is not required for this session.",
             )
 
+        # Normal location submissions and waiver-based starts are distinct paths.
         if session.geofence_waived and not location_waived:
             raise GeofenceWaivedError(
                 "Location verification was waived for this session.",
@@ -373,6 +398,7 @@ class GeofenceValidationService:
     def _build_boundary(
         geofence: SessionGeofenceRecord | None,
     ) -> GeofenceBoundary:
+        # Fail explicitly if the session snapshot lacks any required boundary field.
         if geofence is None or any(
             value is None
             for value in (

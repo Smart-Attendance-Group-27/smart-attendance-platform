@@ -1,3 +1,5 @@
+# Pure location rules: no database or HTTP calls. The service records this result
+# and applies the configured attempt limit after this policy evaluates a reading.
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from math import asin, cos, isfinite, radians, sin, sqrt
@@ -26,6 +28,8 @@ def haversine_distance_m(
     _validate_coordinate("latitude_b", latitude_b, -90, 90)
     _validate_coordinate("longitude_b", longitude_b, -180, 180)
 
+    # Haversine calculates surface distance from latitude/longitude in radians;
+    # multiplying the central angle by Earth's radius gives the distance in metres.
     latitude_a_rad = radians(latitude_a)
     latitude_b_rad = radians(latitude_b)
     latitude_delta = latitude_b_rad - latitude_a_rad
@@ -68,6 +72,8 @@ class GeofenceValidationPolicy:
         _validate_boundary(boundary)
         _validate_accuracy(reading.accuracy_m)
 
+        # captured_at comes from the device; validated_at is the server's clock.
+        # Normalize both to UTC before applying freshness and future-skew limits.
         captured_at = _as_utc("captured_at", reading.captured_at)
         current_time = _as_utc("validated_at", validated_at)
         distance_m = haversine_distance_m(
@@ -76,8 +82,11 @@ class GeofenceValidationPolicy:
             boundary.centre_latitude,
             boundary.centre_longitude,
         )
+        # The buffer is a fixed session allowance. Reported GPS accuracy is
+        # considered separately below, rather than simply enlarging the fence.
         allowed_radius_m = boundary.radius_m + boundary.accuracy_buffer_m
 
+        # A device-reported mocked location is a terminal failure, not a retry.
         if reading.mocked:
             return _result(
                 GeofenceDecision.FAILED,
@@ -87,6 +96,7 @@ class GeofenceValidationPolicy:
                 GeofenceReason.MOCK_LOCATION_DETECTED,
             )
 
+        # An excessively future-dated or stale reading needs a fresh capture.
         if captured_at > current_time + timedelta(
             seconds=self.max_future_skew_seconds,
         ):
@@ -105,6 +115,8 @@ class GeofenceValidationPolicy:
                 GeofenceReason.STALE_LOCATION,
             )
 
+        # Require usable accuracy before deciding whether the position is inside.
+        # Unknown accuracy or error above the session limit asks for another fix.
         if reading.accuracy_m is None:
             return _retry_result(
                 distance_m,
@@ -119,6 +131,8 @@ class GeofenceValidationPolicy:
                 GeofenceReason.LOCATION_ACCURACY_TOO_LOW,
             )
 
+        # Let d = centre distance, a = reported error, R = allowed radius.
+        # d + a <= R: the reading's whole uncertainty circle fits inside the fence.
         if distance_m + reading.accuracy_m <= allowed_radius_m:
             return _result(
                 GeofenceDecision.PASSED,
@@ -128,6 +142,7 @@ class GeofenceValidationPolicy:
                 None,
             )
 
+        # d - a > R: even the nearest edge of that circle is outside -> fail.
         if distance_m - reading.accuracy_m > allowed_radius_m:
             return _result(
                 GeofenceDecision.FAILED,
@@ -137,6 +152,7 @@ class GeofenceValidationPolicy:
                 GeofenceReason.OUTSIDE_GEOFENCE,
             )
 
+        # Otherwise the circle overlaps the boundary, so request a better reading.
         return _retry_result(
             distance_m,
             allowed_radius_m,
@@ -194,6 +210,7 @@ def _validate_nonnegative(field_name: str, value: float) -> None:
 
 
 def _validate_finite(field_name: str, value: float) -> None:
+    # Reject bool, NaN and infinity even when the policy is called outside the API.
     if isinstance(value, bool) or not isfinite(value):
         raise ValueError(f"{field_name} must be a finite number")
 

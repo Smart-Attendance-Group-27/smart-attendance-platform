@@ -4,12 +4,16 @@ from enum import StrEnum
 
 
 class GeofenceDecision(StrEnum):
+    # PASSED satisfies location; FAILED is terminal; RETRY_REQUIRED allows another
+    # reading unless the service has reached the configured attempt limit.
     PASSED = "PASSED"
     FAILED = "FAILED"
     RETRY_REQUIRED = "RETRY_REQUIRED"
 
 
 class GeofenceNextStep(StrEnum):
+    # Navigation hints accompany the decision. Check-in orchestration separately
+    # determines whether the session actually requires any remaining face evidence.
     FACE_VERIFICATION = "FACE_VERIFICATION"
     RETRY_LOCATION = "RETRY_LOCATION"
     NONE = "NONE"
@@ -33,6 +37,7 @@ class GeofenceReason(StrEnum):
 
 @dataclass(frozen=True)
 class GeofenceReading:
+    # Device-reported position, accuracy, timestamp and mock-location flag.
     latitude: float
     longitude: float
     accuracy_m: float | None
@@ -42,6 +47,7 @@ class GeofenceReading:
 
 @dataclass(frozen=True)
 class GeofenceBoundary:
+    # Server-owned session snapshot: centre, radius, buffer and maximum GPS error.
     centre_latitude: float
     centre_longitude: float
     radius_m: float
